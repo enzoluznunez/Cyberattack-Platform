@@ -1,0 +1,20 @@
+{
+    "name": "Study.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "Oculus.VR",
+        "Oculus.Interaction",
+        "meta.xr.mrutilitykit",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
