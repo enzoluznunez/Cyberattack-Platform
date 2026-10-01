@@ -8,7 +8,7 @@ assistant can drive the same tools when asked.
 
 - [ ] A Meta Quest 3 with a USB-C cable
 - [ ] A Google Gemini API key on a paid tier
-- [ ] The API key file, `api.key`, from the project owner
+- [ ] The API key file, `cloud.key`, from the project owner
 - [ ] Internet access on the headset
 
 ## Prepare the Meta Quest 3
@@ -40,8 +40,8 @@ Every sheet is drawn live from a database in the cloud: the API runs on AWS
 Lambda and reads MongoDB Atlas, and the app already knows its address. It only
 needs the key.
 
-1. Ask the project owner for `api.key`.
-2. Put it at `Assets/StreamingAssets/api.key`. Git ignores this path, so the key
+1. Ask the project owner for `cloud.key`.
+2. Put it at `Assets/StreamingAssets/cloud.key`. Git ignores this path, so the key
    stays on your machine and a fresh clone never carries one.
 
 Without it the app opens with nothing listed and says so in a notice.
@@ -73,7 +73,7 @@ Without it the app still runs and every sheet still works; only the assistant fa
 
 Done when you are standing in passthrough with the industries listed beside you. An empty list
 means the database could not be reached — check the headset's internet connection and
-`api.key` — not that the build failed.
+`cloud.key` — not that the build failed.
 
 ## FAQ
 

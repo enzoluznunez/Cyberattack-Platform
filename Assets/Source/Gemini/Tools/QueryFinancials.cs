@@ -15,7 +15,7 @@ public static class FinancialsApi {
     public static string BaseUrl = "https://k2d3ysw7ssd6sjh7ygjfa7ugpe0dmtxj.lambda-url.us-east-1.on.aws";
 
     // What the deployed API expects in X-Api-Key. IndustryCatalog reads it from
-    // StreamingAssets/api.key at startup; left empty, requests go out without
+    // StreamingAssets/cloud.key at startup; left empty, requests go out without
     // it, which a server on this machine does not ask for and the deployed one
     // refuses with a sentence the assistant can read out.
     public static string ApiKey = "";

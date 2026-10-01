@@ -87,8 +87,8 @@ InitTestScene*.unity*
 # Where this machine's financial API lives (differs per machine)
 /[Aa]ssets/StreamingAssets/api.url
 /[Aa]ssets/StreamingAssets/api.url.meta
-/[Aa]ssets/StreamingAssets/api.key
-/[Aa]ssets/StreamingAssets/api.key.meta
+/[Aa]ssets/StreamingAssets/cloud.key
+/[Aa]ssets/StreamingAssets/cloud.key.meta
 
 # Addressables default ignores, before user customizations
 /ServerData

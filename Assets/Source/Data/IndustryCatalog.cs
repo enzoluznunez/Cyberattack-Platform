@@ -21,7 +21,7 @@ public class IndustryCatalog : MonoBehaviour
 
     [Tooltip("One-line file inside StreamingAssets holding the key the deployed API " +
              "expects in X-Api-Key. Git ignores it, as it does gemini.key.")]
-    public string apiKeyFile = "api.key";
+    public string apiKeyFile = "cloud.key";
 
     [Tooltip("Label for the one sheet that spans every industry.")]
     public string allIndustriesLabel = "All Industries";
