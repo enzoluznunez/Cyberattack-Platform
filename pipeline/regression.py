@@ -18,63 +18,55 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from metrics import CATEGORIES, DIVISION_NAMES, FUNDAMENTALS, RATIOS
+from metrics import ATTACK_TYPES, DIVISION_NAMES, FIRST_YEAR, LAST_YEAR, REGIONS, VIEWS
 
 SNAPSHOT = Path(__file__).with_name("regression") / "answers.json"
 
-OPERATORS = ["eq", "ne", "lt", "lte", "gt", "gte"]
-
-# A spread of SIC codes: the busiest, the rarest, and one per division edge.
-SICS = [100, 1000, 1311, 1381, 1531, 2834, 2836, 3674, 4911, 5045, 5812, 6022, 7370, 8062, 9995, 9999]
-
 
 def requests():
-    paths = ["/health", "/ratios", "/fields", "/sheet"]
-    paths += [f"/industries?minimum={m}" for m in (1, 2, 17, 25, 100, 656, 657)]
+    paths = ["/health", "/views", "/sheet"]
 
-    for division in DIVISION_NAMES:
-        paths.append(f"/sheet?division={division}&limit=200")
-        paths.append(f"/sheet?division={division}&limit=3&categories=liquidity")
-        paths.append(f"/sheet?division={division}&where=revenues:gt:1000&match=all")
-    for sic in SICS:
-        paths.append(f"/sheet?sic={sic}&limit=200")
-        paths.append(f"/sheet?sic={sic}&limit=5&years=2020")
-    for per in (1, 2, 3, 5, 10, 50):
-        paths.append(f"/sheet?per={per}&limit=200")
-        paths.append(f"/sheet?per={per}&limit=7")
-    for category in CATEGORIES:
-        paths.append(f"/sheet?categories={category}&limit=50")
-    paths.append(f"/sheet?metrics={','.join(RATIOS)}&limit=200")
-    paths.append("/sheet?years=2019&metrics=net_margin,current_ratio&limit=200")
-    paths.append("/sheet?years=2020,2019,2020&limit=10")
+    for view in VIEWS:
+        paths.append(f"/sheet?view={view}")
+        paths.append(f"/sheet?view={view}&since=2018&until=2023")
+        paths.append(f"/sheet?view={view}&sec=true")
+        paths.append(f"/sheet?view={view}&sec=false")
+        for industry in DIVISION_NAMES:
+            paths.append(f"/sheet?view={view}&industry={industry}")
+        for attack in ATTACK_TYPES:
+            paths.append(f"/sheet?view={view}&attack={attack}")
+        for region in REGIONS:
+            paths.append(f"/sheet?view={view}&region={region}")
+    for year in range(FIRST_YEAR, LAST_YEAR + 1):
+        paths.append(f"/sheet?since={year}&until={year}")
+    for limit, per in ((1, 1), (5, 2), (50, 5), (200, 50)):
+        paths.append(f"/sheet?view=before_after&limit={limit}&per={per}")
+    paths.append("/sheet?view=industry_by_attack&attack=Ransomware,Phishing&accessed=SSN")
+    paths.append("/sheet?view=attack_by_year&information=Financial&relationship=Subsidiary / Affiliate")
+    paths.append("/sheet?view=attack_by_year&state=CA,NY,TX&market=NYSE")
 
-    for field in ("revenues", "net_income", "assets", "price_close_annual", "total_debt"):
-        for op in OPERATORS:
-            for match in ("any", "all"):
-                paths.append(f"/sheet?sic=7370&limit=200&where={field}:{op}:100&match={match}")
-    for match in ("any", "all"):
-        paths.append(f"/sheet?limit=200&where=net_income:lt:0&match={match}")
-        paths.append(f"/sheet?division=Manufacturing&limit=200&where=revenues:gt:1000,net_income:gt:0&match={match}")
-        paths.append(f"/sheet?division=Services&limit=200&where=revenues:gte:500&where=assets:lt:5000&match={match}")
-    paths.append(f"/sheet?sic=7370&where={FUNDAMENTALS[0]}:gt:99999999")
-    paths.append("/sheet?division=Mining&where=revenues:gt:99999999&match=all")
+    for company in ("walmart", "sam's club", "target", "equifax", "%%", "zz-no-such-company"):
+        paths.append(f"/breaches?company={company}")
+    for ticker in ("WMT", "TGT", "EFX"):
+        paths.append(f"/breaches?ticker={ticker}&limit=50")
+    paths.append("/breaches?attack=Ransomware&since=2023&limit=50")
 
     # Rejections: the assistant reads these out loud, so their wording is part
     # of the contract too.
     paths += [
-        "/sheet?sic=7370&division=Mining",
-        "/sheet?metrics=bogus_ratio",
-        "/sheet?categories=profit",
-        "/sheet?division=Atlantis",
-        "/sheet?years=twenty-nineteen",
+        "/sheet?view=pie_chart",
+        "/sheet?attack=Hacking",
+        "/sheet?industry=Atlantis",
+        f"/sheet?since={FIRST_YEAR - 1}",
+        f"/sheet?until={LAST_YEAR + 1}",
+        "/sheet?since=2020&until=2010",
+        "/sheet?state=Virginia",
         "/sheet?limit=0",
         "/sheet?limit=500",
-        "/sheet?where=revenue:gt:1000",
-        "/sheet?where=revenues:above:1000",
-        "/sheet?where=revenues:gt:lots",
-        "/sheet?where=revenues:gt",
-        "/sheet?where=current_ratio:gt:2",
-        "/industries?minimum=0",
+        "/sheet?bogus=1",
+        "/sheet?industry=Mining&attack=Credential Stuffing",
+        "/breaches?company=x",
+        "/breaches?limit=51",
     ]
     return paths
 

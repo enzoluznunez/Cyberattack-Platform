@@ -1,111 +1,250 @@
-"""Read the export as it was delivered and keep the rows that are usable.
+"""Read the two exports as they were delivered and type them.
 
-The export is the seed the whole dataset grows from. It lives in a private S3
-bucket, verbatim and undiscarded, so a row cleaning drops is still there to
-ask about. Nothing here writes it anywhere: rebuild.py reads it, cleans it,
-computes from it and publishes the result.
+The exports are the seed the whole dataset grows from. They live in a private
+Cloud Storage bucket, verbatim, so anything cleaning drops is still there to
+ask about. Nothing here writes anywhere: rebuild.py reads them, cleans them
+and publishes the result.
 
-    raw = read_raw()            the export, every column text
-    staging = usable(raw)       the typed subset everything downstream reads
+    raw = read_raw()            both exports, every value text
+    breaches, fundamentals = usable(*raw)
 
-usable() is the whole definition of "usable".
+usable() is the whole definition of what the tables hold.
 """
 
-import gzip
 import io
 import os
 import re
+from pathlib import Path
 
 import pandas as pd
 
-from metrics import YEARS
+from metrics import (
+    ATTACK_TYPES,
+    FIRST_YEAR,
+    INFORMATION_ACCESSED,
+    INFORMATION_TYPES,
+    LAST_YEAR,
+    MARKETS,
+    REGIONS,
+    RELATIONSHIPS,
+    division,
+)
 
-# Where the export is: an s3:// URI or a local path, gzipped or not.
-RAW_SOURCE = os.environ.get("RAW_SOURCE", "s3://nasba-data-354363694859/raw.csv.gz")
+# Where the exports are: a gs:// prefix or a local directory holding both files.
+RAW_SOURCE = os.environ.get("RAW_SOURCE", "gs://cyberattack-platform-raw")
+BREACHES_FILE = "breach_events.csv"
+FUNDAMENTALS_FILE = "company_fundamentals.csv"
 
-KEYS = ["Trading Symbol", "Year", "GVKEY", "SIC Code", "Entity Central Index Key"]
-TEXT = [
-    "Trading Symbol",
-    "Entity Registrant Name",
-    "Entity Address, Address Line One",
-    "Entity Address, Postal Zip Code",
-    "Entity Address, City or Town",
-    "Entity Address, Country",
-]
-
-# What the export writes where it has no figure. These are the values that make
-# a row unusable, named rather than left to a library's defaults.
-MISSING = [".", "", "NA", "N/A", "NaN", "nan", "null", "NULL"]
+# What the exports write where they have no figure.
+MISSING = {"", "."}
 
 
 def column(heading):
-    """'Entity Address, City or Town' -> entity_address_city_or_town. The one
-    place the export's headings are turned into identifiers. Applying it to a
-    name it already produced changes nothing, so the stored export, whose
-    headings are already names, reads the same as the original."""
+    """'Date of Breach Disclosure' -> date_of_breach_disclosure. The one place
+    the exports' headings are turned into identifiers."""
     return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", heading.lower())).strip("_")
 
 
-KEY_COLUMNS = {column(h) for h in KEYS}
-TEXT_COLUMNS = {column(h) for h in TEXT}
+def read_bytes(source, name):
+    if source.startswith("gs://"):
+        # Imported here: only a read from Cloud Storage needs it.
+        from google.cloud import storage
+
+        bucket, _, prefix = source.removeprefix("gs://").partition("/")
+        path = f"{prefix.strip('/')}/{name}" if prefix.strip("/") else name
+        return storage.Client().bucket(bucket).blob(path).download_as_bytes()
+    return (Path(source) / name).read_bytes()
 
 
-def read_bytes(source):
-    if source.startswith("s3://"):
-        # Imported here: only a read from S3 needs it.
-        import boto3
-
-        bucket, _, key = source.removeprefix("s3://").partition("/")
-        return boto3.client("s3").get_object(Bucket=bucket, Key=key)["Body"].read()
-    with open(source, "rb") as handle:
-        return handle.read()
-
-
-def read_raw(source=RAW_SOURCE):
-    """The export, every value as the text it was written as. Nothing is
-    parsed or guessed at here: an empty cell is an empty string, and 'NA' is
-    the two letters, so what counts as missing is decided in one place below."""
-    data = read_bytes(source)
-    if data[:2] == b"\x1f\x8b":
-        data = gzip.decompress(data)
-    raw = pd.read_csv(io.BytesIO(data), dtype=str, keep_default_na=False, na_filter=False)
-    raw.columns = [column(h.replace("\n", " ")) for h in raw.columns]
+def read_one(source, name):
+    """One export, every value as the text it was written as. Nothing is parsed
+    or guessed at here, so what counts as missing is decided in one place."""
+    raw = pd.read_csv(io.BytesIO(read_bytes(source, name)), dtype=str,
+                      keep_default_na=False, na_filter=False)
+    raw.columns = [column(h) for h in raw.columns]
     return raw
 
 
-def usable(raw):
-    """raw -> staging. A row is usable when every column has a figure and its
-    year is one the sheets draw; a company is usable when every one of those
-    years survives, so a sheet never shows a bar for one year and a gap for
-    the other."""
-    present = ~raw.isin(MISSING).any(axis=1)
-    in_years = raw["year"].isin([str(year) for year in YEARS])
-    staging = raw[present & in_years]
+def read_raw(source=RAW_SOURCE):
+    return read_one(source, BREACHES_FILE), read_one(source, FUNDAMENTALS_FILE)
 
-    years_each = staging.groupby("trading_symbol")["year"].transform("size")
-    staging = staging[years_each == len(YEARS)].copy()
 
-    # Text before key: the ticker is both, and it stays text.
-    for name in staging.columns:
-        if name in TEXT_COLUMNS:
-            continue
-        if name in KEY_COLUMNS:
-            staging[name] = staging[name].str.strip().astype("int64")
-        else:
-            staging[name] = staging[name].astype("float64")
+def text(values):
+    return values.map(lambda v: None if v.strip() in MISSING else v.strip())
 
-    if staging.duplicated(["trading_symbol", "year"]).any():
-        raise ValueError("the export reports some company twice for one year")
-    # In company-then-year order, so everything computed from it comes out the
-    # same however the export happened to be ordered.
-    return staging.sort_values(["trading_symbol", "year"]).reset_index(drop=True)
+
+def number(values):
+    return pd.to_numeric(text(values), errors="raise").astype("float64")
+
+
+def integer(values):
+    """Whole numbers the export sometimes writes as '7374.0'."""
+    numbers = number(values)
+    if (numbers.dropna() % 1 != 0).any():
+        raise ValueError(f"{values.name} holds a fraction where a whole number belongs")
+    return numbers.astype("Int64")
+
+
+def date(values):
+    parsed = pd.to_datetime(text(values), format="%Y-%m-%d", errors="raise")
+    return parsed.map(lambda d: None if pd.isna(d) else d.date())
+
+
+def items(values):
+    """'|Malware|Phishing|' -> ['Malware', 'Phishing']; an empty cell is []."""
+    return values.map(lambda cell: [item.strip() for item in cell.strip().strip("|").split("|")
+                                    if item.strip()])
+
+
+def listed(values, vocabulary):
+    """items(), where every item has to be one the vocabulary names; an unknown
+    one stops the rebuild rather than reaching a table no sheet will ever count
+    it in."""
+    found = items(values)
+    unknown = set(item for row in found for item in row) - set(vocabulary)
+    if unknown:
+        raise ValueError(f"{values.name} holds {sorted(unknown)}, which metrics.py does not name")
+    return found
+
+
+def known(values, vocabulary):
+    cleaned = text(values)
+    unknown = set(cleaned.dropna()) - set(vocabulary)
+    if unknown:
+        raise ValueError(f"{values.name} holds {sorted(unknown)}, which metrics.py does not name")
+    return cleaned
+
+
+def company_sic(breaches_raw, fundamentals_raw):
+    """One SIC code per company, keyed by CIK. The breach export's code wins:
+    it is the SEC's own assignment, and where the two exports disagree (one
+    company in eleven) the fundamentals export is the one that is off — it files
+    Berkshire Hathaway under 9997, a conglomerate, which would make it Public
+    Administration. The fundamentals export fills in the companies the breach
+    export left without one."""
+    from_breaches = (
+        pd.DataFrame({"cik": integer(breaches_raw["cik"]), "sic": integer(breaches_raw["sic_code"])})
+        .dropna().drop_duplicates("cik").set_index("cik")["sic"]
+    )
+    from_fundamentals = (
+        pd.DataFrame({"cik": integer(fundamentals_raw["cik"]), "sic": integer(fundamentals_raw["sic"])})
+        .dropna().drop_duplicates("cik").set_index("cik")["sic"]
+    )
+    return from_breaches.combine_first(from_fundamentals)
+
+
+def breaches(raw, sic):
+    """One row per breach, typed. The ID numbers, phone number, address lines,
+    duplicate state names and the second auditor block are left behind in the
+    export: nothing draws, filters or reads them."""
+    cik = integer(raw["cik"])
+    year = integer(raw["fyear"])
+    disclosed_on = date(raw["date_of_breach_disclosure"])
+
+    # The export's fiscal year is the year the breach was disclosed. The year
+    # sheets count by it, so a breach whose two dates disagree is a question
+    # for the export, not something to settle here.
+    if (disclosed_on.map(lambda d: d.year) != year).any():
+        raise ValueError("a breach's fyear differs from the year it was disclosed")
+    if year.min() < FIRST_YEAR or year.max() > LAST_YEAR:
+        raise ValueError(f"breaches run {year.min()}-{year.max()}, outside "
+                         f"metrics.FIRST_YEAR-LAST_YEAR ({FIRST_YEAR}-{LAST_YEAR})")
+
+    disclosed_to_sec = raw["disclosed_to_sec"].str.strip()
+    if not disclosed_to_sec.isin(["Yes", "No"]).all():
+        raise ValueError("disclosed_to_sec holds something other than Yes or No")
+
+    codes = cik.map(sic).astype("Int64")
+    frame = pd.DataFrame({
+        "breach_key": integer(raw["breach_key"]),
+        "cik": cik,
+        "company": text(raw["public_company_name"]),
+        "targets": items(raw["target_name"]),
+        "target_relationships": listed(raw["target_relationship_to_parent"], RELATIONSHIPS),
+        "ticker": text(raw["ticker"]),
+        "market": known(raw["market"], MARKETS),
+        "state": text(raw["state_code"]),
+        "region": known(raw["region"], REGIONS),
+        "sic": codes,
+        "sic_description": text(raw["sic_code_description"]),
+        "naics": integer(raw["naics_code"]),
+        "division": codes.map(lambda code: division(int(code)) if pd.notna(code) else None),
+        "year": year,
+        "disclosed_on": disclosed_on,
+        "discovered_on": date(raw["date_of_breach_discovery"]),
+        "started_on": date(raw["breach_start_date"]),
+        "ended_on": date(raw["breach_end_date"]),
+        "cost_usd": number(raw["cost"]),
+        "records_lost": integer(raw["number_of_records_lost"]),
+        "information_type": known(raw["type_of_information"], INFORMATION_TYPES),
+        "attack_types": listed(raw["type_of_attack"], ATTACK_TYPES),
+        "information_accessed": listed(raw["information_accessed"], INFORMATION_ACCESSED),
+        "disclosed_to_sec": disclosed_to_sec == "Yes",
+        "filing_url": text(raw["filing"]),
+        "filing_date": date(raw["filing_date"]),
+        "filing_type": text(raw["filing_type"]),
+        "auditor": text(raw["auditor_breach_date"]),
+        "market_cap_usd": number(raw["market_cap"]),
+        "revenue_usd": number(raw["revenue"]),
+        "net_income_usd": number(raw["earnings_net_income"]),
+        "assets_usd": number(raw["assets"]),
+    })
+
+    if frame["breach_key"].isna().any() or frame["breach_key"].duplicated().any():
+        raise ValueError("every breach needs its own breach_key")
+    if (frame["attack_types"].map(len) == 0).any():
+        raise ValueError("a breach lists no attack type, not even 'Not Disclosed'")
+    return frame.sort_values("breach_key").reset_index(drop=True)
+
+
+FIGURES = ["at", "ni", "prcc_f", "auopic"]
+
+
+def fundamentals(raw, sic):
+    """One row per company per year, typed. The export repeats 2,165 company-
+    years, each as a pair where one row lacks figures the other has; the fuller
+    row is the one kept. Two rows equally full that disagree would be a real
+    conflict, and stop the rebuild."""
+    frame = pd.DataFrame({
+        "cik": integer(raw["cik"]),
+        "gvkey": integer(raw["gvkey"]),
+        "ticker": text(raw["ticker"]),
+        "company": text(raw["company_name"]),
+        "year": integer(raw["fyear"]),
+        "fiscal_year_end_month": integer(raw["fyr"]),
+        **{name: number(raw[name]) for name in FIGURES},
+    })
+
+    reported = frame[FIGURES].notna().sum(axis=1)
+    fullest = reported == reported.groupby([frame["cik"], frame["year"]]).transform("max")
+    frame = frame[fullest].drop_duplicates(["cik", "year", *FIGURES])
+    if frame.duplicated(["cik", "year"]).any():
+        raise ValueError("a company-year is reported twice, equally fully, with different figures")
+
+    codes = frame["cik"].map(sic).astype("Int64")
+    frame = frame.assign(
+        sic=codes,
+        division=codes.map(lambda code: division(int(code)) if pd.notna(code) else None),
+        assets_musd=frame["at"],
+        net_income_musd=frame["ni"],
+        price_close=frame["prcc_f"],
+        auditor_opinion=frame["auopic"].astype("Int64"),
+    )
+    columns = ["cik", "gvkey", "ticker", "company", "year", "fiscal_year_end_month", "sic", "division",
+               "assets_musd", "net_income_musd", "price_close", "auditor_opinion"]
+    return frame[columns].sort_values(["cik", "year"]).reset_index(drop=True)
+
+
+def usable(breaches_raw, fundamentals_raw):
+    sic = company_sic(breaches_raw, fundamentals_raw)
+    return breaches(breaches_raw, sic), fundamentals(fundamentals_raw, sic)
 
 
 def main():
-    raw = read_raw()
-    staging = usable(raw)
-    print(f"raw: {len(raw)} rows -> staging: {len(staging)} rows, "
-          f"{staging['trading_symbol'].nunique()} companies ({len(raw) - len(staging)} discarded)")
+    breaches_raw, fundamentals_raw = read_raw()
+    b, f = usable(breaches_raw, fundamentals_raw)
+    print(f"breaches: {len(breaches_raw)} raw -> {len(b)} rows, {b['cik'].nunique()} companies; "
+          f"fundamentals: {len(fundamentals_raw)} raw -> {len(f)} company-years")
     return 0
 
 

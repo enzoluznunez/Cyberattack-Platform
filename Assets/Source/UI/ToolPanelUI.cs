@@ -63,9 +63,9 @@ public class ToolPanelUI : PanelUI
             case ToolType.Profile:
                 return "Lifts one row or column clear of the sheet and reports its count, range, average and total. Press a bar, then sweep your finger along the line you want raised.";
             case ToolType.Sort:
-                return "Reorders the rows or the metrics, so the ones you are comparing sit side by side. Pinch a line beside its label, or anywhere along it, and slide it into place.";
+                return "Reorders the rows or the columns, so the ones you are comparing sit side by side. Pinch a line beside its label, or anywhere along it, and slide it into place.";
             case ToolType.Filter:
-                return "Chooses what stands on the sheet, narrowing it to what you asked for. Open By Company or By Metric, then poke a bar to take that line off the sheet, or tap a name in the list; a filled square means it is showing, and tapping it again brings it back.";
+                return "Chooses what stands on the sheet, narrowing it to what you asked for. Open By Row or By Column, then poke a bar to take that line off the sheet, or tap a name in the list; a filled square means it is showing, and tapping it again brings it back.";
             default:
                 return string.Empty;
         }

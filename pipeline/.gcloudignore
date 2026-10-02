@@ -1,0 +1,10 @@
+# What `gcloud run deploy --source` uploads to Cloud Build: the Dockerfile,
+# requirements.txt and the four files the API imports. Nothing else — no
+# virtual environment, no local data, no settings, no tests.
+*
+!Dockerfile
+!requirements.txt
+!api.py
+!database.py
+!metrics.py
+!sheetcsv.py

@@ -6238,8 +6238,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   manageDatasets: {fileID: 1166616950}
-  apiUrlFile: api.url
-  allIndustriesLabel: All Industries
+  apiUrlFile: cloud.url
 --- !u!1 &1166617000
 GameObject:
   m_ObjectHideFlags: 0

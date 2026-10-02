@@ -84,11 +84,12 @@ InitTestScene*.unity*
 /[Aa]ssets/StreamingAssets/gemini.key
 /[Aa]ssets/StreamingAssets/gemini.key.meta
 
-# Where this machine's financial API lives (differs per machine)
-/[Aa]ssets/StreamingAssets/api.url
-/[Aa]ssets/StreamingAssets/api.url.meta
-/[Aa]ssets/StreamingAssets/api.key
-/[Aa]ssets/StreamingAssets/api.key.meta
+# The breach API: its Google Cloud API key, and the address that points the
+# Editor at a server on this machine instead of the gateway
+/[Aa]ssets/StreamingAssets/cloud.url
+/[Aa]ssets/StreamingAssets/cloud.url.meta
+/[Aa]ssets/StreamingAssets/cloud.key
+/[Aa]ssets/StreamingAssets/cloud.key.meta
 
 # Addressables default ignores, before user customizations
 /ServerData
@@ -133,10 +134,10 @@ ProjectSettings/AI.Assistant/
 __pycache__/
 .pytest_cache/
 /pipeline/.coverage
-# Connection strings and keys; .env.example shows the shape
+# Project settings and keys; .env.example shows the shape
 /pipeline/.env
-# sam build output
-/pipeline/.aws-sam/
+# Local copies of the raw CSVs; the originals live in gs://cyberattack-platform-raw
+/pipeline/data/
 # Recorded API answers: real data, kept off GitHub
 /pipeline/regression/
 

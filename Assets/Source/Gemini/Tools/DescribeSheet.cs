@@ -49,7 +49,7 @@ public sealed class DescribeSheet : AgenticTool {
             result["columnsPerMetric"] = new List<object>(data.SeriesTitles);
             result["colRange"] = new List<object> { 1, last - first + 1 };
             result["note"] = "Each metric holds one cell per entry in 'columnsPerMetric', drawn side by side. " +
-                             "Positions on this axis count metrics, not cells, and a metric's two bars cannot be " +
+                             "Positions on this axis count metrics, not cells, and a metric's bars cannot be " +
                              "separated. Bar heights are comparable within a metric but not between metrics.";
         }
         else {

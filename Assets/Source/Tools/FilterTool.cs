@@ -65,12 +65,14 @@ public class FilterTool : Tool
         DataSource data = Data;
         if (data == null) { Light(); return; }
 
-        bool metrics = data.ClearHiddenGroups();
-        bool companies = data.ClearHiddenRows();
+        bool columns = data.ClearHiddenGroups();
+        bool rows = data.ClearHiddenRows();
 
-        if (metrics && companies) Report("put every company and every metric back on the sheet");
-        else if (metrics) Report("showed every metric again");
-        else if (companies) Report("showed every company again");
+        string rowNouns = DataSource.Plural(DataSource.RowNoun(data));
+        string columnNouns = DataSource.Plural(DataSource.GroupNoun(data, true));
+        if (columns && rows) Report($"put every one of the {rowNouns} and {columnNouns} back on the sheet");
+        else if (columns) Report($"showed every one of the {columnNouns} again");
+        else if (rows) Report($"showed every one of the {rowNouns} again");
 
         Light();
     }
@@ -120,8 +122,8 @@ public class FilterTool : Tool
         // whatever they open. Neither starts lit: the list is what a press is
         // for, and an unopened list is not an unfiltered one.
         _axisRow = toolPanelUI.AddToggleRow(Kind, AxisRowName,
-            (CompanyButton, "By Company", () => OnAxisClicked(Axis.Company)),
-            (MetricButton, "By Metric", () => OnAxisClicked(Axis.Metric)));
+            (CompanyButton, "By Row", () => OnAxisClicked(Axis.Company)),
+            (MetricButton, "By Column", () => OnAxisClicked(Axis.Metric)));
 
         BuildList(data);
         LightAxis();
@@ -160,7 +162,7 @@ public class FilterTool : Tool
         Refresh();
         Report(_open == Axis.None
             ? "closed the filter list"
-            : $"opened the list of {(_open == Axis.Company ? "companies" : "metrics")}");
+            : $"opened the list of {DataSource.Plural(_open == Axis.Company ? DataSource.RowNoun(Data) : DataSource.GroupNoun(Data, true))}");
     }
 
     // The line the finger is over, lit the way the Profile tool lights the line
@@ -193,7 +195,7 @@ public class FilterTool : Tool
         if (_open == Axis.None)
         {
             Notices.Show(this, "Filter",
-                "Open By Company or By Metric to choose what a poke takes off the sheet.");
+                "Open By Row or By Column to choose what a poke takes off the sheet.");
             return;
         }
 
@@ -213,52 +215,6 @@ public class FilterTool : Tool
         if (_axisRow == null) return;
         UIButton.SetSelected(_axisRow.At(0), _open == Axis.Company);
         UIButton.SetSelected(_axisRow.At(1), _open == Axis.Metric);
-    }
-
-    // The categories with at least one metric on this sheet, in contract order,
-    // each with the data groups it covers. A sheet opened with only the
-    // liquidity ratios shows one category button, not five.
-    private static List<KeyValuePair<string, List<int>>> CategoriesOnSheet(DataSource data)
-    {
-        var found = new List<KeyValuePair<string, List<int>>>();
-        if (data == null || !data.IsLoaded) return found;
-
-        List<int> groups = data.DataGroupsInOrder();
-
-        // Indexed by label once rather than rescanned per ratio: every category
-        // would otherwise walk every group, which is five passes over the sheet
-        // on each dataset switch.
-        var byTitle = new Dictionary<string, List<int>>(System.StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < groups.Count; i++)
-        {
-            string label = DataSource.GroupLabelOfData(data, groups[i]);
-            if (string.IsNullOrEmpty(label)) continue;
-            if (!byTitle.TryGetValue(label, out List<int> at))
-                byTitle[label] = at = new List<int>();
-            at.Add(groups[i]);
-        }
-
-        foreach (var category in FinancialsContract.MetricCategories)
-        {
-            var members = new List<int>();
-            foreach (string ratio in category.Value)
-                if (byTitle.TryGetValue(TitleOf(ratio), out List<int> at))
-                    members.AddRange(at);
-            if (members.Count > 0)
-                found.Add(new KeyValuePair<string, List<int>>(category.Key, members));
-        }
-        return found;
-    }
-
-    // 'working_capital' as the sheet spells it: 'Working Capital'. The same
-    // transform the server applies when it writes the header.
-    private static string TitleOf(string ratio)
-    {
-        string[] words = ratio.Split('_');
-        for (int i = 0; i < words.Length; i++)
-            if (words[i].Length > 0)
-                words[i] = char.ToUpperInvariant(words[i][0]) + words[i].Substring(1);
-        return string.Join(" ", words);
     }
 
     private const float ListHeight = 130f;
@@ -354,7 +310,7 @@ public class FilterTool : Tool
 
         string what = parts.Count > 0
             ? string.Join(" and ", parts)
-            : $"left the same {noun}s on the sheet";
+            : $"left the same {DataSource.Plural(noun)} on the sheet";
 
         int showing = rows ? data.RowOrder.Count : data.GroupCount(true);
         int total = rows ? data.RowCount : data.DataGroupCount;
@@ -368,31 +324,8 @@ public class FilterTool : Tool
     {
         if (names.Count == 1) return names[0];
         if (names.Count <= 3) return string.Join(", ", names);
-        return $"{names.Count} {noun}s";
+        return $"{names.Count} {DataSource.Plural(noun)}";
     }
-
-    // The data groups a category covers, or null when the name is not one. The
-    // assistant resolves 'the liquidity ratios' through this before it falls
-    // back to matching one metric by name.
-    public List<int> ResolveCategory(string query)
-    {
-        DataSource data = Data;
-        if (data == null || !data.IsLoaded || string.IsNullOrWhiteSpace(query)) return null;
-
-        string wanted = query.Trim();
-        foreach (var category in CategoriesOnSheet(data))
-            if (string.Equals(category.Key, wanted, System.StringComparison.OrdinalIgnoreCase))
-                return category.Value;
-        return null;
-    }
-
-    public List<string> CategoryNames()
-    {
-        var names = new List<string>();
-        foreach (var category in CategoriesOnSheet(Data)) names.Add(category.Key);
-        return names;
-    }
-
 
     // A company or metric by the name the user says, or by its 1-based place
     // among those on the sheet. Hidden ones answer to their names: they are what

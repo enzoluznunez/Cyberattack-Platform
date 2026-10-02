@@ -1,13 +1,12 @@
-"""Where the data lives: one MongoDB collection, 'companies', one document per
-company with its years inside it.
+"""Where the data lives: two BigQuery tables in one dataset.
 
-    {_id: ticker, name, gvkey, cik, sic_code, division, address: {...},
-     years: [{year, ratios: {...}, fundamentals: {...}}, ...]}
+    breaches        one row per breach
+    fundamentals    one row per company per year
 
 Settings come from the environment, or from pipeline/.env on a laptop;
-.env.example shows its shape. On Lambda the environment names a Parameter Store
-entry instead of holding the secret, so a password is never in the template,
-the package or the function's configuration. Nothing here holds one either.
+.env.example shows its shape. Nothing here holds a password or a key: on a
+laptop the client signs in with `gcloud auth application-default login`, and on
+Cloud Run with the service's own account.
 """
 
 import os
@@ -15,49 +14,48 @@ from functools import cache
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pymongo import MongoClient
+from google.cloud import bigquery
 
 load_dotenv(Path(__file__).with_name(".env"))
 
-COLLECTION = "companies"
+# Where the dataset is created, beside the bucket and the service.
+LOCATION = "us-east1"
+
+BREACHES = "breaches"
+FUNDAMENTALS = "fundamentals"
+
+# The most one query may scan. Both tables together are a few megabytes, so a
+# query that reaches this is a mistake, and BigQuery refuses it rather than
+# billing for it.
+MAX_BYTES_BILLED = 100 * 1024 * 1024
 
 
 @cache
 def setting(name):
-    """A setting by name: NAME from the environment if it is there, otherwise
-    the SecureString parameter NAME_PARAMETER points at, read once per cold
-    start. None when neither is set."""
-    if os.environ.get(name):
-        return os.environ[name]
-    parameter = os.environ.get(f"{name}_PARAMETER")
-    if not parameter:
-        return None
-    # Imported here: Lambda's runtime provides boto3, and a laptop reading .env
-    # never gets this far.
-    import boto3
-
-    found = boto3.client("ssm").get_parameter(Name=parameter, WithDecryption=True)
-    return found["Parameter"]["Value"]
+    """A setting by name from the environment, or None when it is not set."""
+    return os.environ.get(name) or None
 
 
 @cache
 def client():
-    """One client per process. It pools its own connections, so every request
-    shares it rather than opening a connection of its own."""
-    uri = setting("MONGODB_URI")
-    if not uri:
-        raise RuntimeError(
-            "MONGODB_URI is not set. Copy pipeline/.env.example to pipeline/.env "
-            "and put your Atlas connection string in it."
-        )
-    # Five seconds rather than the default thirty: an unreachable database
-    # should fail a request while the headset is still waiting for it.
-    return MongoClient(uri, appname="nasba-api", serverSelectionTimeoutMS=5000, tz_aware=True)
+    """One client per process; it pools its own connections. The project comes
+    from GOOGLE_CLOUD_PROJECT when set, and otherwise from the signed-in
+    account's default, which on Cloud Run is the project it runs in."""
+    return bigquery.Client(project=setting("GOOGLE_CLOUD_PROJECT"), location=LOCATION)
 
 
 def name():
-    return os.environ.get("MONGODB_DB", "nasba")
+    return os.environ.get("BIGQUERY_DATASET", "cyber")
 
 
-def companies():
-    return client()[name()][COLLECTION]
+def table(which, dataset=None):
+    """A table's full name, quoted for SQL."""
+    return f"`{client().project}.{dataset or name()}.{which}`"
+
+
+def query(sql, parameters=()):
+    """Rows of one query. Every value a caller supplied travels as a query
+    parameter, never inside the SQL text."""
+    config = bigquery.QueryJobConfig(query_parameters=list(parameters),
+                                     maximum_bytes_billed=MAX_BYTES_BILLED)
+    return list(client().query(sql, job_config=config).result())

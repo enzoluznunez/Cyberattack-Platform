@@ -1,152 +1,155 @@
-"""The one list of ratios: ratios.py computes them in this order, the financials
-table stores them in this order, and the API serves them by these names."""
+"""The one list of names: clean.py checks the export against it, publish.py
+stores by it, and the API serves by it. A value the export holds that is not
+named here is an error in cleaning rather than a row that quietly never
+reaches a sheet."""
 
-RATIOS = [
-    "working_capital",
-    "current_ratio",
-    "quick_ratio",
-    "accounts_receivable_turnover",
-    "average_days_to_collect_receivables",
-    "inventory_turnover",
-    "average_days_to_collect_inventory",
-    "debt_to_assets",
-    "debt_to_equity",
-    "number_of_times_interest_is_earned",
-    "net_margin",
-    "asset_turnover_ratio",
-    "return_on_investment",
-    "return_on_equity",
-    "earnings_per_share",
-    "book_value_per_share",
-    "price_earnings_ratio",
-    "dividend_yield",
+# Every attack type the export uses, most common first. 'Not Disclosed' is a
+# category of its own, not a missing value: a quarter of all breaches carry it,
+# and a sheet that dropped them would understate every year.
+ATTACK_TYPES = [
+    "Unauthorized Access",
+    "Malware",
+    "Ransomware",
+    "Phishing",
+    "Misconfiguration",
+    "Credential Stuffing",
+    "Not Disclosed",
 ]
 
-# What kind of question each ratio answers. Every ratio belongs to exactly one
-# category and every category holds at least one, which test_ratios.py checks:
-# the app groups the metric list by these, and eighteen flat names is a worse
-# panel than five named groups.
-CATEGORIES = {
-    "liquidity": [
-        "working_capital",
-        "current_ratio",
-        "quick_ratio",
-    ],
-    "efficiency": [
-        "accounts_receivable_turnover",
-        "average_days_to_collect_receivables",
-        "inventory_turnover",
-        "average_days_to_collect_inventory",
-        "asset_turnover_ratio",
-    ],
-    "solvency": [
-        "debt_to_assets",
-        "debt_to_equity",
-        "number_of_times_interest_is_earned",
-    ],
-    "profitability": [
-        "net_margin",
-        "return_on_investment",
-        "return_on_equity",
-        "earnings_per_share",
-    ],
-    "valuation": [
-        "book_value_per_share",
-        "price_earnings_ratio",
-        "dividend_yield",
-    ],
+# What kind of information a breach exposed. One per breach.
+INFORMATION_TYPES = [
+    "Personal",
+    "Financial",
+    "Other",
+    "Not Disclosed",
+]
+
+# The particular fields a breach exposed. A breach lists any number of these.
+INFORMATION_ACCESSED = [
+    "Name",
+    "SSN",
+    "Address",
+    "Email",
+    "Phone Number",
+    "Credit Card",
+    "Debit Card",
+    "Bank Account",
+    "Password",
+    "User Name",
+    "Intellectual Property",
+    "Other",
+    "Not Disclosed",
+]
+
+# Whether the breached entity was the public company itself or one of its
+# subsidiaries. A breach that spans both lists both.
+RELATIONSHIPS = [
+    "Parent",
+    "Subsidiary / Affiliate",
+]
+
+REGIONS = [
+    "US Mid Atlantic",
+    "US New England",
+    "US Southeast",
+    "US Midwest",
+    "US Southwest",
+    "US West",
+    "Canada",
+    "Foreign",
+]
+
+MARKETS = [
+    "NYSE",
+    "NYSE MKT",
+    "NASDAQ Global Select Market",
+    "NASDAQ Global Market",
+    "NASDAQ Capital Market",
+    "OTCQX U.S.",
+    "OTCQX International",
+    "OTCQX International Premier",
+    "OTCQB",
+    "Pink Current",
+    "Pink Limited",
+    "Expert Market",
+]
+
+# The years breaches were disclosed in. clean.py refuses an export with a
+# breach outside them, so a year sheet built on this range never drops one.
+FIRST_YEAR = 2004
+LAST_YEAR = 2024
+
+# The reported figures a company has each year, by the column they are stored
+# under and the title they are drawn with. Monetary figures are in millions of
+# dollars, as the fundamentals export reports them; the share price is dollars
+# per share. The breach export's own snapshot figures are plain dollars, and
+# their columns say so (_usd), so the two units are never one name apart.
+FUNDAMENTALS = {
+    "assets_musd": "Assets",
+    "net_income_musd": "Net Income",
+    "price_close": "Share Price",
 }
 
+# The years around a breach the before/after sheet shows, relative to the year
+# it was disclosed in.
+OFFSETS = [-2, -1, 0, 1, 2]
 
-def category_of(ratio):
-    for name, members in CATEGORIES.items():
-        if ratio in members:
-            return name
-    return None
+# The sheets the API draws. Each is a fixed pairing of what the rows are and
+# what the columns are; filters narrow which breaches are counted, never what
+# the axes mean.
+VIEWS = {
+    "attack_by_year": {
+        "title": "Attacks by Year",
+        "rows": "attack type",
+        "columns": "year",
+        "measure": "breaches",
+        "description": "How many breaches of each attack type were disclosed each year. "
+                       "A breach with two attack types counts once under each.",
+    },
+    "industry_by_attack": {
+        "title": "Industries by Attack",
+        "rows": "industry",
+        "columns": "attack type",
+        "measure": "breaches",
+        "description": "How many breaches each industry disclosed, by attack type. "
+                       "A breach with two attack types counts once under each.",
+    },
+    "before_after": {
+        "title": "Before and After a Breach",
+        "rows": "company",
+        "columns": "figure by years from breach",
+        "measure": "reported figures",
+        "description": "Each breached company's assets and net income (millions of dollars) "
+                       "and share price (dollars), from two years before its first breach "
+                       "to two years after.",
+    },
+}
 
+DEFAULT_VIEW = "attack_by_year"
 
-# The reported line items behind the ratios. These are filterable and joinable,
-# never plottable: a sheet's columns come from RATIOS alone, so this list can
-# grow without widening what the app can draw. 'earnings_per_share' is
-# deliberately absent — it is reported rather than derived, so it already lives
-# in RATIOS, and the two surfaces stay disjoint.
-FUNDAMENTALS = [
-    "assets",
-    "assets_current",
-    "cash_and_equivalents",
-    "inventory",
-    "marketable_securities_current",
-    "receivables_net_current",
-    "accounts_receivable_gross_current",
-    "allowance_for_doubtful_accounts",
-    "property_plant_equipment_net",
-    "liabilities",
-    "liabilities_current",
-    "total_debt",
-    "stockholders_equity",
-    "preferred_stock_value",
-    "revenues",
-    "cost_of_goods_sold",
-    "earnings_before_interest_and_taxes",
-    "net_income",
-    "net_income_available_to_common",
-    "interest_expense",
-    "dividends_paid_common",
-    "preferred_stock_dividends",
-    "common_shares_outstanding",
-    "price_close_annual",
-]
-
-# The export reports monetary figures and share counts in millions; the closing
-# price alone is a plain per-share amount. A filter is written in the field's own
-# unit, so "revenue over $1B" is revenues:gt:1000 and not revenues:gt:1000000000.
-# /fields publishes this with each field's observed range so a caller can tell
-# which it is without guessing, because guessing wrong returns an empty sheet
-# rather than an error.
-UNITS = {name: "millions" for name in FUNDAMENTALS}
-UNITS["price_close_annual"] = "usd_per_share"
-
-UNIT_NOTE = (
-    "Figures are in millions except price_close_annual, which is dollars per "
-    "share. Revenue over one billion dollars is revenues:gt:1000."
-)
-
-DEFAULT_METRICS = [
-    "current_ratio",
-    "quick_ratio",
-    "debt_to_equity",
-    "net_margin",
-    "return_on_equity",
-    "asset_turnover_ratio",
-]
-
-# The /sheet defaults: what a request that names no years and no caps gets, and
-# so what the app draws when it opens an industry without narrowing it.
-YEARS = [2019, 2020]
-
-# A hundred companies is 3,600 bars and a sheet about ten metres deep. It is the
-# most the renderer is asked to draw at once: every bar is its own object with its
-# own collider, so the ceiling here is a rendering budget rather than a limit on
+# A hundred companies is 1,500 bars on the before/after sheet. It is the most
+# the renderer is asked to draw at once: every bar is its own object with its
+# own collider, so the ceiling is a rendering budget rather than a limit on
 # what the database will answer.
 SHEET_LIMIT = 100
 
-# How many companies each industry contributes to the cross-industry sheet.
-# Ranking the whole database by size and taking the top hundred returns mostly
-# manufacturers, which is a leaderboard rather than a comparison; ten from each
-# keeps every industry on the sheet and keeps filtering to an industry from
-# coming back empty. Ten of ten industries is a hundred rows, which is the row
-# ceiling, so the two numbers are meant to be read together.
+# How many companies each industry contributes to a before/after sheet that
+# names no industry. Ranking every breached company by size returns mostly
+# manufacturers and banks, which is a leaderboard rather than a comparison; ten
+# from each keeps every industry on the sheet.
 SHEET_PER = 10
 LIMIT_MINIMUM = 1
 LIMIT_MAXIMUM = 200
 
-# What "largest first" ranks companies by.
-SIZE_METRIC = "working_capital"
+# How many breaches one /breaches answer lists at most. The assistant reads
+# them out, so this is a listening budget.
+BREACH_LIMIT = 10
+BREACH_LIMIT_MAXIMUM = 50
 
 # Each division is a contiguous run of SIC codes: a code belongs to the first
-# division whose ceiling it falls under. publish.py labels every company with it,
-# and /sheet and /industries read the label, so an industry means one set of
-# companies everywhere.
+# division whose ceiling it falls under. clean.py labels every company with it,
+# and the API reads the label, so an industry means one set of companies
+# everywhere.
 DIVISIONS = [
     (1000, "Agriculture"),
     (1500, "Mining"),
@@ -164,6 +167,8 @@ LAST_DIVISION = "Public Administration"
 
 
 def division(sic):
+    if sic is None:
+        return None
     for ceiling, name in DIVISIONS:
         if sic < ceiling:
             return name
@@ -189,15 +194,14 @@ DIVISION_NAMES = [name for name, _, _ in division_bounds()]
 # industry is the same color on every sheet it appears on and a filter that drops
 # rows never repaints the survivors.
 #
-# Any two of these can end up side by side: rows leave here in company-name order
-# but the user sorts them at will, so no ordering is durable and every pair has to
-# stand on its own. Ten categorical colors cannot all be told apart under that —
-# measured worst pairs are dE 2.9 between Transportation and Agriculture for a
-# deuteranope and 7.1 between Manufacturing and Mining for normal vision (OKLab
-# x100, against gates of 8 and 15). So colour is a fast way to see that two rows
-# differ in kind, not a reliable way to name which kind: every row is labelled
-# with its company, and the assistant names the industries on a piece when asked.
-# A legend is what would fix it.
+# Any two of these can end up side by side: the user sorts rows at will, so no
+# ordering is durable and every pair has to stand on its own. Ten categorical
+# colors cannot all be told apart under that — measured worst pairs are dE 2.9
+# between Transportation and Agriculture for a deuteranope and 7.1 between
+# Manufacturing and Mining for normal vision (OKLab x100, against gates of 8 and
+# 15). So colour is a fast way to see that two rows differ in kind, not a
+# reliable way to name which kind: every row is labelled, and the assistant
+# names the industries on a sheet when asked. A legend is what would fix it.
 # Keyed by name rather than zipped against DIVISION_NAMES by position: inserting
 # a division into DIVISIONS would otherwise shift every colour below it, which is
 # exactly the "same colour on every sheet" promise above failing silently.

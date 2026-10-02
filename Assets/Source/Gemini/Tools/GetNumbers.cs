@@ -10,7 +10,8 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
         public string row;
         [Doc("The metric to read: its name, or its 1-based position. Give it with 'row' for one company's figures, or alone to read down the metric."), Optional]
         public string column;
-        [Doc("Which year of a paired metric to read, such as '2019'. Leave it out to get both years."), Optional]
+        [Doc("Which column of a grouped figure to read, by its title within the group, such as '-1' for the " +
+             "year before a breach. Leave it out to get them all."), Optional]
         public string year;
     }
 
@@ -20,8 +21,8 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
                       "Give 'row' and 'column' together for a single cell, 'row' alone to read across that row, " +
                       "'column' alone to read down that column, or neither to read the whole block; a block over " +
                       "100 cells is refused, so read a large sheet a row or column at a time. " +
-                      "When the sheet pairs its columns, 'column' names the metric and covers both its years; add " +
-                      "'year' to read just one of them. " +
+                      "When the sheet groups its columns, 'column' names the figure and covers every column of " +
+                      "it; add 'year' to read just one of them. " +
                       "Rows and columns take a name or a 1-based position, and readings come back in display order, " +
                       "so a Sort reorder is reflected in them. A cell with no value reads as null, never as zero. " +
                       "This is the source for anything numeric: read the values you need and work out totals, averages, " +
@@ -56,7 +57,7 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
             }
         }
         else if (!string.IsNullOrWhiteSpace(args.year)) {
-            result["error"] = "'year' picks one column of a metric, so give 'column' as well.";
+            result["error"] = "'year' picks one column of a grouped figure, so give 'column' as well.";
             return;
         }
 

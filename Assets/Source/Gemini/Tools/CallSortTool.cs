@@ -165,7 +165,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         }
         if (data.IsGrouped(!isColumn) && !hasLine) {
             result["error"] = "Each row spans several metrics in different units, so there is no single number to " +
-                "rank them by. Name the metric in 'by.line', such as {line: 'Revenue'}.";
+                "rank them by. Name the metric in 'by.line', such as {line: 'Net Income'}.";
             return;
         }
 
@@ -216,7 +216,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
 
         result["rankedBy"] = hasLine
             ? DataSource.GroupLabelAt(data, !isColumn, data.GroupOf(!isColumn, crossLo))
-              + (crossLo == crossHi ? "" : $" ({crossMeasure} of both years)")
+              + (crossLo == crossHi ? "" : $" ({crossMeasure} of its columns)")
             : measure;
         result["first"] = biggestFirst ? "biggest" : "smallest";
         if (ranked.Count <= MaxEchoedLines) result["scores"] = scores;
