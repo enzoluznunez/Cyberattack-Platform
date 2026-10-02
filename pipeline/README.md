@@ -92,6 +92,33 @@ Bind `0.0.0.0` rather than localhost: the request comes from a headset on the
 same network, and the address it uses is the one line in
 `Assets/StreamingAssets/api.url`.
 
+## Deploying to Google Cloud
+
+The same `api.py` runs on Cloud Run as the service `cyber-api`, at
+`https://cyber-api-546782261162.us-east1.run.app`:
+
+```sh
+./deploy.sh
+```
+
+Cloud Build builds the image from the `Dockerfile` (`.gcloudignore` uploads
+only the API's own files) and Cloud Run serves it. The first run also sets up
+what the service needs, and later runs leave it alone:
+
+- the service account `cyber-api`, which may run BigQuery queries and read the
+  `cyber` dataset, and nothing else
+- the Secret Manager secret `api-key`: what callers send as `X-Api-Key`, and
+  the same value as the headset's `Assets/StreamingAssets/cloud.key`. Cloud
+  Run hands it to the API as `API_KEY`; only `/health` is open without it.
+
+Requests time out after nine seconds, under the headset's own ten, and at most
+two instances run. To hold the deployed API to the regression recording:
+
+```sh
+REGRESSION_URL=https://cyber-api-546782261162.us-east1.run.app \
+REGRESSION_KEY="$(cat ../Assets/StreamingAssets/cloud.key)" pytest tests/test_regression.py
+```
+
 ## The one list
 
 `metrics.py` owns the names: the attack types and every other category the
