@@ -131,7 +131,7 @@ public sealed class ListDatasets : AgenticTool {
                 }
                 break;
             case EditKind.Filter:
-                e["axis"] = r.filterIsRow ? "company" : "metric";
+                e["axis"] = r.filterIsRow ? "row" : "column";
                 e["hidden"] = FilterTitles(data, r.filterIsRow, r.filterPostHidden);
                 e["wasHidden"] = FilterTitles(data, r.filterIsRow, r.filterPreHidden);
                 break;

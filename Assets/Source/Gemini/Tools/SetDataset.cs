@@ -15,14 +15,14 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "SetDataset",
         Description = "Open one of the listed datasets (switch to it); each keeps its own edits and undo " +
-                      "history. They are the industries the database holds, listed from the start and fetched the " +
-                      "first time they are opened, so this is how an industry gets on screen and it works whether " +
-                      "or not that one has been read before. Nothing else in the app changes datasets: there is no " +
-                      "button for it, so a user who wants a different industry is asking you.",
+                      "history. The breach database's sheets are listed from the start and fetched the first time " +
+                      "they are opened, so this is how one gets on screen and it works whether or not it has been " +
+                      "read before; sheets OpenSheet drew are listed too. Nothing else in the app changes " +
+                      "datasets: there is no button for it, so a user who wants a different sheet is asking you.",
         Parameters = ParametersFor(typeof(Args))
     };
 
-    // Most industries are listed but unread until someone opens one. Reading takes
+    // Most sheets are listed but unread until someone opens one. Reading takes
     // a frame or two, so the wait happens here, before Run reports on the dataset:
     // otherwise the reply would describe the dataset being left rather than the one
     // being opened.

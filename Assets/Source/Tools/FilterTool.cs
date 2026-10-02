@@ -65,12 +65,14 @@ public class FilterTool : Tool
         DataSource data = Data;
         if (data == null) { Light(); return; }
 
-        bool metrics = data.ClearHiddenGroups();
-        bool companies = data.ClearHiddenRows();
+        bool columns = data.ClearHiddenGroups();
+        bool rows = data.ClearHiddenRows();
 
-        if (metrics && companies) Report("put every company and every metric back on the sheet");
-        else if (metrics) Report("showed every metric again");
-        else if (companies) Report("showed every company again");
+        string rowNouns = DataSource.Plural(DataSource.RowNoun(data));
+        string columnNouns = DataSource.Plural(DataSource.GroupNoun(data, true));
+        if (columns && rows) Report($"put every one of the {rowNouns} and {columnNouns} back on the sheet");
+        else if (columns) Report($"showed every one of the {columnNouns} again");
+        else if (rows) Report($"showed every one of the {rowNouns} again");
 
         Light();
     }
@@ -120,8 +122,8 @@ public class FilterTool : Tool
         // whatever they open. Neither starts lit: the list is what a press is
         // for, and an unopened list is not an unfiltered one.
         _axisRow = toolPanelUI.AddToggleRow(Kind, AxisRowName,
-            (CompanyButton, "By Company", () => OnAxisClicked(Axis.Company)),
-            (MetricButton, "By Metric", () => OnAxisClicked(Axis.Metric)));
+            (CompanyButton, "By Row", () => OnAxisClicked(Axis.Company)),
+            (MetricButton, "By Column", () => OnAxisClicked(Axis.Metric)));
 
         BuildList(data);
         LightAxis();
@@ -160,7 +162,7 @@ public class FilterTool : Tool
         Refresh();
         Report(_open == Axis.None
             ? "closed the filter list"
-            : $"opened the list of {(_open == Axis.Company ? "companies" : "metrics")}");
+            : $"opened the list of {DataSource.Plural(_open == Axis.Company ? DataSource.RowNoun(Data) : DataSource.GroupNoun(Data, true))}");
     }
 
     // The line the finger is over, lit the way the Profile tool lights the line
@@ -193,7 +195,7 @@ public class FilterTool : Tool
         if (_open == Axis.None)
         {
             Notices.Show(this, "Filter",
-                "Open By Company or By Metric to choose what a poke takes off the sheet.");
+                "Open By Row or By Column to choose what a poke takes off the sheet.");
             return;
         }
 
@@ -308,7 +310,7 @@ public class FilterTool : Tool
 
         string what = parts.Count > 0
             ? string.Join(" and ", parts)
-            : $"left the same {noun}s on the sheet";
+            : $"left the same {DataSource.Plural(noun)} on the sheet";
 
         int showing = rows ? data.RowOrder.Count : data.GroupCount(true);
         int total = rows ? data.RowCount : data.DataGroupCount;
@@ -322,7 +324,7 @@ public class FilterTool : Tool
     {
         if (names.Count == 1) return names[0];
         if (names.Count <= 3) return string.Join(", ", names);
-        return $"{names.Count} {noun}s";
+        return $"{names.Count} {DataSource.Plural(noun)}";
     }
 
     // A company or metric by the name the user says, or by its 1-based place

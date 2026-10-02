@@ -226,10 +226,23 @@ public abstract class DataSource : MonoBehaviour
             if (!_hiddenRows.Contains(_rowOrder[i])) _visibleRows.Add(_rowOrder[i]);
     }
 
-    // What one row is called. A sheet that arrived with industries on it is a
-    // sheet of companies; an ordinary CSV loaded by hand is just rows.
+    // What one row is called: the sheet's own name for its rows when its corner
+    // cell gives one ('attack type', 'industry', 'company'), and otherwise just
+    // a row, which is all an ordinary CSV loaded by hand says.
     public static string RowNoun(DataSource data) =>
-        data != null && data.HasRowCategories ? "company" : "row";
+        data != null && !string.IsNullOrWhiteSpace(data.RowAxisTitle)
+            ? data.RowAxisTitle.Trim().ToLowerInvariant()
+            : "row";
+
+    // 'industry' -> 'industries', 'attack type' -> 'attack types'. The nouns
+    // come from the data, so a plain trailing 's' is not always right.
+    public static string Plural(string noun)
+    {
+        if (string.IsNullOrEmpty(noun)) return noun;
+        if (noun.Length > 1 && noun.EndsWith("y") && "aeiou".IndexOf(noun[noun.Length - 2]) < 0)
+            return noun.Substring(0, noun.Length - 1) + "ies";
+        return noun.EndsWith("s") ? noun : noun + "s";
+    }
 
     public static string RowLabelOfData(DataSource data, int dataRow)
     {

@@ -4,8 +4,8 @@ using Google.GenAI.Types;
 public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
 
     public class Args {
-        [Doc("Which axis to filter: 'metric' for the columns, 'company' for the rows. " +
-             "Defaults to 'metric'. One call filters one axis; send a second call for the other."), Optional]
+        [Doc("Which axis to filter: 'column' or 'row'. Defaults to 'column'. One call filters one axis; " +
+             "send a second call for the other."), Optional]
         public string axis;
         [Doc("Things to take off the sheet, by name or by 1-based position among those showing."), Optional]
         public string[] hide;
@@ -22,15 +22,16 @@ public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "CallFilterTool",
-Description = "Choose what stands on the sheet: which metrics, or which companies. A hidden metric leaves with both its years and " +
-                      "keeps its place in the arrangement, so bringing it back does not disturb a sort. " +
-                      "The same call filters the company axis when 'axis' is 'company': a hidden company is one " +
-                      "row off the sheet, and it keeps its place in the arrangement too. " +
+        Description = "Choose what stands on the sheet: which columns, or which rows. A hidden column leaves " +
+                      "with every bar it holds \u2014 on a sheet that groups its columns, a whole figure with all " +
+                      "its years \u2014 and keeps its place in the arrangement, so bringing it back does not " +
+                      "disturb a sort. The same call filters the rows when 'axis' is 'row': a hidden row is off " +
+                      "the sheet, and it keeps its place in the arrangement too. " +
                       "Give 'hide' and 'show' to change particular ones, 'only' to leave just the ones named, " +
                       "or 'showAll' to clear the filter on that axis. " +
                       "Everything in one call is one edit on the undo timeline. " +
                       "What is off the sheet is not gone: it comes back with this tool, and no other " +
-                      "tool can read it while it is hidden. At least one metric and one company always stay on the sheet.",
+                      "tool can read it while it is hidden. At least one column and one row always stay on the sheet.",
         Parameters = ParametersFor(typeof(Args))
     };
 
@@ -51,9 +52,10 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
         bool named = (args.hide != null && args.hide.Length > 0) || (args.show != null && args.show.Length > 0);
 
         if (!showAll && !only && !named) {
-            NeedChoice(result, rows ? "companies" : "metrics",
+            string nouns = DataSource.Plural(rows ? DataSource.RowNoun(data) : DataSource.GroupNoun(data, true));
+            NeedChoice(result, rows ? "rows" : "columns",
                 filter.Names(rows),
-                $"Say which {(rows ? "companies" : "metrics")} to hide or show.");
+                $"Say which {nouns} to hide or show.");
             return;
         }
 
@@ -97,8 +99,9 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
         Report(data, rows, result);
     }
 
-    // 'metric' unless the caller says otherwise, which is what a filter meant
-    // before the tool could reach the other axis.
+    // The columns unless the caller says otherwise, which is what a filter meant
+    // before the tool could reach the other axis. 'metric' and 'company' are
+    // still understood, from when every sheet was companies by metrics.
     private static bool ReadAxis(string axis, out bool rows, Dictionary<string, object> result) {
         rows = false;
         if (string.IsNullOrWhiteSpace(axis)) return true;
@@ -111,7 +114,7 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
             case "metric": case "metrics": case "column": case "columns":
                 return true;
             default:
-                result["error"] = $"'{axis.Trim()}' is not an axis; say 'metric' or 'company'.";
+                result["error"] = $"'{axis.Trim()}' is not an axis; say 'column' or 'row'.";
                 return false;
         }
     }
@@ -127,8 +130,8 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
 
             if (rows) {
                 if (!filter.TryResolve(true, name, out int row)) {
-                    result["error"] = $"No single company matches '{name.Trim()}'.";
-                    result["companies"] = new List<object>(filter.Names(true));
+                    result["error"] = $"No single row matches '{name.Trim()}'.";
+                    result["rows"] = new List<object>(filter.Names(true));
                     return false;
                 }
                 if (!into.Contains(row)) into.Add(row);
@@ -136,8 +139,8 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
             }
 
             if (!filter.TryResolve(false, name, out int group)) {
-                result["error"] = $"No single metric matches '{name.Trim()}'.";
-                result["metrics"] = new List<object>(filter.Names(false));
+                result["error"] = $"No single column matches '{name.Trim()}'.";
+                result["columns"] = new List<object>(filter.Names(false));
                 return false;
             }
             if (!into.Contains(group)) into.Add(group);
@@ -156,7 +159,7 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
             foreach (int group in data.DataGroupsInOrder())
                 (data.IsDataGroupHidden(group) ? off : showing).Add(DataSource.GroupLabelOfData(data, group));
 
-        string noun = rows ? "company" : "metric";
+        string noun = rows ? "row" : "column";
         result["axis"] = noun;
         result["showing"] = showing;
         result["hidden"] = off;
