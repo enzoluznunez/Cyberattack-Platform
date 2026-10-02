@@ -138,18 +138,14 @@ public class ViewCatalog : MonoBehaviour
     {
         if (manageDatasets.ActiveIndex >= 0) return;
 
-        var datasets = manageDatasets.Datasets;
-        for (int i = 0; i < datasets.Count; i++)
-        {
-            if (datasets[i].payload != url) continue;
-            manageDatasets.SwitchDataset(i);
-            return;
-        }
+        int index = manageDatasets.IndexOf(url);
+        if (index >= 0) manageDatasets.SwitchDataset(index);
     }
 
     // The request that draws one sheet, unfiltered: every breach, every year.
-    public static string SheetUrl(string view) =>
-        CyberApi.BaseUrl.TrimEnd('/') + "/sheet?view=" + Uri.EscapeDataString(view);
+    public static string SheetPath(string view) => "/sheet?view=" + Uri.EscapeDataString(view);
+
+    public static string SheetUrl(string view) => CyberApi.BaseUrl.TrimEnd('/') + SheetPath(view);
 
     private struct View
     {

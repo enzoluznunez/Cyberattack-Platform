@@ -128,22 +128,13 @@ public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
             string name = wanted[i];
             if (string.IsNullOrWhiteSpace(name)) continue;
 
-            if (rows) {
-                if (!filter.TryResolve(true, name, out int row)) {
-                    result["error"] = $"No single row matches '{name.Trim()}'.";
-                    result["rows"] = new List<object>(filter.Names(true));
-                    return false;
-                }
-                if (!into.Contains(row)) into.Add(row);
-                continue;
-            }
-
-            if (!filter.TryResolve(false, name, out int group)) {
-                result["error"] = $"No single column matches '{name.Trim()}'.";
-                result["columns"] = new List<object>(filter.Names(false));
+            if (!filter.TryResolve(rows, name, out int index)) {
+                string noun = rows ? "row" : "column";
+                result["error"] = $"No single {noun} matches '{name.Trim()}'.";
+                result[noun + "s"] = new List<object>(filter.Names(rows));
                 return false;
             }
-            if (!into.Contains(group)) into.Add(group);
+            if (!into.Contains(index)) into.Add(index);
         }
         return true;
     }

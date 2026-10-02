@@ -78,24 +78,30 @@ def render(document):
     return "".join(out)
 
 
-def main():
+def write_or_check(target, generated):
+    """The command line of a script that generates a checked-in file: rewrite
+    the file, or with --check, exit non-zero if it differs from what the script
+    generates now. gateway.py shares it."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
-    generated = render(schema())
     if args.check:
-        current = TARGET.read_text() if TARGET.exists() else ""
+        current = target.read_text() if target.exists() else ""
         if current != generated:
-            print(f"{TARGET} is stale; run: python codegen.py", file=sys.stderr)
+            print(f"{target} is stale; run: python {Path(sys.argv[0]).name}", file=sys.stderr)
             return 1
-        print(f"{TARGET} is up to date")
+        print(f"{target} is up to date")
         return 0
 
-    TARGET.parent.mkdir(parents=True, exist_ok=True)
-    TARGET.write_text(generated)
-    print(f"wrote {TARGET}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(generated)
+    print(f"wrote {target}")
     return 0
+
+
+def main():
+    return write_or_check(TARGET, render(schema()))
 
 
 if __name__ == "__main__":

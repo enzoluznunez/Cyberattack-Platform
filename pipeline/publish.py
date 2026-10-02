@@ -87,5 +87,5 @@ def publish(breaches, fundamentals, dataset=None):
             table_schema=[field.to_api_repr() for field in schema],
             progress_bar=False,
         )
-        counts[which] = client.get_table(f"{client.project}.{name}.{which}").num_rows
+        counts[which] = client.get_table(database.table_id(which, name)).num_rows
     return counts

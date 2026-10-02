@@ -31,26 +31,25 @@ MAX_BYTES_BILLED = 100 * 1024 * 1024
 
 
 @cache
-def setting(name):
-    """A setting by name from the environment, or None when it is not set."""
-    return os.environ.get(name) or None
-
-
-@cache
 def client():
     """One client per process; it pools its own connections. The project comes
     from GOOGLE_CLOUD_PROJECT when set, and otherwise from the signed-in
     account's default, which on Cloud Run is the project it runs in."""
-    return bigquery.Client(project=setting("GOOGLE_CLOUD_PROJECT"), location=LOCATION)
+    return bigquery.Client(project=os.environ.get("GOOGLE_CLOUD_PROJECT") or None, location=LOCATION)
 
 
 def name():
     return os.environ.get("BIGQUERY_DATASET", "cyber")
 
 
-def table(which, dataset=None):
+def table_id(which, dataset=None):
+    """A table's full name, as the client's table calls take it."""
+    return f"{client().project}.{dataset or name()}.{which}"
+
+
+def table(which):
     """A table's full name, quoted for SQL."""
-    return f"`{client().project}.{dataset or name()}.{which}`"
+    return f"`{table_id(which)}`"
 
 
 def query(sql, parameters=()):

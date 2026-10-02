@@ -19,11 +19,6 @@ import database
 import publish
 
 
-def build(source=clean.RAW_SOURCE):
-    """The exports -> (breaches, fundamentals), without writing anything."""
-    return clean.usable(*clean.read_raw(source))
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default=clean.RAW_SOURCE,
@@ -32,10 +27,10 @@ def main():
                         help="dataset to publish into (default: BIGQUERY_DATASET or cyber)")
     args = parser.parse_args()
 
-    breaches, fundamentals = build(args.source)
-    counts = publish.publish(breaches, fundamentals, args.dataset)
-
     name = args.dataset or database.name()
+    breaches, fundamentals = clean.usable(*clean.read_raw(args.source))
+    counts = publish.publish(breaches, fundamentals, name)
+
     print(f"{args.source} -> {database.client().project}.{name}: "
           + ", ".join(f"{table} {rows} rows" for table, rows in counts.items()))
     return 0

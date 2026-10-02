@@ -83,16 +83,16 @@ public class ManageDatasets : MonoBehaviour
     {
         if (string.IsNullOrEmpty(payload)) return;
 
-        for (int i = 0; i < _datasets.Count; i++)
-            if (_datasets[i].payload == payload)
-            {
-                bool alreadyActive = i == _active;
-                string openLabel = _datasets[i].label;
-                SwitchDataset(i);
-                Notices.Show(this, "Already Open",
-                    alreadyActive ? $"{openLabel} is already open." : $"Switched to {openLabel}.");
-                return;
-            }
+        int open = IndexOf(payload);
+        if (open >= 0)
+        {
+            bool alreadyActive = open == _active;
+            string openLabel = _datasets[open].label;
+            SwitchDataset(open);
+            Notices.Show(this, "Already Open",
+                alreadyActive ? $"{openLabel} is already open." : $"Switched to {openLabel}.");
+            return;
+        }
 
         Dataset dataset = new Dataset
         {
@@ -102,6 +102,9 @@ public class ManageDatasets : MonoBehaviour
         _datasets.Add(dataset);
         SwitchDataset(_datasets.Count - 1);
     }
+
+    // The dataset with this payload, or -1 when none has it.
+    public int IndexOf(string payload) => _datasets.FindIndex(d => d.payload == payload);
 
     // A dataset the app knows of but has not read. It is listed straight away and
     // costs nothing until it is opened.
@@ -125,10 +128,7 @@ public class ManageDatasets : MonoBehaviour
 
     private bool AddCatalogEntryQuietly(string file, string label, string description)
     {
-        if (string.IsNullOrEmpty(file)) return false;
-
-        for (int i = 0; i < _datasets.Count; i++)
-            if (_datasets[i].payload == file) return false;
+        if (string.IsNullOrEmpty(file) || IndexOf(file) >= 0) return false;
 
         _datasets.Add(new Dataset
         {
