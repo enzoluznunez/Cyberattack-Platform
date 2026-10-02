@@ -1,13 +1,18 @@
-"""The Unity tool and the API used to repeat the same constraints in two
-languages. These tests fail if the generated file, or the tool that consumes it,
-drifts from the OpenAPI schema."""
-
-from pathlib import Path
+"""The Unity tools and the API would otherwise repeat the same constraints in
+two languages. These tests fail if the generated file drifts from the OpenAPI
+schema, or the schema from metrics.py."""
 
 import codegen
-from metrics import CATEGORIES, DEFAULT_METRICS, FUNDAMENTALS, RATIOS, UNIT_NOTE
-
-TOOL = codegen.TARGET.parent / "QueryFinancials.cs"
+from metrics import (
+    ATTACK_TYPES,
+    DEFAULT_VIEW,
+    DIVISION_NAMES,
+    FIRST_YEAR,
+    INFORMATION_ACCESSED,
+    LAST_YEAR,
+    SHEET_LIMIT,
+    VIEWS,
+)
 
 
 def test_generated_file_is_current():
@@ -15,58 +20,15 @@ def test_generated_file_is_current():
     assert codegen.TARGET.read_text() == codegen.render(codegen.schema())
 
 
-def test_generated_limits_match_the_pydantic_model():
+def test_generated_years_and_limits_match_the_pydantic_models():
     text = codegen.TARGET.read_text()
-    limit = codegen.parameters(codegen.schema(), "/sheet")["limit"]
-    assert f"LimitMinimum = {limit['minimum']};" in text
-    assert f"LimitMaximum = {limit['maximum']};" in text
-    assert f"LimitDefault = {limit['default']};" in text
+    assert f"FirstYear = {FIRST_YEAR};" in text
+    assert f"LastYear = {LAST_YEAR};" in text
+    assert f"LimitDefault = {SHEET_LIMIT};" in text
+    assert f'DefaultView = "{DEFAULT_VIEW}";' in text
 
 
-def test_generated_metrics_are_the_metric_surface():
+def test_generated_names_are_the_ones_metrics_lists():
     text = codegen.TARGET.read_text()
-    assert all(f'"{ratio}"' in text for ratio in RATIOS)
-    assert all(f'"{metric}"' in text for metric in DEFAULT_METRICS)
-
-
-def test_unity_tool_reads_the_contract_instead_of_repeating_it():
-    source = TOOL.read_text()
-    assert "FinancialsContract.LimitMinimum" in source
-    assert "FinancialsContract.LimitMaximum" in source
-    assert "FinancialsContract.LimitDefault" in source
-    assert "FinancialsContract.Metrics" in source
-    # The hand-copied constraints are gone.
-    assert "Limits(1, 200)" not in source
-    assert "?? 30" not in source
-
-
-def test_generated_filter_fields_are_the_filter_surface():
-    text = codegen.TARGET.read_text()
-    assert all(f'"{field}"' in text for field in FUNDAMENTALS)
-    for operator in ("eq", "ne", "lt", "lte", "gt", "gte"):
-        assert f'"{operator}"' in text
-
-
-def test_generated_categories_cover_every_ratio():
-    text = codegen.TARGET.read_text()
-    for name, members in CATEGORIES.items():
-        assert f'"{name}"' in text
-        assert all(f'"{ratio}"' in text for ratio in members)
-
-
-def test_the_unit_note_reaches_the_generated_file():
-    # A filter in the wrong unit comes back as an empty sheet rather than an
-    # error, so this sentence has to travel with the contract.
-    assert UNIT_NOTE in codegen.TARGET.read_text()
-
-
-def test_unity_tool_validates_filters_against_the_contract():
-    """The tool refuses a bad filter locally, using the generated lists rather
-    than its own copy of them, so a typo costs no round trip."""
-    source = TOOL.read_text()
-    assert "FinancialsContract.FilterFields" in source
-    assert "FinancialsContract.FilterOperators" in source
-    assert "FinancialsContract.FilterUnits" in source
-    # No hand-copied field names or operators.
-    for literal in ('"revenues", "assets"', '"gt", "gte"'):
-        assert literal not in source
+    for names in (list(VIEWS), DIVISION_NAMES, ATTACK_TYPES, INFORMATION_ACCESSED):
+        assert all(f'"{name}"' in text for name in names)

@@ -1,16 +1,14 @@
-"""Rebuild the database the API serves, from the export, in one command.
+"""Rebuild the tables the API serves, from the exports, in one command.
 
-    python rebuild.py                  the export in S3 -> the 'nasba' database
-    python rebuild.py --db nasba_test  the same, into a scratch database
-    python rebuild.py --source FILE    a local copy of the export instead
+    python rebuild.py                       the exports in Cloud Storage -> the 'cyber' dataset
+    python rebuild.py --dataset cyber_test  the same, into a scratch dataset
+    python rebuild.py --source data         local copies of the exports instead
 
-The export is read (clean.read_raw), the usable rows kept (clean.usable), the
-ratios computed (ratios.compute) and the result published as one document per
-company (publish.publish). Nothing is kept in between: every run starts from
-the export, so the database is always what the export and this code say.
+The exports are read (clean.read_raw), typed (clean.usable) and published as
+two tables (publish.publish). Nothing is kept in between: every run starts from
+the exports, so the tables are always what the exports and this code say.
 
-Reading from S3 needs AWS credentials (AWS_PROFILE=nasba after
-`aws sso login --profile nasba`); publishing needs the Atlas admin user in .env.
+Needs `gcloud auth application-default login` on a laptop.
 """
 
 import argparse
@@ -19,29 +17,27 @@ import sys
 import clean
 import database
 import publish
-import ratios
 
 
 def build(source=clean.RAW_SOURCE):
-    """The export -> (staging, documents), without writing anything."""
-    staging = clean.usable(clean.read_raw(source))
-    return staging, list(publish.documents(ratios.compute(staging)))
+    """The exports -> (breaches, fundamentals), without writing anything."""
+    return clean.usable(*clean.read_raw(source))
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default=clean.RAW_SOURCE,
-                        help="s3://bucket/key or a local path to the export (default: %(default)s)")
-    parser.add_argument("--db", default=None, help="database to publish into (default: MONGODB_DB or nasba)")
+                        help="gs://bucket or a local directory holding both exports (default: %(default)s)")
+    parser.add_argument("--dataset", default=None,
+                        help="dataset to publish into (default: BIGQUERY_DATASET or cyber)")
     args = parser.parse_args()
 
-    staging, docs = build(args.source)
-    collection = publish.publish(docs, args.db)
+    breaches, fundamentals = build(args.source)
+    counts = publish.publish(breaches, fundamentals, args.dataset)
 
-    years = sum(len(doc["years"]) for doc in docs)
-    print(f"{args.source}: {len(staging)} usable rows -> "
-          f"{args.db or database.name()}.{database.COLLECTION}: "
-          f"{collection.count_documents({})} companies, {years} company-years")
+    name = args.dataset or database.name()
+    print(f"{args.source} -> {database.client().project}.{name}: "
+          + ", ".join(f"{table} {rows} rows" for table, rows in counts.items()))
     return 0
 
 

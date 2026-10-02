@@ -133,10 +133,10 @@ ProjectSettings/AI.Assistant/
 __pycache__/
 .pytest_cache/
 /pipeline/.coverage
-# Connection strings and keys; .env.example shows the shape
+# Project settings and keys; .env.example shows the shape
 /pipeline/.env
-# sam build output
-/pipeline/.aws-sam/
+# Local copies of the raw CSVs; the originals live in gs://cyberattack-platform-raw
+/pipeline/data/
 # Recorded API answers: real data, kept off GitHub
 /pipeline/regression/
 
