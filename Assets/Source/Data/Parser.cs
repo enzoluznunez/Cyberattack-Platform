@@ -52,7 +52,7 @@ public class Parser : DataSource
         using (UnityEngine.Networking.UnityWebRequest www = UnityEngine.Networking.UnityWebRequest.Get(url))
         {
             // A sheet from the API carries its key; a file or any other URL does not.
-            FinancialsApi.Authorize(www);
+            CyberApi.Authorize(www);
             yield return www.SendWebRequest();
 
             if (www.result != UnityEngine.Networking.UnityWebRequest.Result.Success)

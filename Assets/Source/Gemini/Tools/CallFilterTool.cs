@@ -7,14 +7,12 @@ public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
         [Doc("Which axis to filter: 'metric' for the columns, 'company' for the rows. " +
              "Defaults to 'metric'. One call filters one axis; send a second call for the other."), Optional]
         public string axis;
-        [Doc("Things to take off the sheet, by name, by 1-based position among those showing, or \u2014 on the " +
-             "metric axis \u2014 by the kind of ratio they are, which takes all of its metrics off together."), Optional]
+        [Doc("Things to take off the sheet, by name or by 1-based position among those showing."), Optional]
         public string[] hide;
-        [Doc("Things to bring back onto the sheet, by name or by kind; hidden ones have no position."), Optional]
+        [Doc("Things to bring back onto the sheet, by name; hidden ones have no position."), Optional]
         public string[] show;
         [Doc("Show only these and hide every other one on the axis. Use this for 'just show me X and Y'; " +
-             "it replaces the filter rather than adding to it. A kind of ratio stands for all of its " +
-             "metrics here too."), Optional]
+             "it replaces the filter rather than adding to it."), Optional]
         public string[] only;
         [Doc("Clear the filter on this axis and put everything back on the sheet."), Optional]
         public bool? showAll;
@@ -29,9 +27,7 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
                       "The same call filters the company axis when 'axis' is 'company': a hidden company is one " +
                       "row off the sheet, and it keeps its place in the arrangement too. " +
                       "Give 'hide' and 'show' to change particular ones, 'only' to leave just the ones named, " +
-                      "or 'showAll' to clear the filter on that axis. Where a metric can be named, so can a kind of ratio " +
-                      "\u2014 liquidity, efficiency, solvency, profitability or valuation \u2014 which stands for " +
-                      "every metric of that kind on the sheet; ListRatios gives the grouping. " +
+                      "or 'showAll' to clear the filter on that axis. " +
                       "Everything in one call is one edit on the undo timeline. " +
                       "What is off the sheet is not gone: it comes back with this tool, and no other " +
                       "tool can read it while it is hidden. At least one metric and one company always stay on the sheet.",
@@ -139,20 +135,9 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
                 continue;
             }
 
-            // A kind of ratio first: it stands for several metrics at once, and
-            // no category shares a name with a metric, so there is nothing to
-            // disambiguate between them.
-            List<int> kind = filter.ResolveCategory(name);
-            if (kind != null) {
-                for (int k = 0; k < kind.Count; k++)
-                    if (!into.Contains(kind[k])) into.Add(kind[k]);
-                continue;
-            }
-
             if (!filter.TryResolve(false, name, out int group)) {
-                result["error"] = $"No single metric or kind of ratio matches '{name.Trim()}'.";
+                result["error"] = $"No single metric matches '{name.Trim()}'.";
                 result["metrics"] = new List<object>(filter.Names(false));
-                result["kinds"] = new List<object>(filter.CategoryNames());
                 return false;
             }
             if (!into.Contains(group)) into.Add(group);

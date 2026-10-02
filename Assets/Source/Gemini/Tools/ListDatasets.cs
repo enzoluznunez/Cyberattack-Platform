@@ -7,8 +7,8 @@ public sealed class ListDatasets : AgenticTool {
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "ListDatasets",
         Description = "List the datasets and what stands on each: 'name', 'active' (whether it is the dataset " +
-                      "currently open), 'read' (false for an industry that is listed but has not been read yet; " +
-                      "SetDataset reads it, and 'companies' says how many it would bring) and 'edits' (the tool " +
+                      "currently open), 'read' (false for a sheet that is listed but has not been read yet; " +
+                      "SetDataset reads it, and 'description' says what it would show) and 'edits' (the tool " +
                       "edits that currently stand on it, newest first). " +
                       "This is cheap and carries no row, column or value data; call DescribeSheet for the sheet's " +
                       "titles, ranges, position and industries, GetNumbers for its numbers, or DescribeDataset for " +
@@ -29,14 +29,14 @@ public sealed class ListDatasets : AgenticTool {
                 var dataset = datasets.Datasets[i];
                 bool active = i == datasets.ActiveIndex;
 
-                // An industry that has not been read yet has no sheet and no
-                // edits; saying so is the whole of what there is to report.
+                // A sheet that has not been read yet has nothing drawn and no
+                // edits; what it would show is the whole of what there is to report.
                 if (!dataset.loaded) {
                     list.Add(new Dictionary<string, object> {
                         { "name", string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label },
                         { "active", false },
                         { "read", false },
-                        { "companies", dataset.companies }
+                        { "description", dataset.description }
                     });
                     continue;
                 }

@@ -26,11 +26,12 @@ public class ManageDatasets : MonoBehaviour
         // answered yet; the result handler and Unload both clear the reader.
         public bool loading => source != null && !loaded;
 
-        // Listed from the industry index rather than scanned in: it stands in the
-        // rail from startup and is parsed the first time someone opens it, so a
-        // session begins with every industry named and none of them read.
+        // Listed from the database's catalogue of sheets rather than scanned in:
+        // it stands in the rail from startup and is read the first time someone
+        // opens it, so a session begins with every sheet named and none of them
+        // read. The description says what it would show once read.
         public bool catalogued;
-        public int companies;
+        public string description;
 
         public readonly EditList Edits = new EditList();
     }
@@ -104,25 +105,25 @@ public class ManageDatasets : MonoBehaviour
 
     // A dataset the app knows of but has not read. It is listed straight away and
     // costs nothing until it is opened.
-    public void AddCatalogEntry(string file, string label, int companies)
+    public void AddCatalogEntry(string file, string label, string description)
     {
-        if (AddCatalogEntryQuietly(file, label, companies)) OnDatasetsChanged?.Invoke();
+        if (AddCatalogEntryQuietly(file, label, description)) OnDatasetsChanged?.Invoke();
     }
 
     // The rail is torn down and rebuilt on every change, so a whole index is
-    // listed in one go and announced once rather than once per industry.
-    public void AddCatalogEntries(IEnumerable<(string file, string label, int companies)> entries)
+    // listed in one go and announced once rather than once per sheet.
+    public void AddCatalogEntries(IEnumerable<(string file, string label, string description)> entries)
     {
         if (entries == null) return;
 
         bool added = false;
-        foreach ((string file, string label, int companies) in entries)
-            added |= AddCatalogEntryQuietly(file, label, companies);
+        foreach ((string file, string label, string description) in entries)
+            added |= AddCatalogEntryQuietly(file, label, description);
 
         if (added) OnDatasetsChanged?.Invoke();
     }
 
-    private bool AddCatalogEntryQuietly(string file, string label, int companies)
+    private bool AddCatalogEntryQuietly(string file, string label, string description)
     {
         if (string.IsNullOrEmpty(file)) return false;
 
@@ -134,7 +135,7 @@ public class ManageDatasets : MonoBehaviour
             payload = file,
             label = string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label,
             catalogued = true,
-            companies = companies
+            description = description
         });
         return true;
     }
@@ -144,7 +145,7 @@ public class ManageDatasets : MonoBehaviour
 
     // Reads a listed dataset if it has not been read, and answers when it is
     // ready either way. The assistant awaits this so that it never reports
-    // switching to an industry the app is still reading, then switches itself;
+    // switching to a sheet the app is still reading, then switches itself;
     // reading alone asks for nothing to be shown.
     public Task<bool> EnsureLoaded(int index)
     {
@@ -204,12 +205,12 @@ public class ManageDatasets : MonoBehaviour
 
         if (!ok)
         {
-            // An industry stays in the rail when its file will not read: it is
-            // still one of the industries, and trying again is a tap away.
+            // A listed sheet stays in the rail when it will not read: it is
+            // still one of the sheets, and trying again is a tap away.
             if (dataset.catalogued)
             {
                 Unload(dataset);
-                Notices.Show(this, "Industry Unavailable",
+                Notices.Show(this, "Sheet Unavailable",
                     reason ?? $"{dataset.label} could not be read.");
                 OnDatasetsChanged?.Invoke();
                 return;
@@ -271,7 +272,7 @@ public class ManageDatasets : MonoBehaviour
         _requested = null;
         if (index == _active) return;
 
-        // A listed industry is read here, the first time it is asked for. The
+        // A listed sheet is read here, the first time it is asked for. The
         // parse finishes on a later frame and lands back in OnDatasetLoadResult,
         // which switches to it then, unless something else was asked for since.
         if (!_datasets[index].loaded)
