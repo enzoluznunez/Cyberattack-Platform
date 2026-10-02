@@ -4,10 +4,9 @@
     fundamentals    one row per company per year
 
 Settings come from the environment, or from pipeline/.env on a laptop;
-.env.example shows its shape. Nothing here holds a password: on a laptop the
-client signs in with `gcloud auth application-default login`, and on Cloud Run
-with the service's own account. The one secret, API_KEY, is handed to Cloud Run
-from Secret Manager as an environment variable.
+.env.example shows its shape. Nothing here holds a password or a key: on a
+laptop the client signs in with `gcloud auth application-default login`, and on
+Cloud Run with the service's own account.
 """
 
 import os

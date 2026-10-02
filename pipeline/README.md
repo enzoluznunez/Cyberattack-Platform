@@ -71,7 +71,7 @@ and draws each one from `/sheet`:
 
 | Endpoint | What it answers |
 |---|---|
-| `/health` | Whether the service is up, and how many rows each table holds. Open without a key. |
+| `/health` | Whether the service is up, and how many rows each table holds. Open without a key at the gateway. |
 | `/views` | The sheets, and the names every filter takes |
 | `/sheet?view=…` | One sheet, as the CSV the app parses |
 | `/breaches` | Individual breaches, newest first, for the assistant to read out |
@@ -94,28 +94,51 @@ same network, and the address it uses is the one line in
 
 ## Deploying to Google Cloud
 
-The same `api.py` runs on Cloud Run as the service `cyber-api`, at
-`https://cyber-api-546782261162.us-east1.run.app`:
+```
+headset --(Google Cloud API key)--> API Gateway --(cyber-gateway-1)--> Cloud Run --> BigQuery
+```
+
+The same `api.py` runs on Cloud Run as the service `cyber-api`, which is
+private: only API Gateway may call it. Callers use the gateway, at
+`https://cyber-gateway-6z6s1gve.ue.gateway.dev`, sending a Google Cloud API key
+in `X-Api-Key`. Only `/health` answers without one.
 
 ```sh
 ./deploy.sh
 ```
 
 Cloud Build builds the image from the `Dockerfile` (`.gcloudignore` uploads
-only the API's own files) and Cloud Run serves it. The first run also sets up
-what the service needs, and later runs leave it alone:
+only the API's own files) and Cloud Run serves it. The script also keeps in
+place, and leaves alone once there:
 
 - the service account `cyber-api`, which may run BigQuery queries and read the
   `cyber` dataset, and nothing else
-- the Secret Manager secret `api-key`: what callers send as `X-Api-Key`, and
-  the same value as the headset's `Assets/StreamingAssets/cloud.key`. Cloud
-  Run hands it to the API as `API_KEY`; only `/health` is open without it.
+- the gateway's service account `cyber-gateway-1` as the only one allowed to
+  invoke the service
+- the gateway `cyber-gateway` in `us-east1`, serving the API `cyber` from
+  `gateway.json`. A gateway config cannot be edited, so each version of the
+  file becomes a config named after its contents, and the gateway moves to it
+  only when the file changed.
 
-Requests time out after nine seconds, under the headset's own ten, and at most
-two instances run. To hold the deployed API to the regression recording:
+The gateway forwards only the paths `gateway.json` lists. It is generated from
+`api.py`'s own routes, and `pytest` fails if it is stale:
 
 ```sh
-REGRESSION_URL=https://cyber-api-546782261162.us-east1.run.app \
+python gateway.py --check
+```
+
+The key itself is made in the console (APIs & Services → Credentials), as an
+ordinary API key restricted to the API `cyber` — not bound to a service
+account, which Google allows only for Gemini and Vertex — and goes in the
+headset's `Assets/StreamingAssets/cloud.key`. Disabling or deleting it there
+cuts the headset off without a redeploy.
+
+Requests time out after nine seconds at both the gateway and Cloud Run, under
+the headset's own ten, and at most two instances run. To hold the deployed API
+to the regression recording:
+
+```sh
+REGRESSION_URL=https://cyber-gateway-6z6s1gve.ue.gateway.dev \
 REGRESSION_KEY="$(cat ../Assets/StreamingAssets/cloud.key)" pytest tests/test_regression.py
 ```
 

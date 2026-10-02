@@ -1,4 +1,3 @@
-import hmac
 from enum import StrEnum
 from typing import Annotated
 
@@ -61,28 +60,12 @@ VOCABULARY = {
     "market": MARKETS,
 }
 
+# Nothing here checks who is asking. Deployed, the service is private: Cloud
+# Run lets in only API Gateway's service account, and the gateway lets in only
+# callers with a Google Cloud API key restricted to this API (gateway.json says
+# which paths need one). On a laptop and in the tests there is no gateway, and
+# nothing is asked for.
 app = FastAPI(title="Cyberattack Platform")
-
-# What anyone may ask without a key: whether the service is up, and nothing
-# about the data beyond how many rows it holds.
-OPEN_PATHS = {"/health"}
-
-
-@app.middleware("http")
-async def require_api_key(request: Request, call_next):
-    """A Cloud Run URL is reachable by anyone, so every request but a health
-    check carries the key in X-Api-Key. Where no key is configured — a laptop,
-    the tests — nothing is checked, so the key is a property of the deployment
-    rather than of the code."""
-    expected = database.setting("API_KEY")
-    if expected and request.url.path not in OPEN_PATHS:
-        given = request.headers.get("x-api-key", "")
-        # Compared in constant time, so the reply's timing says nothing about
-        # how much of a guess was right.
-        if not hmac.compare_digest(given.encode(), expected.encode()):
-            return JSONResponse(status_code=401,
-                                content={"detail": "The API key is missing or wrong."})
-    return await call_next(request)
 
 
 # Pydantic reports a list of structured errors; the voice client reads 'detail'

@@ -8,15 +8,16 @@ using UnityEngine.Networking;
 
 public static class CyberApi {
 
-    // Where the database is: the API on Cloud Run, the same for every build.
-    // StreamingAssets/api.url overrides it when present, which is how the
-    // Editor is pointed at a server running on this machine instead.
-    public static string BaseUrl = "https://cyber-api-546782261162.us-east1.run.app";
+    // Where the database is: API Gateway, in front of the private Cloud Run
+    // service, the same for every build. StreamingAssets/api.url overrides it
+    // when present, which is how the Editor is pointed at a server running on
+    // this machine instead.
+    public static string BaseUrl = "https://cyber-gateway-6z6s1gve.ue.gateway.dev";
 
-    // What the deployed API expects in X-Api-Key. ViewCatalog reads it from
-    // StreamingAssets/cloud.key at startup; left empty, requests go out without
-    // it, which a server on this machine does not ask for and the deployed one
-    // refuses with a sentence the assistant can read out.
+    // The Google Cloud API key the gateway checks in X-Api-Key, restricted to
+    // this API alone. ViewCatalog reads it from StreamingAssets/cloud.key at
+    // startup; left empty, requests go out without it, which a server on this
+    // machine does not ask for and the gateway refuses.
     public static string ApiKey = "";
     public const string KeyHeader = "X-Api-Key";
 
@@ -78,13 +79,16 @@ public static class CyberApi {
         return list;
     }
 
-    // FastAPI wraps its error text as {"detail": ...}; anything else is passed on, cut short.
+    // FastAPI wraps its error text as {"detail": ...} and the gateway its own
+    // refusals as {"code": ..., "message": ...}; anything else is passed on,
+    // cut short.
     private static string Detail(string body) {
         try {
             using JsonDocument doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("detail", out JsonElement detail) &&
-                detail.ValueKind == JsonValueKind.String)
-                return detail.GetString();
+            foreach (string name in new[] { "detail", "message" })
+                if (doc.RootElement.TryGetProperty(name, out JsonElement text) &&
+                    text.ValueKind == JsonValueKind.String)
+                    return text.GetString();
         }
         catch (JsonException) { }
         return string.IsNullOrEmpty(body) ? "" : body.Length <= 200 ? body : body.Substring(0, 200);

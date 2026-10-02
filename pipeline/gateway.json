@@ -1,0 +1,84 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "cyber",
+    "description": "The Cyberattack Platform API: breach sheets and lookups, drawn from BigQuery.",
+    "version": "1.0.0"
+  },
+  "schemes": [
+    "https"
+  ],
+  "produces": [
+    "application/json",
+    "text/plain"
+  ],
+  "x-google-backend": {
+    "address": "https://cyber-api-546782261162.us-east1.run.app",
+    "path_translation": "APPEND_PATH_TO_ADDRESS",
+    "deadline": 9.0
+  },
+  "securityDefinitions": {
+    "api_key": {
+      "type": "apiKey",
+      "name": "x-api-key",
+      "in": "header"
+    }
+  },
+  "paths": {
+    "/breaches": {
+      "get": {
+        "operationId": "breaches",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sheet": {
+      "get": {
+        "operationId": "sheet",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/views": {
+      "get": {
+        "operationId": "views",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    }
+  }
+}
