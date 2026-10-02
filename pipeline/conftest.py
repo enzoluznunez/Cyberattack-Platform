@@ -3,8 +3,11 @@ import os
 # Every test reads this dataset, which the session rebuilds from the exports
 # before anything runs, so the tests never touch 'cyber', the dataset the
 # deployed API serves. Set before database is imported, so no .env can point
-# the tests anywhere else.
-TEST_DATASET = "cyber_test"
+# the tests anywhere else. Cloud Build tests in 'cyber_ci' (BIGQUERY_TEST_DATASET),
+# so a build and a laptop run never rebuild the same tables at once.
+TEST_DATASET = os.environ.get("BIGQUERY_TEST_DATASET", "cyber_test")
+if TEST_DATASET == "cyber":
+    raise RuntimeError("the tests rebuild their dataset; never point them at 'cyber'")
 os.environ["BIGQUERY_DATASET"] = TEST_DATASET
 
 import pytest  # noqa: E402
