@@ -17,7 +17,7 @@ public class ViewCatalog : MonoBehaviour
 
     [Tooltip("One-line file inside StreamingAssets holding the API's base URL. " +
              "Absent or empty, the built-in default is used.")]
-    public string apiUrlFile = "api.url";
+    public string apiUrlFile = "cloud.url";
 
     [Tooltip("One-line file inside StreamingAssets holding the Google Cloud API key the " +
              "gateway checks in X-Api-Key. Git ignores it, as it does gemini.key.")]

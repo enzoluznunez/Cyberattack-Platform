@@ -9,7 +9,7 @@ using UnityEngine.Networking;
 public static class CyberApi {
 
     // Where the database is: API Gateway, in front of the private Cloud Run
-    // service, the same for every build. StreamingAssets/api.url overrides it
+    // service, the same for every build. StreamingAssets/cloud.url overrides it
     // when present, which is how the Editor is pointed at a server running on
     // this machine instead.
     public static string BaseUrl = "https://cyber-gateway-6z6s1gve.ue.gateway.dev";

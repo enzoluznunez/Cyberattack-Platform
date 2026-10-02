@@ -84,9 +84,10 @@ InitTestScene*.unity*
 /[Aa]ssets/StreamingAssets/gemini.key
 /[Aa]ssets/StreamingAssets/gemini.key.meta
 
-# Where this machine's financial API lives (differs per machine)
-/[Aa]ssets/StreamingAssets/api.url
-/[Aa]ssets/StreamingAssets/api.url.meta
+# The breach API: its Google Cloud API key, and the address that points the
+# Editor at a server on this machine instead of the gateway
+/[Aa]ssets/StreamingAssets/cloud.url
+/[Aa]ssets/StreamingAssets/cloud.url.meta
 /[Aa]ssets/StreamingAssets/cloud.key
 /[Aa]ssets/StreamingAssets/cloud.key.meta
 

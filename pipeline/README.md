@@ -90,7 +90,7 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 
 Bind `0.0.0.0` rather than localhost: the request comes from a headset on the
 same network, and the address it uses is the one line in
-`Assets/StreamingAssets/api.url`.
+`Assets/StreamingAssets/cloud.url`.
 
 ## Deploying to Google Cloud
 
