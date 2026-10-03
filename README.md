@@ -102,8 +102,8 @@ still go through `deploy.sh` by hand.
 ## FAQ
 
 **Does it cost anything?** The Gemini API, yes, for whatever the assistant is used. The
-breach database — Cloud Storage, BigQuery, Cloud Run and API Gateway — is small enough to
-sit within Google Cloud's free tiers, and the project has a monthly budget alert in case it
-ever does not.
+breach database — Cloud Storage, BigQuery, Cloud Run and API Gateway, plus the Cloud Build
+pipeline that tests and deploys it — is small enough to sit within Google Cloud's free tiers,
+and the project has a monthly budget alert in case it ever does not.
 
 **Can I try it without a headset?** Not meaningfully — hand input and passthrough are the interface.
