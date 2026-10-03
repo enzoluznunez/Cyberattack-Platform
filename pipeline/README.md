@@ -142,6 +142,34 @@ REGRESSION_URL=https://cyber-gateway-6z6s1gve.ue.gateway.dev \
 REGRESSION_KEY="$(cat ../Assets/StreamingAssets/cloud.key)" pytest tests/test_regression.py
 ```
 
+## CI/CD
+
+Cloud Build runs `cloudbuild.yaml` (at the repository root) on every push to
+GitHub, as the service account `cyber-ci`:
+
+```
+any branch:  pytest
+main:        pytest -> docker build -> push to Artifact Registry -> deploy to Cloud Run -> /health through the gateway
+```
+
+Two triggers, `cyber-test` and `cyber-deploy`, share the file and differ only in
+`_DEPLOY`. A failing test stops the build, so nothing untested reaches Cloud
+Run. The image is tagged with the commit it was built from.
+
+Builds test in their own dataset, `cyber_ci`, so one never rebuilds the tables
+a laptop run is reading. `cyber-ci` may rebuild that dataset, read the
+exports, and ship new revisions of `cyber-api` — not read `cyber`, change IAM
+or touch the gateway. The one-time setup above and changes to `gateway.json`
+still go through `./deploy.sh`; a build fails if `gateway.json` is stale, which
+is the reminder to run it.
+
+To run the tests on Cloud Build by hand, from the repository root:
+
+```sh
+gcloud builds submit --region=us-east1 \
+    --service-account=projects/cyberattack-platform/serviceAccounts/cyber-ci@cyberattack-platform.iam.gserviceaccount.com
+```
+
 ## The one list
 
 `metrics.py` owns the names: the attack types and every other category the
@@ -165,13 +193,13 @@ python codegen.py --check      # Assets/Source/Gemini/Tools/CyberContract.g.cs
 pytest
 ```
 
-Every run rebuilds a separate dataset, `cyber_test`, from the exports before
-anything else happens, and every test reads that one — never `cyber`, which
+A run whose tests read the data first rebuilds a separate dataset, `cyber_test`
+(`cyber_ci` on Cloud Build), from the exports, and every test reads that one — never `cyber`, which
 the API serves. So a run checks the whole path: exports, cleaning, tables and
 API. Each sheet is checked cell by cell against the same count done in pandas.
 Needs the sign-in above.
 
-- **Unit** — cleaning rules, the sheet CSV format, the one list, the API key check.
+- **Unit** — cleaning rules, the sheet CSV format, the one list, the generated files.
 - **Integration** — every endpoint through FastAPI's test client, against `cyber_test`.
 - **Regression** — `tests/test_regression.py` sends 141 requests and fails on
   any answer that differs by a byte from a recording, one test per request.

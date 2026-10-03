@@ -56,35 +56,25 @@ public class BreachFilters {
     [Doc("true for only breaches disclosed to the SEC, false for only those that were not.")]
     public bool? sec;
 
-    // The filters that take names, with the names each takes. The schema lists
-    // them so the model picks from them rather than guessing a spelling.
-    private static readonly (string field, string[] names)[] Vocabulary = {
-        ("industry", CyberContract.Industries),
-        ("attack", CyberContract.AttackTypes),
-        ("information", CyberContract.InformationTypes),
-        ("accessed", CyberContract.InformationAccessed),
-        ("relationship", CyberContract.Relationships),
-        ("region", CyberContract.Regions),
-        ("market", CyberContract.Markets),
+    // The filters that take names, with the names each takes and the field
+    // holding them. The schema lists the names so the model picks from them
+    // rather than guessing a spelling.
+    private static readonly (string field, string[] names, Func<BreachFilters, string[]> given)[] Vocabulary = {
+        ("industry", CyberContract.Industries, f => f.industry),
+        ("attack", CyberContract.AttackTypes, f => f.attack),
+        ("information", CyberContract.InformationTypes, f => f.information),
+        ("accessed", CyberContract.InformationAccessed, f => f.accessed),
+        ("relationship", CyberContract.Relationships, f => f.relationship),
+        ("region", CyberContract.Regions, f => f.region),
+        ("market", CyberContract.Markets, f => f.market),
     };
 
     public static Schema Named(Schema schema) {
-        foreach ((string field, string[] names) in Vocabulary)
+        foreach ((string field, string[] names, _) in Vocabulary)
             if (schema.Properties.TryGetValue(field, out Schema property) && property.Items != null)
                 property.Items.Enum = new List<string>(names);
         return schema;
     }
-
-    private string[] Values(string field) => field switch {
-        "industry" => industry,
-        "attack" => attack,
-        "information" => information,
-        "accessed" => accessed,
-        "relationship" => relationship,
-        "region" => region,
-        "market" => market,
-        _ => null
-    };
 
     // Puts every name into the contract's own spelling, or says why one cannot
     // be: the reason lists what would have worked.
@@ -95,8 +85,8 @@ public class BreachFilters {
             if (year.HasValue && (year < CyberContract.FirstYear || year > CyberContract.LastYear))
                 return $"Breaches run from {CyberContract.FirstYear} to {CyberContract.LastYear}; {year} is outside them.";
 
-        foreach ((string field, string[] names) in Vocabulary) {
-            string[] given = Values(field);
+        foreach ((string field, string[] names, var values) in Vocabulary) {
+            string[] given = values(this);
             if (given == null) continue;
             for (int i = 0; i < given.Length; i++) {
                 string canonical = Array.Find(names, n => string.Equals(n, given[i]?.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -117,7 +107,7 @@ public class BreachFilters {
 
     public bool Any =>
         since.HasValue || until.HasValue || sec.HasValue || (state != null && state.Length > 0) ||
-        Array.Exists(Vocabulary, v => Values(v.field) != null && Values(v.field).Length > 0);
+        Array.Exists(Vocabulary, v => v.given(this) is { Length: > 0 });
 
     // The filters as query parameters, each name its own parameter, so a name
     // holding a comma ('Finance, Insurance, Real Estate') stays one name.
@@ -125,8 +115,8 @@ public class BreachFilters {
         var query = new StringBuilder();
         if (since.HasValue) query.Append("&since=").Append(since.Value);
         if (until.HasValue) query.Append("&until=").Append(until.Value);
-        foreach ((string field, _) in Vocabulary)
-            Append(query, field, Values(field));
+        foreach ((string field, _, var values) in Vocabulary)
+            Append(query, field, values(this));
         Append(query, "state", state);
         if (sec.HasValue) query.Append("&sec=").Append(sec.Value ? "true" : "false");
         return query.ToString();
@@ -145,10 +135,8 @@ public class BreachFilters {
             int first = since ?? CyberContract.FirstYear, last = until ?? CyberContract.LastYear;
             parts.Add(first == last ? $"{first}" : $"{first}–{last}");
         }
-        foreach ((string field, _) in Vocabulary) {
-            string[] given = Values(field);
-            if (given != null && given.Length > 0) parts.Add(string.Join(", ", given));
-        }
+        foreach ((_, _, var values) in Vocabulary)
+            if (values(this) is { Length: > 0 } given) parts.Add(string.Join(", ", given));
         if (state != null && state.Length > 0) parts.Add(string.Join(", ", state));
         if (sec.HasValue) parts.Add(sec.Value ? "disclosed to the SEC" : "not disclosed to the SEC");
         return string.Join("; ", parts);
@@ -231,15 +219,15 @@ public sealed class OpenSheet : AgenticTool {
 
     protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
         var bound = ToolArguments.Bind(typeof(Args), args, out string bindError) as Args;
-        if (bound == null) return Fail(bindError);
+        if (bound == null) return CyberApi.Fail(bindError);
 
         string view = Array.Find(CyberContract.Views,
             v => string.Equals(v, bound.view?.Trim(), StringComparison.OrdinalIgnoreCase));
         if (view == null)
-            return Fail($"'{bound.view}' is not a sheet; use one of {string.Join(", ", CyberContract.Views)}.");
+            return CyberApi.Fail($"'{bound.view}' is not a sheet; use one of {string.Join(", ", CyberContract.Views)}.");
 
         string bad = bound.Check();
-        if (bad != null) return Fail(bad);
+        if (bad != null) return CyberApi.Fail(bad);
 
         bool sized = view == "before_after" &&
                      ((bound.limit ?? CyberContract.LimitDefault) != CyberContract.LimitDefault ||
@@ -247,32 +235,29 @@ public sealed class OpenSheet : AgenticTool {
 
         // Unfiltered, the sheet is the one already listed: switch to it, reading
         // it first if nobody has opened it yet, rather than drawing a duplicate.
-        if (!bound.Any && !sized) {
-            string url = ViewCatalog.SheetUrl(view);
-            Task<bool> reading = null;
-            await MainThread.Run(() => {
-                var datasets = Scene.Datasets;
-                int index = IndexOf(datasets, url);
-                if (index < 0) return;
-                listed = url;
-                if (!datasets.Datasets[index].loaded) reading = datasets.EnsureLoaded(index);
-            }).ConfigureAwait(false);
-            if (reading != null) await reading.ConfigureAwait(false);
-            if (listed != null) return await base.Execute(args).ConfigureAwait(false);
-        }
+        // Filtered, the listed sheet's title names the new one.
+        bool unfiltered = !bound.Any && !sized;
+        string url = ViewCatalog.SheetUrl(view);
+        string title = view;
+        Task<bool> reading = null;
+        await MainThread.Run(() => {
+            var datasets = Scene.Datasets;
+            int index = datasets != null ? datasets.IndexOf(url) : -1;
+            if (index < 0) return;
+            title = datasets.Datasets[index].label;
+            if (!unfiltered) return;
+            listed = url;
+            if (!datasets.Datasets[index].loaded) reading = datasets.EnsureLoaded(index);
+        }).ConfigureAwait(false);
+        if (reading != null) await reading.ConfigureAwait(false);
+        if (listed != null) return await base.Execute(args).ConfigureAwait(false);
 
-        string query = "/sheet?view=" + view + bound.Query();
+        string query = ViewCatalog.SheetPath(view) + bound.Query();
         if (view == "before_after") {
             if (bound.limit.HasValue) query += $"&limit={bound.limit.Value}";
             if (bound.per.HasValue) query += $"&per={bound.per.Value}";
         }
 
-        string title = view;
-        await MainThread.Run(() => {
-            var datasets = Scene.Datasets;
-            int index = IndexOf(datasets, ViewCatalog.SheetUrl(view));
-            if (index >= 0) title = datasets.Datasets[index].label;
-        }).ConfigureAwait(false);
         string narrowed = bound.Summary();
         label = narrowed.Length > 0 ? $"{title}: {narrowed}" : title;
 
@@ -282,21 +267,11 @@ public sealed class OpenSheet : AgenticTool {
         catch (Exception e) {
             Debug.LogWarning($"[OpenSheet] {e.Message}");
             // A 404 is the server saying which filters matched no breach.
-            return Fail(e is CyberApi.ApiError { Status: 404 } ? e.Message : CyberApi.Explain(e));
+            return CyberApi.Fail(e is CyberApi.ApiError { Status: 404 } ? e.Message : CyberApi.Explain(e));
         }
 
         return await base.Execute(args).ConfigureAwait(false);
     }
-
-    private static int IndexOf(ManageDatasets datasets, string payload) {
-        if (datasets == null) return -1;
-        for (int i = 0; i < datasets.DatasetCount; i++)
-            if (datasets.Datasets[i].payload == payload) return i;
-        return -1;
-    }
-
-    private static Dictionary<string, object> Fail(string why) =>
-        new Dictionary<string, object> { { "error", why } };
 
     protected override void Run(Dictionary<string, object> args, Dictionary<string, object> result) {
         // The tool is a long-lived singleton, so what Execute fetched is handed
@@ -310,7 +285,7 @@ public sealed class OpenSheet : AgenticTool {
         if (datasets == null) { result["error"] = "No dataset manager in the scene."; return; }
 
         if (url != null) {
-            int index = IndexOf(datasets, url);
+            int index = datasets.IndexOf(url);
             if (index < 0 || !datasets.Datasets[index].loaded) {
                 result["error"] = "That sheet could not be read.";
                 return;
@@ -377,49 +352,39 @@ public sealed class FindBreaches : Function {
 
     protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
         var bound = ToolArguments.Bind(typeof(Args), args, out string bindError) as Args;
-        if (bound == null) return new Dictionary<string, object> { { "error", bindError } };
+        if (bound == null) return CyberApi.Fail(bindError);
 
         string bad = bound.Check();
-        if (bad != null) return new Dictionary<string, object> { { "error", bad } };
+        if (bad != null) return CyberApi.Fail(bad);
 
-        string query = "/breaches?" + bound.Query().TrimStart('&');
+        string parameters = bound.Query();
         if (!string.IsNullOrWhiteSpace(bound.company))
-            query += "&company=" + Uri.EscapeDataString(bound.company.Trim());
+            parameters += "&company=" + Uri.EscapeDataString(bound.company.Trim());
         if (!string.IsNullOrWhiteSpace(bound.ticker))
-            query += "&ticker=" + Uri.EscapeDataString(bound.ticker.Trim());
-        if (bound.limit.HasValue) query += $"&limit={bound.limit.Value}";
-        query = query.Replace("?&", "?");
+            parameters += "&ticker=" + Uri.EscapeDataString(bound.ticker.Trim());
+        if (bound.limit.HasValue) parameters += $"&limit={bound.limit.Value}";
+        string query = "/breaches?" + parameters.TrimStart('&');
 
         return await CyberApi.Fetch("FindBreaches", query, (root, result) => {
             result["total"] = root.GetProperty("total").GetInt32();
             var breaches = new List<object>();
             foreach (JsonElement b in root.GetProperty("breaches").EnumerateArray())
                 breaches.Add(new Dictionary<string, object> {
-                    { "company", Text(b, "company") },
+                    { "company", CyberApi.Text(b, "company") },
                     { "breached", CyberApi.Strings(b.GetProperty("targets")) },
-                    { "ticker", Text(b, "ticker") },
-                    { "industry", Text(b, "industry") },
-                    { "disclosed", Text(b, "disclosed_on") },
-                    { "discovered", Text(b, "discovered_on") },
+                    { "ticker", CyberApi.Text(b, "ticker") },
+                    { "industry", CyberApi.Text(b, "industry") },
+                    { "disclosed", CyberApi.Text(b, "disclosed_on") },
+                    { "discovered", CyberApi.Text(b, "discovered_on") },
                     { "attackTypes", CyberApi.Strings(b.GetProperty("attack_types")) },
-                    { "informationType", Text(b, "information_type") },
+                    { "informationType", CyberApi.Text(b, "information_type") },
                     { "informationAccessed", CyberApi.Strings(b.GetProperty("information_accessed")) },
-                    { "recordsLost", Number(b, "records_lost") },
-                    { "costUsd", Number(b, "cost_usd") },
+                    { "recordsLost", CyberApi.Number(b, "records_lost") },
+                    { "costUsd", CyberApi.Number(b, "cost_usd") },
                     { "disclosedToSec", b.GetProperty("disclosed_to_sec").GetBoolean() },
-                    { "reportedIn", Text(b, "filing_type") }
+                    { "reportedIn", CyberApi.Text(b, "filing_type") }
                 });
             result["breaches"] = breaches;
         }).ConfigureAwait(false);
     }
-
-    private static string Text(JsonElement element, string name) =>
-        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
-
-    private static object Number(JsonElement element, string name) =>
-        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number
-            ? (object)value.GetDouble()
-            : null;
 }

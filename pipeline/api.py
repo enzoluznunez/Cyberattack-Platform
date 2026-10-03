@@ -1,3 +1,4 @@
+from datetime import date
 from enum import StrEnum
 from typing import Annotated
 
@@ -60,6 +61,20 @@ VOCABULARY = {
     "market": MARKETS,
 }
 
+# Every filter on a column, in the order a description lists them: the column it
+# tests, and whether that column holds a list of names (a breach passes when any
+# of them is named) or a single one.
+FILTER_COLUMNS = {
+    "industry": ("b.division", False),
+    "attack": ("b.attack_types", True),
+    "information": ("b.information_type", False),
+    "accessed": ("b.information_accessed", True),
+    "relationship": ("b.target_relationships", True),
+    "region": ("b.region", False),
+    "market": ("b.market", False),
+    "state": ("b.state", False),
+}
+
 # Nothing here checks who is asking. Deployed, the service is private: Cloud
 # Run lets in only API Gateway's service account, and the gateway lets in only
 # callers with a Google Cloud API key restricted to this API (gateway.json says
@@ -116,8 +131,7 @@ class Filters(BaseModel):
 
     # Callers send these as one comma-separated value; FastAPI hands a list only
     # when the parameter is repeated. Accept both and flatten.
-    @field_validator("attack", "information", "accessed", "relationship", "region", "market", "state",
-                     mode="before")
+    @field_validator(*(name for name in FILTER_COLUMNS if name != "industry"), mode="before")
     @classmethod
     def split_commas(cls, value):
         if value is None:
@@ -156,25 +170,12 @@ class Filters(BaseModel):
         clauses = ["b.year BETWEEN @since AND @until"]
         parameters = [ScalarQueryParameter("since", "INT64", self.since),
                       ScalarQueryParameter("until", "INT64", self.until)]
-
-        def one_of(name, column, values):
+        for name, (column, holds_list) in FILTER_COLUMNS.items():
+            values = getattr(self, name)
             if values:
-                clauses.append(f"{column} IN UNNEST(@{name})")
+                clauses.append(f"EXISTS (SELECT 1 FROM UNNEST({column}) AS item WHERE item IN UNNEST(@{name}))"
+                               if holds_list else f"{column} IN UNNEST(@{name})")
                 parameters.append(ArrayQueryParameter(name, "STRING", [str(v) for v in values]))
-
-        def any_of(name, column, values):
-            if values:
-                clauses.append(f"EXISTS (SELECT 1 FROM UNNEST({column}) AS item WHERE item IN UNNEST(@{name}))")
-                parameters.append(ArrayQueryParameter(name, "STRING", [str(v) for v in values]))
-
-        one_of("industry", "b.division", self.industry)
-        any_of("attack", "b.attack_types", self.attack)
-        one_of("information", "b.information_type", self.information)
-        any_of("accessed", "b.information_accessed", self.accessed)
-        any_of("relationship", "b.target_relationships", self.relationship)
-        one_of("region", "b.region", self.region)
-        one_of("market", "b.market", self.market)
-        one_of("state", "b.state", self.state)
         if self.sec is not None:
             clauses.append("b.disclosed_to_sec = @sec")
             parameters.append(ScalarQueryParameter("sec", "BOOL", self.sec))
@@ -183,13 +184,7 @@ class Filters(BaseModel):
     def describe(self):
         """The filters in words, for a sheet that came back empty."""
         named_filters = [f"{name} {', '.join(str(v) for v in values)}"
-                         for name, values in (("industry", self.industry), ("attack", self.attack),
-                                              ("information", self.information),
-                                              ("accessed", self.accessed),
-                                              ("relationship", self.relationship),
-                                              ("region", self.region), ("market", self.market),
-                                              ("state", self.state))
-                         if values]
+                         for name in FILTER_COLUMNS if (values := getattr(self, name))]
         if self.sec is not None:
             named_filters.append("disclosed to the SEC" if self.sec else "not disclosed to the SEC")
         span = f"{self.since}" if self.since == self.until else f"{self.since}-{self.until}"
@@ -245,10 +240,10 @@ class Breach(BaseModel):
     region: str | None
     state: str | None
     year: int
-    disclosed_on: str
-    discovered_on: str | None
-    started_on: str | None
-    ended_on: str | None
+    disclosed_on: date
+    discovered_on: date | None
+    started_on: date | None
+    ended_on: date | None
     attack_types: list[str]
     information_type: str | None
     information_accessed: list[str]
@@ -270,7 +265,7 @@ def health():
     # Table metadata rather than a query: free, and it answers whether the
     # service can reach its data.
     client = database.client()
-    rows = {which: client.get_table(f"{client.project}.{database.name()}.{which}").num_rows
+    rows = {which: client.get_table(database.table_id(which)).num_rows
             for which in (database.BREACHES, database.FUNDAMENTALS)}
     return {"status": "ok", "breaches": rows[database.BREACHES],
             "company_years": rows[database.FUNDAMENTALS]}
@@ -322,6 +317,8 @@ def attack_by_year(query):
     rows = [(attack, None, [counts.get((attack, year), 0) for year in years])
             for attack in attack_axis(query)
             if any((attack, year) in counts for year in years)]
+    if not rows:
+        return None
     return sheetcsv.render("Attack Type / Year", [str(year) for year in years], rows)
 
 
@@ -332,6 +329,8 @@ def industry_by_attack(query):
     rows = [(industry, industry, [counts.get((industry, attack), 0) for attack in attacks])
             for industry in DIVISION_NAMES
             if any((industry, attack) in counts for attack in attacks)]
+    if not rows:
+        return None
     return sheetcsv.render("Industry / Attack Type", attacks, rows, colored=True)
 
 
@@ -416,9 +415,10 @@ SHEETS = {
 
 def sheet_csv(query):
     """One sheet, as the CSV the app parses. Every sheet the app draws comes
-    through here, so the rows it shows are the tables as they stand."""
+    through here, so the rows it shows are the tables as they stand. A sheet
+    with no rows comes back None."""
     text = SHEETS[query.view.value](query)
-    if text is None or len(sheetcsv.read(text)[2]) == 0:
+    if text is None:
         raise EmptySheet(f"no breaches {query.describe()}")
     return text
 
@@ -460,12 +460,5 @@ def breaches(query: Annotated[BreachQuery, Query()]):
         ORDER BY b.disclosed_on DESC, b.breach_key
         LIMIT @limit
     """, parameters)
-
-    def iso(value):
-        return value.isoformat() if value is not None else None
-
-    listed = [{field: row[field] for field in Breach.model_fields if field not in
-               ("disclosed_on", "discovered_on", "started_on", "ended_on")}
-              | {field: iso(row[field]) for field in ("disclosed_on", "discovered_on", "started_on", "ended_on")}
-              for row in found]
+    listed = [{field: row[field] for field in Breach.model_fields} for row in found]
     return {"total": found[0]["total"] if found else 0, "breaches": listed}

@@ -73,11 +73,27 @@ public static class CyberApi {
         return result;
     }
 
+    // What a tool returns when it stops before or instead of a request.
+    public static Dictionary<string, object> Fail(string why) =>
+        new Dictionary<string, object> { { "error", why } };
+
     public static List<object> Strings(JsonElement array) {
         var list = new List<object>();
         foreach (JsonElement item in array.EnumerateArray()) list.Add(item.GetString());
         return list;
     }
+
+    // A property's text, or null when it is missing or not a string.
+    public static string Text(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    // A property's number, or null when it is missing or not a number.
+    public static object Number(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number
+            ? (object)value.GetDouble()
+            : null;
 
     // FastAPI wraps its error text as {"detail": ...} and the gateway its own
     // refusals as {"code": ..., "message": ...}; anything else is passed on,
@@ -86,9 +102,7 @@ public static class CyberApi {
         try {
             using JsonDocument doc = JsonDocument.Parse(body);
             foreach (string name in new[] { "detail", "message" })
-                if (doc.RootElement.TryGetProperty(name, out JsonElement text) &&
-                    text.ValueKind == JsonValueKind.String)
-                    return text.GetString();
+                if (Text(doc.RootElement, name) is string text) return text;
         }
         catch (JsonException) { }
         return string.IsNullOrEmpty(body) ? "" : body.Length <= 200 ? body : body.Substring(0, 200);

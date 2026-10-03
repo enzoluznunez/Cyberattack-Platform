@@ -27,6 +27,12 @@ GATEWAY_ACCOUNT="cyber-gateway-1@${PROJECT}.iam.gserviceaccount.com"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# A stale gateway.json would leave a new endpoint unreachable, so it stops the
+# script before anything is built.
+PYTHON="${HERE}/.venv/bin/python"
+[ -x "${PYTHON}" ] || PYTHON=python3
+"${PYTHON}" "${HERE}/gateway.py" --check
+
 gcloud config set project "${PROJECT}" --quiet >/dev/null
 
 # --- The service account the API runs as: BigQuery jobs in the project, and
@@ -77,9 +83,6 @@ fi
 # --- The gateway, kept in step with gateway.json. A config cannot be edited,
 # --- so each version of the file becomes a config named after its contents,
 # --- and the gateway is moved to it only when the contents changed.
-PYTHON="${HERE}/.venv/bin/python"
-[ -x "${PYTHON}" ] || PYTHON=python3
-"${PYTHON}" "${HERE}/gateway.py" --check
 CONFIG="${API}-$(shasum -a 256 "${HERE}/gateway.json" | cut -c1-12)"
 
 if ! gcloud api-gateway apis describe "${API}" >/dev/null 2>&1; then

@@ -1,0 +1,22 @@
+# What `gcloud builds submit` uploads from the repository root, for running
+# cloudbuild.yaml by hand: the build file, the pipeline, and the generated C#
+# contract its tests compare against. Triggers check out the repository
+# themselves and ignore this file.
+/*
+!/cloudbuild.yaml
+!/pipeline/
+/pipeline/.venv/
+/pipeline/data/
+/pipeline/regression/
+/pipeline/.env
+**/__pycache__/
+!/Assets/
+/Assets/*
+!/Assets/Source/
+/Assets/Source/*
+!/Assets/Source/Gemini/
+/Assets/Source/Gemini/*
+!/Assets/Source/Gemini/Tools/
+/Assets/Source/Gemini/Tools/*
+!/Assets/Source/Gemini/Tools/CyberContract.g.cs
+**/.pytest_cache/

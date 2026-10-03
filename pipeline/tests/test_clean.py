@@ -8,11 +8,6 @@ from metrics import FIRST_YEAR, LAST_YEAR
 
 
 @pytest.fixture(scope="module")
-def raw():
-    return clean.read_raw()
-
-
-@pytest.fixture(scope="module")
 def sic(raw):
     return clean.company_sic(*raw)
 

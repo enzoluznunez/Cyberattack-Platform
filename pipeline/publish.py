@@ -11,6 +11,7 @@ empty is an empty array, so "unreported" has one spelling per kind of column.
 """
 
 import pandas_gbq
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 import database
@@ -73,7 +74,12 @@ def publish(breaches, fundamentals, dataset=None):
     """Replace both tables. Returns {table: rows now in it}."""
     client = database.client()
     name = dataset or database.name()
-    client.create_dataset(bigquery.Dataset(f"{client.project}.{name}"), exists_ok=True)
+    # Created only when missing: creating one takes a project-wide permission
+    # that Cloud Build's account, which may edit only its own dataset, lacks.
+    try:
+        client.get_dataset(f"{client.project}.{name}")
+    except NotFound:
+        client.create_dataset(bigquery.Dataset(f"{client.project}.{name}"))
 
     counts = {}
     for which, frame in ((database.BREACHES, breaches), (database.FUNDAMENTALS, fundamentals)):
@@ -87,5 +93,5 @@ def publish(breaches, fundamentals, dataset=None):
             table_schema=[field.to_api_repr() for field in schema],
             progress_bar=False,
         )
-        counts[which] = client.get_table(f"{client.project}.{name}.{which}").num_rows
+        counts[which] = client.get_table(database.table_id(which, name)).num_rows
     return counts

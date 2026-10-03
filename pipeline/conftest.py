@@ -3,27 +3,35 @@ import os
 # Every test reads this dataset, which the session rebuilds from the exports
 # before anything runs, so the tests never touch 'cyber', the dataset the
 # deployed API serves. Set before database is imported, so no .env can point
-# the tests anywhere else.
-TEST_DATASET = "cyber_test"
+# the tests anywhere else. Cloud Build tests in 'cyber_ci' (BIGQUERY_TEST_DATASET),
+# so a build and a laptop run never rebuild the same tables at once.
+TEST_DATASET = os.environ.get("BIGQUERY_TEST_DATASET", "cyber_test")
+if TEST_DATASET == "cyber":
+    raise RuntimeError("the tests rebuild their dataset; never point them at 'cyber'")
 os.environ["BIGQUERY_DATASET"] = TEST_DATASET
 
-import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
+import clean  # noqa: E402
 import database  # noqa: E402
 import publish  # noqa: E402
-import rebuild  # noqa: E402
 
 
-@pytest.fixture(scope="session", autouse=True)
-def tables():
-    """Both exports, cleaned, and published into the test dataset. Every run
-    starts from the exports in Cloud Storage (or RAW_SOURCE), so the tests
-    check the whole path — export, cleaning, tables, API — rather than whatever
-    was loaded last."""
+@pytest.fixture(scope="session")
+def raw():
+    """Both exports as delivered, read once from Cloud Storage (or RAW_SOURCE)."""
+    return clean.read_raw()
+
+
+@pytest.fixture(scope="session")
+def tables(raw):
+    """Both exports, cleaned, and published into the test dataset. A run that
+    reads the data starts from the exports, so those tests check the whole path —
+    export, cleaning, tables, API — rather than whatever was loaded last. A run
+    that never asks for the data never publishes it."""
     assert database.name() == TEST_DATASET
-    breaches, fundamentals = rebuild.build()
-    publish.publish(breaches, fundamentals, TEST_DATASET)
+    breaches, fundamentals = clean.usable(*raw)
+    publish.publish(breaches, fundamentals)
     return breaches, fundamentals
 
 
@@ -44,15 +52,10 @@ def attacks(breaches):
 
 
 @pytest.fixture(scope="session")
-def client():
+def client(tables):
     from fastapi.testclient import TestClient
 
     import api
 
     with TestClient(api.app) as connected:
         yield connected
-
-
-def raw_frame(**columns):
-    """A one-or-more-row export, every value text, for the cleaning tests."""
-    return pd.DataFrame({name: [str(v) for v in values] for name, values in columns.items()})

@@ -14,6 +14,7 @@ usable() is the whole definition of what the tables hold.
 import io
 import os
 import re
+from functools import cache
 from pathlib import Path
 
 import pandas as pd
@@ -45,14 +46,19 @@ def column(heading):
     return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", heading.lower())).strip("_")
 
 
+@cache
+def storage_client():
+    # Imported here: only a read from Cloud Storage needs it.
+    from google.cloud import storage
+
+    return storage.Client()
+
+
 def read_bytes(source, name):
     if source.startswith("gs://"):
-        # Imported here: only a read from Cloud Storage needs it.
-        from google.cloud import storage
-
         bucket, _, prefix = source.removeprefix("gs://").partition("/")
         path = f"{prefix.strip('/')}/{name}" if prefix.strip("/") else name
-        return storage.Client().bucket(bucket).blob(path).download_as_bytes()
+        return storage_client().bucket(bucket).blob(path).download_as_bytes()
     return (Path(source) / name).read_bytes()
 
 
@@ -96,22 +102,24 @@ def items(values):
                                     if item.strip()])
 
 
-def listed(values, vocabulary):
-    """items(), where every item has to be one the vocabulary names; an unknown
-    one stops the rebuild rather than reaching a table no sheet will ever count
-    it in."""
-    found = items(values)
-    unknown = set(item for row in found for item in row) - set(vocabulary)
+def reject_unknown(values, found, vocabulary):
+    """An unknown name stops the rebuild rather than reaching a table no sheet
+    will ever count it in."""
+    unknown = set(found) - set(vocabulary)
     if unknown:
         raise ValueError(f"{values.name} holds {sorted(unknown)}, which metrics.py does not name")
+
+
+def listed(values, vocabulary):
+    """items(), where every item has to be one the vocabulary names."""
+    found = items(values)
+    reject_unknown(values, (item for row in found for item in row), vocabulary)
     return found
 
 
 def known(values, vocabulary):
     cleaned = text(values)
-    unknown = set(cleaned.dropna()) - set(vocabulary)
-    if unknown:
-        raise ValueError(f"{values.name} holds {sorted(unknown)}, which metrics.py does not name")
+    reject_unknown(values, cleaned.dropna(), vocabulary)
     return cleaned
 
 
@@ -122,15 +130,17 @@ def company_sic(breaches_raw, fundamentals_raw):
     Berkshire Hathaway under 9997, a conglomerate, which would make it Public
     Administration. The fundamentals export fills in the companies the breach
     export left without one."""
-    from_breaches = (
-        pd.DataFrame({"cik": integer(breaches_raw["cik"]), "sic": integer(breaches_raw["sic_code"])})
-        .dropna().drop_duplicates("cik").set_index("cik")["sic"]
-    )
-    from_fundamentals = (
-        pd.DataFrame({"cik": integer(fundamentals_raw["cik"]), "sic": integer(fundamentals_raw["sic"])})
-        .dropna().drop_duplicates("cik").set_index("cik")["sic"]
-    )
-    return from_breaches.combine_first(from_fundamentals)
+    def by_cik(raw, column):
+        return (pd.DataFrame({"cik": integer(raw["cik"]), "sic": integer(raw[column])})
+                .dropna().drop_duplicates("cik").set_index("cik")["sic"])
+
+    return by_cik(breaches_raw, "sic_code").combine_first(by_cik(fundamentals_raw, "sic"))
+
+
+def industry(cik, sic):
+    """(SIC code, division) per row, for a column of CIKs."""
+    codes = cik.map(sic).astype("Int64")
+    return codes, codes.map(lambda code: division(int(code)) if pd.notna(code) else None)
 
 
 def breaches(raw, sic):
@@ -154,7 +164,7 @@ def breaches(raw, sic):
     if not disclosed_to_sec.isin(["Yes", "No"]).all():
         raise ValueError("disclosed_to_sec holds something other than Yes or No")
 
-    codes = cik.map(sic).astype("Int64")
+    codes, divisions = industry(cik, sic)
     frame = pd.DataFrame({
         "breach_key": integer(raw["breach_key"]),
         "cik": cik,
@@ -168,7 +178,7 @@ def breaches(raw, sic):
         "sic": codes,
         "sic_description": text(raw["sic_code_description"]),
         "naics": integer(raw["naics_code"]),
-        "division": codes.map(lambda code: division(int(code)) if pd.notna(code) else None),
+        "division": divisions,
         "year": year,
         "disclosed_on": disclosed_on,
         "discovered_on": date(raw["date_of_breach_discovery"]),
@@ -197,7 +207,14 @@ def breaches(raw, sic):
     return frame.sort_values("breach_key").reset_index(drop=True)
 
 
-FIGURES = ["at", "ni", "prcc_f", "auopic"]
+# The figures kept from the fundamentals export, by the column they are stored
+# under and the export column they come from.
+FIGURES = {
+    "assets_musd": "at",
+    "net_income_musd": "ni",
+    "price_close": "prcc_f",
+    "auditor_opinion": "auopic",
+}
 
 
 def fundamentals(raw, sic):
@@ -212,27 +229,19 @@ def fundamentals(raw, sic):
         "company": text(raw["company_name"]),
         "year": integer(raw["fyear"]),
         "fiscal_year_end_month": integer(raw["fyr"]),
-        **{name: number(raw[name]) for name in FIGURES},
+        **{name: number(raw[source]) for name, source in FIGURES.items()},
     })
 
-    reported = frame[FIGURES].notna().sum(axis=1)
+    reported = frame[list(FIGURES)].notna().sum(axis=1)
     fullest = reported == reported.groupby([frame["cik"], frame["year"]]).transform("max")
     frame = frame[fullest].drop_duplicates(["cik", "year", *FIGURES])
     if frame.duplicated(["cik", "year"]).any():
         raise ValueError("a company-year is reported twice, equally fully, with different figures")
 
-    codes = frame["cik"].map(sic).astype("Int64")
-    frame = frame.assign(
-        sic=codes,
-        division=codes.map(lambda code: division(int(code)) if pd.notna(code) else None),
-        assets_musd=frame["at"],
-        net_income_musd=frame["ni"],
-        price_close=frame["prcc_f"],
-        auditor_opinion=frame["auopic"].astype("Int64"),
-    )
-    columns = ["cik", "gvkey", "ticker", "company", "year", "fiscal_year_end_month", "sic", "division",
-               "assets_musd", "net_income_musd", "price_close", "auditor_opinion"]
-    return frame[columns].sort_values(["cik", "year"]).reset_index(drop=True)
+    codes, divisions = industry(frame["cik"], sic)
+    frame = frame.assign(sic=codes, division=divisions,
+                         auditor_opinion=frame["auditor_opinion"].astype("Int64"))
+    return frame.sort_values(["cik", "year"]).reset_index(drop=True)
 
 
 def usable(breaches_raw, fundamentals_raw):

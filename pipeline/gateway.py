@@ -15,10 +15,11 @@ Query parameters are not listed: the gateway passes them through untouched,
 and api.py is what checks them.
 """
 
-import argparse
 import json
 import sys
 from pathlib import Path
+
+from codegen import write_or_check
 
 TARGET = Path(__file__).with_name("gateway.json")
 
@@ -79,22 +80,7 @@ def render():
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--check", action="store_true")
-    args = parser.parse_args()
-
-    generated = render()
-    if args.check:
-        current = TARGET.read_text() if TARGET.exists() else ""
-        if current != generated:
-            print(f"{TARGET} is stale; run: python gateway.py", file=sys.stderr)
-            return 1
-        print(f"{TARGET} is up to date")
-        return 0
-
-    TARGET.write_text(generated)
-    print(f"wrote {TARGET}")
-    return 0
+    return write_or_check(TARGET, render())
 
 
 if __name__ == "__main__":

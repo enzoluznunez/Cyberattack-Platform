@@ -1,0 +1,97 @@
+# CI/CD for the API, run by Cloud Build on every push to GitHub.
+#
+#     any branch:  test
+#     main:        test -> build the image -> push it -> deploy to Cloud Run -> smoke test
+#
+# Two triggers share this file and differ only in _DEPLOY. Both run as the
+# cyber-ci service account, which can rebuild the 'cyber_ci' dataset and ship
+# new revisions of cyber-api, and nothing else: it cannot touch 'cyber', IAM or
+# the gateway. One-time setup and gateway changes stay in pipeline/deploy.sh.
+#
+# By hand, from the repository root (tests only, unless _DEPLOY=true):
+#
+#     gcloud builds submit --region=us-east1 \
+#         --service-account=projects/cyberattack-platform/serviceAccounts/cyber-ci@cyberattack-platform.iam.gserviceaccount.com
+
+substitutions:
+  _DEPLOY: "false"
+  _REGION: us-east1
+  _SERVICE: cyber-api
+  _TEST_DATASET: cyber_ci
+  _GATEWAY_URL: https://cyber-gateway-6z6s1gve.ue.gateway.dev
+
+steps:
+  # The whole suite: cleaning, the API against a freshly rebuilt test dataset,
+  # and the checks that CyberContract.g.cs and gateway.json are current. The
+  # regression recording is not in the repository, so those tests skip here.
+  - id: test
+    name: python:3.13-slim
+    dir: pipeline
+    entrypoint: bash
+    env:
+      - GOOGLE_CLOUD_PROJECT=$PROJECT_ID
+      - BIGQUERY_TEST_DATASET=$_TEST_DATASET
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - PIP_ROOT_USER_ACTION=ignore
+    args:
+      - -c
+      - |
+        pip install --quiet --no-cache-dir -r requirements-dev.txt
+        python -m pytest -q
+
+  # The image is tagged with the commit it was built from, so the revision
+  # serving traffic always says which commit it is. A build run by hand has
+  # no commit and is tagged with its build ID instead.
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        [ "$_DEPLOY" = "true" ] || { echo "not main: nothing to ship"; exit 0; }
+        TAG="$SHORT_SHA"
+        [ -n "$$TAG" ] || TAG="$BUILD_ID"
+        IMAGE="$_REGION-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/$_SERVICE:$$TAG"
+        echo "$$IMAGE" > /workspace/image
+        docker build -t "$$IMAGE" pipeline
+        docker push "$$IMAGE"
+
+  # The same settings deploy.sh uses; see there for why each is what it is.
+  # Who may call the service is left as deploy.sh set it (only the gateway),
+  # and cyber-ci could not change it if it tried.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        [ "$_DEPLOY" = "true" ] || exit 0
+        gcloud run deploy "$_SERVICE" \
+          --image "$(cat /workspace/image)" \
+          --region "$_REGION" \
+          --service-account "$_SERVICE@$PROJECT_ID.iam.gserviceaccount.com" \
+          --set-env-vars "GOOGLE_CLOUD_PROJECT=$PROJECT_ID,BIGQUERY_DATASET=cyber" \
+          --memory 512Mi \
+          --cpu 1 \
+          --timeout 9 \
+          --min-instances 0 \
+          --max-instances 2 \
+          --quiet
+
+  # The way a headset reaches it: through the gateway to the new revision and
+  # on to BigQuery. /health needs no key and fails unless both tables answer.
+  - id: smoke-test
+    name: gcr.io/cloud-builders/curl
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        [ "$_DEPLOY" = "true" ] || exit 0
+        curl --fail --silent --show-error --retry 5 --retry-delay 5 --retry-all-errors "$_GATEWAY_URL/health"
+
+options:
+  # A build that runs as its own service account logs to Cloud Logging rather
+  # than to a bucket of its own.
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1200s
