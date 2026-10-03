@@ -83,6 +83,22 @@ Done when you are standing in passthrough with Attacks by Year open and the thre
 listed beside you. An empty list means the database could not be reached — check the
 headset's internet connection and `cloud.key` — not that the build failed.
 
+## Changing the Breach Database API
+
+The API under `pipeline/` ships itself. Cloud Build watches this repository and runs
+`cloudbuild.yaml` on every push:
+
+```
+push to any branch:  run the tests
+merge to main:       run the tests --> build the Docker image --> deploy to Cloud Run --> check it answers
+```
+
+A failing test stops the build, so nothing untested reaches the headsets, and the live
+version is always tagged with the commit it came from. Builds and their logs are in the
+Google Cloud console under **Cloud Build → History** (region `us-east1`).
+`pipeline/README.md` covers what the pipeline may and may not touch, and the changes that
+still go through `deploy.sh` by hand.
+
 ## FAQ
 
 **Does it cost anything?** The Gemini API, yes, for whatever the assistant is used. The
