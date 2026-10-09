@@ -33,6 +33,7 @@ ENUMS = {
     "Relationships": "Relationship",
     "Regions": "RegionName",
     "Markets": "MarketName",
+    "Countries": "CountryName",
 }
 
 

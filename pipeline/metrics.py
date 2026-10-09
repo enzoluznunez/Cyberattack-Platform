@@ -59,6 +59,89 @@ REGIONS = [
     "Foreign",
 ]
 
+# The countries breached companies are headquartered in, most breaches first,
+# by the name they are filtered and drawn under and the ISO 3166 code their map
+# is filed under. Puerto Rico is drawn on the United States' map, as the export
+# files it under a US region.
+COUNTRIES = {
+    "United States": "US",
+    "United Kingdom": "GB",
+    "Japan": "JP",
+    "Canada": "CA",
+    "Ireland": "IE",
+    "Brazil": "BR",
+    "Netherlands": "NL",
+    "India": "IN",
+    "Bermuda": "BM",
+    "Luxembourg": "LU",
+    "China": "CN",
+    "Cayman Islands": "KY",
+    "Mexico": "MX",
+    "Germany": "DE",
+    "Argentina": "AR",
+    "Taiwan": "TW",
+    "South Africa": "ZA",
+    "Italy": "IT",
+    "Israel": "IL",
+    "Belgium": "BE",
+    "Finland": "FI",
+    "Cyprus": "CY",
+    "South Korea": "KR",
+    "Hong Kong": "HK",
+    "Singapore": "SG",
+    "Colombia": "CO",
+    "Indonesia": "ID",
+    "Spain": "ES",
+    "Denmark": "DK",
+    "Switzerland": "CH",
+    "Panama": "PA",
+}
+
+# A foreign headquarters' state code is EDGAR's code for its country. US and
+# Canadian ones are a state or province, and their region says which country.
+FOREIGN_STATE_CODES = {
+    "X0": "United Kingdom",
+    "M0": "Japan",
+    "L2": "Ireland",
+    "D5": "Brazil",
+    "P7": "Netherlands",
+    "K7": "India",
+    "D0": "Bermuda",
+    "N4": "Luxembourg",
+    "F4": "China",
+    "E9": "Cayman Islands",
+    "O5": "Mexico",
+    "2M": "Germany",
+    "C1": "Argentina",
+    "F5": "Taiwan",
+    "T3": "South Africa",
+    "L6": "Italy",
+    "L3": "Israel",
+    "C9": "Belgium",
+    "H9": "Finland",
+    "G4": "Cyprus",
+    "M5": "South Korea",
+    "K3": "Hong Kong",
+    "U0": "Singapore",
+    "F8": "Colombia",
+    "K8": "Indonesia",
+    "U3": "Spain",
+    "G7": "Denmark",
+    "V8": "Switzerland",
+    "R1": "Panama",
+}
+
+
+def country_of(region, state_code):
+    """The country a headquarters is in, or None for a foreign state code this
+    file does not name."""
+    if region and region.startswith("US "):
+        return "United States"
+    if region == "Canada":
+        return "Canada"
+    return FOREIGN_STATE_CODES.get(state_code)
+
+
 MARKETS = [
     "NYSE",
     "NYSE MKT",

@@ -5,6 +5,11 @@ cyberattacks on publicly listed companies. Sheets of breach data stand in front 
 passthrough, you reshape them with your hands, and a voice assistant can drive the same
 tools when asked — and look up individual breaches.
 
+Beside the sheets stands a map of one country at a time, with a dot for every city a
+breached company is headquartered in, sized by its number of breaches. Pinch the map and
+swipe it aside to bring in the next country, most breached first; the sheets follow it and
+count only that country's breaches. Point a fingertip at a dot to see its city and count.
+
 ## Prerequisites
 
 - [ ] A Meta Quest 3 with a USB-C cable

@@ -3,6 +3,8 @@ cover every SIC code once, and every view names a sheet the API can draw."""
 
 import api
 from metrics import (
+    COUNTRIES,
+    FOREIGN_STATE_CODES,
     DEFAULT_VIEW,
     DIVISION_COLORS,
     DIVISION_NAMES,
@@ -29,3 +31,13 @@ def test_divisions_are_contiguous_and_cover_every_code():
 def test_every_view_is_a_sheet_the_api_draws():
     assert set(VIEWS) == set(api.SHEETS)
     assert DEFAULT_VIEW in VIEWS
+
+
+def test_every_foreign_code_names_a_listed_country():
+    assert set(FOREIGN_STATE_CODES.values()) <= set(COUNTRIES)
+
+
+def test_every_country_has_its_own_map_code():
+    codes = list(COUNTRIES.values())
+    assert len(set(codes)) == len(codes)
+    assert all(len(code) == 2 and code.isupper() for code in codes)

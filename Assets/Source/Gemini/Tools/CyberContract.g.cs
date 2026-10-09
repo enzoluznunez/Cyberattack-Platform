@@ -23,4 +23,5 @@ public static class CyberContract {
     public static readonly string[] Relationships = { "Parent", "Subsidiary / Affiliate" };
     public static readonly string[] Regions = { "US Mid Atlantic", "US New England", "US Southeast", "US Midwest", "US Southwest", "US West", "Canada", "Foreign" };
     public static readonly string[] Markets = { "NYSE", "NYSE MKT", "NASDAQ Global Select Market", "NASDAQ Global Market", "NASDAQ Capital Market", "OTCQX U.S.", "OTCQX International", "OTCQX International Premier", "OTCQB", "Pink Current", "Pink Limited", "Expert Market" };
+    public static readonly string[] Countries = { "United States", "United Kingdom", "Japan", "Canada", "Ireland", "Brazil", "Netherlands", "India", "Bermuda", "Luxembourg", "China", "Cayman Islands", "Mexico", "Germany", "Argentina", "Taiwan", "South Africa", "Italy", "Israel", "Belgium", "Finland", "Cyprus", "South Korea", "Hong Kong", "Singapore", "Colombia", "Indonesia", "Spain", "Denmark", "Switzerland", "Panama" };
 }

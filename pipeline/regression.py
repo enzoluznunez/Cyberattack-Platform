@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from metrics import ATTACK_TYPES, DIVISION_NAMES, FIRST_YEAR, LAST_YEAR, REGIONS, VIEWS
+from metrics import ATTACK_TYPES, COUNTRIES, DIVISION_NAMES, FIRST_YEAR, LAST_YEAR, REGIONS, VIEWS
 
 SNAPSHOT = Path(__file__).with_name("regression") / "answers.json"
 
@@ -37,6 +37,8 @@ def requests():
             paths.append(f"/sheet?view={view}&attack={attack}")
         for region in REGIONS:
             paths.append(f"/sheet?view={view}&region={region}")
+        for country in COUNTRIES:
+            paths.append(f"/sheet?view={view}&country={country}")
     for year in range(FIRST_YEAR, LAST_YEAR + 1):
         paths.append(f"/sheet?since={year}&until={year}")
     for limit, per in ((1, 1), (5, 2), (50, 5), (200, 50)):
@@ -50,6 +52,10 @@ def requests():
     for ticker in ("WMT", "TGT", "EFX"):
         paths.append(f"/breaches?ticker={ticker}&limit=50")
     paths.append("/breaches?attack=Ransomware&since=2023&limit=50")
+
+    paths.append("/map")
+    paths.append("/map?attack=Ransomware&since=2020")
+    paths.append("/map?country=Japan,Canada")
 
     # Rejections: the assistant reads these out loud, so their wording is part
     # of the contract too.
@@ -67,6 +73,8 @@ def requests():
         "/sheet?industry=Mining&attack=Credential Stuffing",
         "/breaches?company=x",
         "/breaches?limit=51",
+        "/map?country=Atlantis",
+        "/map?industry=Mining&attack=Credential Stuffing",
     ]
     return paths
 

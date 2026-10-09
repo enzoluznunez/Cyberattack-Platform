@@ -109,6 +109,15 @@ public static class SystemPrompt {
         "ListViews gives every filter's names; an industry's name is one name even when it holds commas. " +
         "On the Before and After sheet, filters choose which breach a company is measured from, and a company " +
         "with no breach passing them is not on it.\n" +
+        "Beside the table is a map of one country at a time, with a dot for every city a breached company is " +
+        "headquartered in. A dot's area is its city's breach count, on one scale across every map, and every map " +
+        "is drawn to one scale too, so a small country is a small map; Alaska and Hawaii are moved and Alaska " +
+        "shrunk, as on most US maps. The user swipes from country to country, most breaches first. The listed " +
+        "sheets follow the map: each counts only the breaches at companies headquartered in the country it " +
+        "shows, which the state names. To show another country's map and bars, call ShowCountry. OpenSheet and " +
+        "FindBreaches are not narrowed by the map: pass country with the map's country when the user means what " +
+        "they are looking at, and leave it out when they ask about everywhere. A breach's place is its " +
+        "company's headquarters, not where the attack happened; say so if it matters.\n" +
         "The sheets count breaches; they never say which ones. For anything about particular breaches or " +
         "companies — what happened, when, which subsidiary was hit, how many records, what it cost, where " +
         "it was reported, or which companies make up a count — call FindBreaches. It also gives a company's " +
