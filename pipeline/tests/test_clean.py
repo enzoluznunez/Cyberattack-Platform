@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 
 import clean
-from metrics import FIRST_YEAR, LAST_YEAR
+import places
+from metrics import COUNTRIES, FIRST_YEAR, LAST_YEAR
 
 
 @pytest.fixture(scope="module")
@@ -115,3 +116,50 @@ def test_only_companies_no_export_classifies_lack_an_industry(raw, breaches):
     no_code = breaches_raw["sic_code"].str.strip() == ""
     unclassified = breaches_raw[no_code & ~breaches_raw["cik"].isin(fundamentals_raw["cik"])]
     assert breaches["division"].isna().sum() == len(unclassified)
+
+
+def test_every_breach_has_a_country(raw, breaches):
+    assert breaches["country"].isin(list(COUNTRIES)).all()
+    us = raw[0]["region"].str.strip().str.startswith("US ")
+    assert (breaches["country"] == "United States").sum() == us.sum()
+
+
+def test_every_breach_with_a_city_is_placed(raw, breaches):
+    blank = raw[0]["city"].map(places.city_key).isna()
+    assert breaches["city"].isna().sum() == blank.sum() == 1
+    assert breaches["lat"].notna().sum() == breaches["lon"].notna().sum() == len(breaches) - 1
+    assert breaches["lat"].dropna().between(-90, 90).all()
+    assert breaches["lon"].dropna().between(-180, 180).all()
+
+
+def test_spellings_of_one_city_are_one_place(breaches):
+    """'ST LOUIS' and 'ST. LOUIS', 'NEW YORK' and 'NEW YORK,' and 'DUBLIN 2'
+    each land on one dot."""
+    for place in ("St. Louis, MO", "New York, NY", "Dublin", "São Paulo"):
+        at = breaches[breaches["city"] == place]
+        assert len(at) > 1
+        assert at[["lat", "lon"]].drop_duplicates().shape[0] == 1
+
+
+def test_one_place_has_one_position():
+    """A dot is one place, so a place name every spelling of it shares sits in
+    one spot in its country."""
+    positions = {}
+    for (country, _, _), (place, lat, lon) in places.load().items():
+        positions.setdefault((country, place), set()).add((lat, lon))
+    assert {k: v for k, v in positions.items() if len(v) > 1} == {}
+
+
+def test_a_city_places_csv_lacks_stops_the_rebuild(raw, sic):
+    changed = raw[0].copy()
+    changed.loc[0, "city"] = "ATLANTIS"
+    with pytest.raises(ValueError, match="ATLANTIS"):
+        clean.breaches(changed, sic)
+
+
+def test_a_country_metrics_lacks_stops_the_rebuild(raw, sic):
+    changed = raw[0].copy()
+    foreign = changed.index[changed["region"].str.strip() == "Foreign"][0]
+    changed.loc[foreign, "state_code"] = "Q9"
+    with pytest.raises(ValueError, match="Q9"):
+        clean.breaches(changed, sic)

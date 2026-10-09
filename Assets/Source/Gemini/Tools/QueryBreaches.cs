@@ -53,6 +53,10 @@ public class BreachFilters {
     public string[] state;
 
     [Optional]
+    [Doc("Countries of the companies' headquarters.")]
+    public string[] country;
+
+    [Optional]
     [Doc("true for only breaches disclosed to the SEC, false for only those that were not.")]
     public bool? sec;
 
@@ -67,6 +71,7 @@ public class BreachFilters {
         ("relationship", CyberContract.Relationships, f => f.relationship),
         ("region", CyberContract.Regions, f => f.region),
         ("market", CyberContract.Markets, f => f.market),
+        ("country", CyberContract.Countries, f => f.country),
     };
 
     public static Schema Named(Schema schema) {
@@ -149,7 +154,7 @@ public sealed class ListViews : Function {
         Name = "ListViews",
         Description = "List the sheets the breach database can draw — what each one's rows, columns and bars " +
                       "are — and the names every filter takes: the industries, attack types, kinds of " +
-                      "information, regions and markets, and the years breaches run over. Each sheet is already " +
+                      "information, regions, countries and markets, and the years breaches run over. Each sheet is already " +
                       "listed as a dataset, unfiltered. Call this before OpenSheet or FindBreaches when you need a " +
                       "filter's exact names, or when the user asks what data there is."
     };
@@ -374,6 +379,7 @@ public sealed class FindBreaches : Function {
                     { "breached", CyberApi.Strings(b.GetProperty("targets")) },
                     { "ticker", CyberApi.Text(b, "ticker") },
                     { "industry", CyberApi.Text(b, "industry") },
+                    { "headquarters", Headquarters(b) },
                     { "disclosed", CyberApi.Text(b, "disclosed_on") },
                     { "discovered", CyberApi.Text(b, "discovered_on") },
                     { "attackTypes", CyberApi.Strings(b.GetProperty("attack_types")) },
@@ -386,5 +392,11 @@ public sealed class FindBreaches : Function {
                 });
             result["breaches"] = breaches;
         }).ConfigureAwait(false);
+    }
+
+    // 'Toyota, Japan', or the country alone when the export gave no city.
+    private static string Headquarters(JsonElement breach) {
+        string city = CyberApi.Text(breach, "city"), country = CyberApi.Text(breach, "country");
+        return string.IsNullOrEmpty(city) ? country : $"{city}, {country}";
     }
 }

@@ -14,6 +14,7 @@ from metrics import (
     ATTACK_TYPES,
     BREACH_LIMIT,
     BREACH_LIMIT_MAXIMUM,
+    COUNTRIES,
     DEFAULT_VIEW,
     DIVISION_NAMES,
     FIRST_YEAR,
@@ -47,6 +48,7 @@ Accessed = named("Accessed", INFORMATION_ACCESSED)
 Relationship = named("Relationship", RELATIONSHIPS)
 RegionName = named("RegionName", REGIONS)
 MarketName = named("MarketName", MARKETS)
+CountryName = named("CountryName", COUNTRIES)
 
 # The names each filter takes, which a rejection lists so the assistant can say
 # what would have worked.
@@ -59,6 +61,7 @@ VOCABULARY = {
     "relationship": RELATIONSHIPS,
     "region": REGIONS,
     "market": MARKETS,
+    "country": list(COUNTRIES),
 }
 
 # Every filter on a column, in the order a description lists them: the column it
@@ -73,6 +76,7 @@ FILTER_COLUMNS = {
     "region": ("b.region", False),
     "market": ("b.market", False),
     "state": ("b.state", False),
+    "country": ("b.country", False),
 }
 
 # Nothing here checks who is asking. Deployed, the service is private: Cloud
@@ -127,6 +131,7 @@ class Filters(BaseModel):
     region: list[RegionName] = []
     market: list[MarketName] = []
     state: list[str] = []
+    country: list[CountryName] = []
     sec: bool | None = None
 
     # Callers send these as one comma-separated value; FastAPI hands a list only
@@ -239,6 +244,8 @@ class Breach(BaseModel):
     industry: str | None
     region: str | None
     state: str | None
+    country: str
+    city: str | None
     year: int
     disclosed_on: date
     discovered_on: date | None
@@ -258,6 +265,24 @@ class Breach(BaseModel):
 class BreachList(BaseModel):
     total: int
     breaches: list[Breach]
+
+
+class City(BaseModel):
+    city: str
+    lat: float
+    lon: float
+    breaches: int
+
+
+class Country(BaseModel):
+    country: CountryName
+    code: str
+    breaches: int
+    cities: list[City]
+
+
+class BreachMap(BaseModel):
+    countries: list[Country]
 
 
 @app.get("/health", response_model=Health)
@@ -462,3 +487,31 @@ def breaches(query: Annotated[BreachQuery, Query()]):
     """, parameters)
     listed = [{field: row[field] for field in Breach.model_fields} for row in found]
     return {"total": found[0]["total"] if found else 0, "breaches": listed}
+
+
+@app.get("/map", response_model=BreachMap)
+def breach_map(query: Annotated[Filters, Query()]):
+    """Where the breached companies are headquartered: every country holding a
+    breach that passes the filters, most breaches first, each with one dot per
+    city, most breaches first. A breach counts once, in its country and in its
+    city; the one breach whose city the export left blank counts in its country
+    alone. A map of nothing is an answer, not an error."""
+    where, parameters = query.where()
+    found = database.query(f"""
+        SELECT b.country, b.city, b.lat, b.lon, COUNT(*) AS n
+        FROM {database.table(database.BREACHES)} AS b
+        WHERE {where}
+        GROUP BY b.country, b.city, b.lat, b.lon
+    """, parameters)
+
+    countries = {}
+    for row in found:
+        country = countries.setdefault(row["country"], {
+            "country": row["country"], "code": COUNTRIES[row["country"]], "breaches": 0, "cities": []})
+        country["breaches"] += row["n"]
+        if row["city"] is not None:
+            country["cities"].append({"city": row["city"], "lat": row["lat"], "lon": row["lon"],
+                                      "breaches": row["n"]})
+    for country in countries.values():
+        country["cities"].sort(key=lambda city: (-city["breaches"], city["city"]))
+    return {"countries": sorted(countries.values(), key=lambda c: (-c["breaches"], c["country"]))}

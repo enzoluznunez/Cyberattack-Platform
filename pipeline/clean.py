@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
+import places
 from metrics import (
     ATTACK_TYPES,
     FIRST_YEAR,
@@ -28,6 +29,7 @@ from metrics import (
     MARKETS,
     REGIONS,
     RELATIONSHIPS,
+    country_of,
     division,
 )
 
@@ -143,7 +145,33 @@ def industry(cik, sic):
     return codes, codes.map(lambda code: division(int(code)) if pd.notna(code) else None)
 
 
-def breaches(raw, sic):
+def located(raw, known_places=None):
+    """(country, place, lat, lon) per breach, for its headquarters. Every
+    breach has a country. A breach with a city has that city's place from
+    places.csv, which is what the maps draw one dot for; a city places.csv does
+    not list stops the rebuild, as an unknown name does. The one breach the
+    export gives no city stays off the maps' dots but counts in its country."""
+    known_places = places.load() if known_places is None else known_places
+
+    country = pd.Series([country_of(r.strip(), s.strip()) for r, s in zip(raw["region"], raw["state_code"])],
+                        index=raw.index, dtype="object", name="country")
+    if country.isna().any():
+        codes = sorted(set(raw.loc[country.isna(), "state_code"].str.strip()))
+        raise ValueError(f"state_code holds {codes}, a country metrics.py does not name")
+
+    keys = [(c, s.strip(), places.city_key(city)) for c, s, city in zip(country, raw["state_code"], raw["city"])]
+    unknown = sorted({k for k in keys if k[2] is not None and k not in known_places})
+    if unknown:
+        raise ValueError(f"city holds {unknown}, which places.csv does not list")
+
+    found = [known_places.get(k) if k[2] is not None else None for k in keys]
+    return (country,
+            pd.Series([f[0] if f else None for f in found], index=raw.index, dtype="object"),
+            pd.Series([f[1] if f else None for f in found], index=raw.index, dtype="float64"),
+            pd.Series([f[2] if f else None for f in found], index=raw.index, dtype="float64"))
+
+
+def breaches(raw, sic, known_places=None):
     """One row per breach, typed. The ID numbers, phone number, address lines,
     duplicate state names and the second auditor block are left behind in the
     export: nothing draws, filters or reads them."""
@@ -165,6 +193,7 @@ def breaches(raw, sic):
         raise ValueError("disclosed_to_sec holds something other than Yes or No")
 
     codes, divisions = industry(cik, sic)
+    country, city, lat, lon = located(raw, known_places)
     frame = pd.DataFrame({
         "breach_key": integer(raw["breach_key"]),
         "cik": cik,
@@ -175,6 +204,10 @@ def breaches(raw, sic):
         "market": known(raw["market"], MARKETS),
         "state": text(raw["state_code"]),
         "region": known(raw["region"], REGIONS),
+        "country": country,
+        "city": city,
+        "lat": lat,
+        "lon": lon,
         "sic": codes,
         "sic_description": text(raw["sic_code_description"]),
         "naics": integer(raw["naics_code"]),

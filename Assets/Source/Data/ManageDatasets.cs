@@ -17,14 +17,8 @@ public class ManageDatasets : MonoBehaviour
 
     public class Dataset
     {
-        public DataSource source;
         public string label;
         public string payload;
-        public bool loaded;
-
-        // A parse is in flight exactly while a reader exists that has not
-        // answered yet; the result handler and Unload both clear the reader.
-        public bool loading => source != null && !loaded;
 
         // Listed from the database's catalogue of sheets rather than scanned in:
         // it stands in the rail from startup and is read the first time someone
@@ -33,8 +27,73 @@ public class ManageDatasets : MonoBehaviour
         public bool catalogued;
         public string description;
 
-        public readonly EditList Edits = new EditList();
+        // A listed sheet is drawn for one country at a time, the one the map is
+        // showing, and each country is a reading of its own: its own parse, its
+        // own edits and its own undo history, kept for when the map comes back
+        // to it. Everything else is one reading under the empty key.
+        internal sealed class Reading
+        {
+            public DataSource source;
+            public bool loaded;
+            public readonly EditList Edits = new EditList();
+        }
+
+        private readonly Dictionary<string, Reading> _readings = new Dictionary<string, Reading>();
+        private string _country = "";
+
+        internal string Country
+        {
+            get => _country;
+            set => _country = catalogued ? value ?? "" : "";
+        }
+
+        internal Reading Current
+        {
+            get
+            {
+                if (!_readings.TryGetValue(_country, out Reading reading))
+                    _readings[_country] = reading = new Reading();
+                return reading;
+            }
+        }
+
+        internal IEnumerable<Reading> Readings => _readings.Values;
+
+        public DataSource source
+        {
+            get => Current.source;
+            set => Current.source = value;
+        }
+
+        public bool loaded
+        {
+            get => Current.loaded;
+            set => Current.loaded = value;
+        }
+
+        // A parse is in flight exactly while a reader exists that has not
+        // answered yet; the result handler and Unload both clear the reader.
+        public bool loading => source != null && !loaded;
+
+        public EditList Edits => Current.Edits;
+
+        // What is read: the payload, narrowed to the country for a listed sheet.
+        public string Url => _country.Length > 0
+            ? payload + "&country=" + Uri.EscapeDataString(_country)
+            : payload;
     }
+
+    // The country every listed sheet is drawn for, or empty for all of them.
+    // The map is the one that sets it, starting from the country it opens on:
+    // the most breached, which the contract lists first, so the first sheet is
+    // read once rather than once unscoped and again for the map.
+    private string _country = CyberContract.Countries.Length > 0 ? CyberContract.Countries[0] : "";
+    public string Country => _country;
+
+    // Which dataset, and which of its readings, each reader in flight is for:
+    // a read can land after the map has moved on to another country.
+    private readonly Dictionary<Parser, (Dataset dataset, Dataset.Reading reading)> _reads =
+        new Dictionary<Parser, (Dataset, Dataset.Reading)>();
 
     private readonly List<Dataset> _datasets = new List<Dataset>();
     private int _active = -1;
@@ -135,7 +194,8 @@ public class ManageDatasets : MonoBehaviour
             payload = file,
             label = string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label,
             catalogued = true,
-            description = description
+            description = description,
+            Country = _country
         });
         return true;
     }
@@ -180,24 +240,30 @@ public class ManageDatasets : MonoBehaviour
 
         Parser reader = host.AddComponent<Parser>();
         dataset.source = reader;
+        _reads[reader] = (dataset, dataset.Current);
 
         reader.onLoadResult = (ok, reason) => OnDatasetLoadResult(reader, ok, reason);
-        reader.Load(dataset.payload);
-    }
-
-    private int IndexOfSource(DataSource source)
-    {
-        for (int i = 0; i < _datasets.Count; i++)
-            if (_datasets[i].source == source) return i;
-        return -1;
+        reader.Load(dataset.Url);
     }
 
     private void OnDatasetLoadResult(Parser reader, bool ok, string reason)
     {
-        int index = IndexOfSource(reader);
+        if (!_reads.TryGetValue(reader, out var read)) return;
+        _reads.Remove(reader);
+
+        Dataset dataset = read.dataset;
+        int index = _datasets.IndexOf(dataset);
         if (index < 0) return;
 
-        Dataset dataset = _datasets[index];
+        // A reading for a country the map has since left is kept, or let go
+        // of, quietly: nothing on screen is waiting for it.
+        if (read.reading != dataset.Current)
+        {
+            if (ok) read.reading.loaded = true;
+            else Unload(read.reading);
+            return;
+        }
+
         SettleLoad(dataset, ok);
 
         bool requested = dataset == _requested;
@@ -206,10 +272,13 @@ public class ManageDatasets : MonoBehaviour
         if (!ok)
         {
             // A listed sheet stays in the rail when it will not read: it is
-            // still one of the sheets, and trying again is a tap away.
+            // still one of the sheets, and trying again is a tap away. One the
+            // map narrowed to a country with no breaches on it is cleared off
+            // the table, so no other country's bars stand under this map.
             if (dataset.catalogued)
             {
-                Unload(dataset);
+                Unload(dataset.Current);
+                if (index == _active && sheetManager != null) sheetManager.SetDataSource(null);
                 Notices.Show(this, "Sheet Unavailable",
                     reason ?? $"{dataset.label} could not be read.");
                 OnDatasetsChanged?.Invoke();
@@ -228,7 +297,8 @@ public class ManageDatasets : MonoBehaviour
 
         StateChannel.Record("Dataset", $"loaded a new dataset, {dataset.label}");
         OnDatasetsChanged?.Invoke();
-        if (requested) SwitchDataset(index);
+        // The open dataset reread for a new country is shown again in place.
+        if (requested) Activate(index);
     }
 
     public void RemoveDataset(int index)
@@ -245,7 +315,8 @@ public class ManageDatasets : MonoBehaviour
         if (_active > index) _active--;
         else if (wasActive) _active = -1;
 
-        if (dataset.source != null) Destroy(dataset.source.gameObject);
+        foreach (Dataset.Reading reading in dataset.Readings)
+            if (reading.source != null) Destroy(reading.source.gameObject);
 
         if (wasActive)
         {
@@ -282,6 +353,13 @@ public class ManageDatasets : MonoBehaviour
             return;
         }
 
+        Activate(index);
+    }
+
+    // Shows a read dataset on the table: the switch itself, and what a listed
+    // sheet reread for another country goes through again.
+    private void Activate(int index)
+    {
         if (sheetManager != null) sheetManager.CommitPendingGrabs();
         if (toolManager != null) toolManager.DeselectTool();
 
@@ -328,12 +406,48 @@ public class ManageDatasets : MonoBehaviour
         return rest > 0 ? $"{list} and {rest} more" : list;
     }
 
-    // Gives back everything the parse held, and leaves the entry listed.
-    private void Unload(Dataset dataset)
+    // Narrows every listed sheet to one country, or to none with null or
+    // empty. The open one is cleared off the table at once and drawn again for
+    // the country when it is read, so a map never stands over another
+    // country's bars; a country already read comes straight back, edits and
+    // all.
+    public void SetCountry(string country)
     {
-        dataset.loaded = false;
-        if (dataset.source != null) Destroy(dataset.source.gameObject);
-        dataset.source = null;
+        country ??= "";
+        if (country == _country) return;
+
+        // A move still in hand belongs to the country it was made in, so it is
+        // settled into that one's history before the readings change.
+        Dataset active = ActiveDataset;
+        bool narrowed = active != null && active.catalogued;
+        if (narrowed)
+        {
+            if (sheetManager != null) sheetManager.CommitPendingGrabs();
+            if (toolManager != null) toolManager.DeselectTool();
+        }
+
+        _country = country;
+        foreach (Dataset dataset in _datasets) dataset.Country = country;
+
+        if (narrowed)
+        {
+            if (active.loaded) Activate(_active);
+            else
+            {
+                if (sheetManager != null) sheetManager.SetDataSource(null);
+                _requested = active;
+                BeginLoad(active);
+            }
+        }
+        OnDatasetsChanged?.Invoke();
+    }
+
+    // Gives back everything the parse held, and leaves the entry listed.
+    private void Unload(Dataset.Reading reading)
+    {
+        reading.loaded = false;
+        if (reading.source != null) Destroy(reading.source.gameObject);
+        reading.source = null;
     }
 
     private void Rebind(Dataset dataset)

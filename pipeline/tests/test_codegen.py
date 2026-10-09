@@ -5,6 +5,7 @@ schema, or the schema from metrics.py."""
 import codegen
 from metrics import (
     ATTACK_TYPES,
+    COUNTRIES,
     DEFAULT_VIEW,
     DIVISION_NAMES,
     FIRST_YEAR,
@@ -30,5 +31,5 @@ def test_generated_years_and_limits_match_the_pydantic_models():
 
 def test_generated_names_are_the_ones_metrics_lists():
     text = codegen.TARGET.read_text()
-    for names in (list(VIEWS), DIVISION_NAMES, ATTACK_TYPES, INFORMATION_ACCESSED):
+    for names in (list(VIEWS), DIVISION_NAMES, ATTACK_TYPES, INFORMATION_ACCESSED, list(COUNTRIES)):
         assert all(f'"{name}"' in text for name in names)

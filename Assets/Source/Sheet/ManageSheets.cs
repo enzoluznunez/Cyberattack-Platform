@@ -82,6 +82,10 @@ public class ManageSheets : MonoBehaviour
     public float BaseY => _baseY;
     public bool IsBuilt => _sheets.Count > 0;
 
+    // Whether the table has found its place in front of the user; until then
+    // its transform is wherever the scene left it.
+    public bool IsAnchored => _anchored;
+
     private bool _recenterHooked;
 
     private void OnEnable()
@@ -1272,7 +1276,7 @@ public class ManageSheets : MonoBehaviour
         return OVRPlugin.userPresent && OVRPlugin.GetNodePositionTracked(OVRPlugin.Node.EyeCenter);
     }
 
-    private static bool TryGetCameraBasis(out Vector3 position, out Quaternion yaw)
+    internal static bool TryGetCameraBasis(out Vector3 position, out Quaternion yaw)
     {
         position = Vector3.zero;
         yaw = Quaternion.identity;

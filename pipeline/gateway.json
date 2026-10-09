@@ -50,6 +50,21 @@
         }
       }
     },
+    "/map": {
+      "get": {
+        "operationId": "breach_map",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
     "/sheet": {
       "get": {
         "operationId": "sheet",

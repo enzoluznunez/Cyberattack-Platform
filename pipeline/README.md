@@ -52,7 +52,8 @@ One command, and nothing kept in between: every run starts from the exports.
 
 - `breaches` — one row per breach. Attack types, information accessed, breached
   subsidiaries and parent/subsidiary are real lists, dates are dates, and every
-  breach carries the industry (`division`) of its company.
+  breach carries the industry (`division`) of its company, and the country,
+  city and coordinates of its headquarters.
 - `fundamentals` — one row per company per year: assets and net income (in
   millions of dollars, as the export reports them), share price and auditor
   opinion. The export repeats 2,165 company-years; the fuller row is kept.
@@ -62,7 +63,33 @@ code, falling back to the fundamentals export's.
 
 Cleaning refuses an export it does not understand — an attack type
 `metrics.py` does not name, a breach outside the year range, two equally full
-rows for one company-year that disagree — rather than loading it.
+rows for one company-year that disagree, a country or city it cannot place —
+rather than loading it.
+
+## Places and maps
+
+The export gives each headquarters a city but no coordinates. `places.csv`,
+checked in, is the table from city to latitude and longitude; every spelling of
+one city (`ST LOUIS`, `ST. LOUIS`) maps to one place, so the app draws one dot
+for it. When an export names a city the table lacks, the rebuild stops; draft
+the missing rows, check them, and rebuild:
+
+```sh
+python places.py --source data     # appends rows; never rewrites one
+```
+
+It matches names in GeoNames' `cities500` (CC BY 4.0) and falls back to Census
+ZIP centres for US cities; what neither finds it prints, to be added by hand.
+`maps.py` draws every country's outline from Natural Earth (public domain) into
+`Assets/Resources/Maps/countries.json`, which the app ships:
+
+```sh
+python maps.py --preview data/maps  # rewrite the outlines, and draw each to a PNG
+```
+
+Both scripts say in their header where to download their sources into `data/`.
+Rerun `maps.py` only when a country is added to `metrics.COUNTRIES`;
+`tests/test_maps.py` checks every country has a map and every place lands on it.
 
 ## Serving the app
 
@@ -75,11 +102,12 @@ and draws each one from `/sheet`:
 | `/views` | The sheets, and the names every filter takes |
 | `/sheet?view=…` | One sheet, as the CSV the app parses |
 | `/breaches` | Individual breaches, newest first, for the assistant to read out |
+| `/map` | Every country with a breach, most first, and its cities' breach counts and coordinates |
 
 The three sheets are `attack_by_year` (the default), `industry_by_attack` and
-`before_after`. Every sheet and `/breaches` take the same filters: `since`,
+`before_after`. Every sheet, `/breaches` and `/map` take the same filters: `since`,
 `until`, `industry`, `attack`, `information`, `accessed`, `relationship`,
-`region`, `market`, `state` and `sec`. Most take several names separated by
+`region`, `market`, `state`, `country` and `sec`. Most take several names separated by
 commas; repeat `industry` instead, since one industry's name holds commas.
 
 To run it on a laptop:

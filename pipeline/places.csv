@@ -1,0 +1,447 @@
+country,state,city,place,lat,lon,source
+Argentina,C1,BUENOS AIRES,Buenos Aires,-34.6131,-58.3772,geonames
+Belgium,C9,BRUSSELS,Brussels,50.8505,4.3488,geonames
+Bermuda,D0,HAMILTON,Hamilton,32.2949,-64.7830,geonames
+Bermuda,D0,PEMBROKE,Pembroke Parish,32.3002,-64.7920,geonames
+Brazil,D5,BELO HORIZONTE,Belo Horizonte,-19.9208,-43.9378,geonames
+Brazil,D5,ITAIM EMPRESARIAL,Cajamar,-23.3557,-46.8770,hand
+Brazil,D5,PARANA,Curitiba,-25.4284,-49.2733,hand
+Brazil,D5,S?O PAULO,São Paulo,-23.5475,-46.6361,hand
+Brazil,D5,SAO JOSE DOS CAMPOS,São José dos Campos,-23.1794,-45.8869,geonames
+Brazil,D5,SAO PAULO,São Paulo,-23.5475,-46.6361,geonames
+Brazil,D5,SAO PAULO SP,São Paulo,-23.5475,-46.6361,hand
+Canada,A0,CALGARY,Calgary,51.0501,-114.0853,geonames
+Canada,A0,EDMONTON,Edmonton,53.5501,-113.4687,geonames
+Canada,A1,BURNABY,Burnaby,49.2664,-122.9526,geonames
+Canada,A1,RICHMOND,Richmond,49.1700,-123.1368,geonames
+Canada,A1,VANCOUVER,Vancouver,49.2497,-123.1193,geonames
+Canada,A6,MARKHAM,Markham,43.8668,-79.2663,geonames
+Canada,A6,OTTAWA,Ottawa,45.4112,-75.6981,geonames
+Canada,A6,TORONTO,Toronto,43.7064,-79.3986,geonames
+Canada,A6,VAUGHAN,Vaughan,43.8361,-79.4983,geonames
+Canada,A8,MONTREAL,Montréal,45.5088,-73.5878,geonames
+Canada,A8,VALCOURT,Valcourt,45.5001,-72.3158,geonames
+Cayman Islands,E9,GEORGE TOWN,George Town,19.2866,-81.3744,geonames
+Cayman Islands,E9,GEORGETOWN,George Town,19.2866,-81.3744,geonames
+Cayman Islands,E9,GRAND CAYMAN,George Town,19.2866,-81.3744,hand
+China,F4,BEIJING,Beijing,39.9075,116.3972,geonames
+China,F4,SHANGHAI,Shanghai,31.2222,121.4581,geonames
+Colombia,F8,BOGOTA,Bogotá,4.6097,-74.0817,geonames
+Cyprus,G4,NICOSIA,Nicosia,35.1728,33.3540,geonames
+Denmark,G7,BAGSVAERD,Bagsværd,55.7617,12.4544,hand
+Finland,H9,ESPOO,Espoo,60.2052,24.6522,geonames
+Germany,2M,BERLIN,Berlin,52.5244,13.4105,geonames
+Germany,2M,HAMBURG,Hamburg,53.5507,9.9930,geonames
+Germany,2M,MAINZ,Mainz,49.9819,8.2801,geonames
+Hong Kong,K3,CAUSEWAY BAY,Causeway Bay,22.2819,114.1851,geonames
+India,K7,BANGALORE,Bengaluru,12.9719,77.5937,geonames
+India,K7,GURGAON,Gurugram,28.4601,77.0263,geonames
+India,K7,HYPERABAD,Hyderabad,17.3840,78.4564,hand
+India,K7,KARNATAKA,Bengaluru,12.9719,77.5937,hand
+Indonesia,K8,BANDUNG,Bandung,-6.9222,107.6069,geonames
+Ireland,L2,CORK,Cork,51.8980,-8.4706,geonames
+Ireland,L2,COUNTY DUBLIN,Dublin,53.3331,-6.2489,hand
+Ireland,L2,DUBLIN,Dublin,53.3331,-6.2489,geonames
+Ireland,L2,DUBLIN 1,Dublin,53.3331,-6.2489,hand
+Ireland,L2,DUBLIN 2,Dublin,53.3331,-6.2489,hand
+Israel,L3,HAIFA,Haifa,32.8130,34.9993,geonames
+Israel,L3,HAIFA BAY,Haifa,32.8130,34.9993,hand
+Italy,L6,MARANELLO,Maranello,44.5310,10.8689,geonames
+Italy,L6,VALDILANA (BIELLA),Valdilana,45.6667,8.1667,hand
+Japan,M0,KADOMA-SHI OSAKA,Kadoma,34.7381,135.5869,hand
+Japan,M0,TOKYO,Tokyo,35.6895,139.6917,geonames
+Japan,M0,TOYOTA CITY,Toyota,35.0826,137.1560,hand
+Luxembourg,N4,LUXEMBOURG,Luxembourg,49.6098,6.1327,geonames
+Mexico,O5,COL ANAHUAC,Mexico City,19.4285,-99.1277,hand
+Mexico,O5,MEXICO,Mexico City,19.4285,-99.1277,geonames
+Netherlands,P7,AMSTELVEEN,Amstelveen,52.3008,4.8639,geonames
+Netherlands,P7,AMSTERDAM,Amsterdam,52.3740,4.8897,geonames
+Netherlands,P7,BILTHOVEN,Bilthoven,52.1300,5.2014,geonames
+Netherlands,P7,HOOFDDORP,Hoofddorp,52.3025,4.6889,geonames
+Netherlands,P7,LEIDEN,Leiden,52.1583,4.4931,geonames
+Netherlands,P7,THE HAGUE,The Hague,52.0767,4.2986,geonames
+Panama,R1,PANAMA CITY,Panama City,8.9936,-79.5197,geonames
+Singapore,U0,SINGAPORE,Singapore,1.2897,103.8501,geonames
+South Africa,T3,SANDTON,Sandton,-26.1076,28.0567,hand
+South Korea,M5,NAJU-SI,Naju,35.0158,126.7108,hand
+Spain,U3,MADRID,Madrid,40.4165,-3.7026,geonames
+Switzerland,V8,ZURICH,Zürich,47.3667,8.5500,geonames
+Taiwan,F5,HSINCHU,Hsinchu,24.8036,120.9686,geonames
+Taiwan,F5,TAIPEI,Taipei,25.0531,121.5264,geonames
+United Kingdom,X0,CAMBRIDGE,Cambridge,52.2000,0.1167,geonames
+United Kingdom,X0,EDINBURGH SCOTLAND,Edinburgh,55.9521,-3.1965,hand
+United Kingdom,X0,ELY CAMBRIDGESHIRE,Ely,52.3990,0.2622,hand
+United Kingdom,X0,LONDON,London,51.5085,-0.1257,geonames
+United Kingdom,X0,MANCHESTER,Manchester,53.4809,-2.2374,geonames
+United Kingdom,X0,NEWBURY,Newbury,51.4015,-1.3247,geonames
+United Kingdom,X0,WOKINGHAM,Wokingham,51.4112,-0.8357,geonames
+United States,AK,ANCHORAGE,"Anchorage, AK",61.2181,-149.9003,geonames
+United States,AL,BROOKWOOD,"Brookwood, AL",33.2557,-87.3208,geonames
+United States,AR,BENTONVILLE,"Bentonville, AR",36.3728,-94.2088,geonames
+United States,AR,CONWAY,"Conway, AR",35.0887,-92.4421,geonames
+United States,AR,LITTLE ROCK,"Little Rock, AR",34.7465,-92.2896,geonames
+United States,AZ,CHANDLER,"Chandler, AZ",33.3062,-111.8413,geonames
+United States,AZ,PHOENIX,"Phoenix, AZ",33.4484,-112.0740,geonames
+United States,AZ,SCOTTSDALE,"Scottsdale, AZ",33.5092,-111.8990,geonames
+United States,AZ,TEMPE,"Tempe, AZ",33.4148,-111.9093,geonames
+United States,CA,AGOURA HILLS,"Agoura Hills, CA",34.1364,-118.7745,geonames
+United States,CA,ANAHEIM,"Anaheim, CA",33.8353,-117.9145,geonames
+United States,CA,BEVERLY HILLS,"Beverly Hills, CA",34.0736,-118.4004,geonames
+United States,CA,BRISBANE,"Brisbane, CA",37.6808,-122.4000,geonames
+United States,CA,BURBANK,"Burbank, CA",34.1808,-118.3090,geonames
+United States,CA,CAMPBELL,"Campbell, CA",37.2872,-121.9500,geonames
+United States,CA,CARLSBAD,"Carlsbad, CA",33.1581,-117.3506,geonames
+United States,CA,CHICO,"Chico, CA",39.7285,-121.8375,geonames
+United States,CA,CUPERTINO,"Cupertino, CA",37.3230,-122.0322,geonames
+United States,CA,CYPRESS,"Cypress, CA",33.8170,-118.0373,geonames
+United States,CA,EL SEGUNDO,"El Segundo, CA",33.9192,-118.4165,geonames
+United States,CA,EMERYVILLE,"Emeryville, CA",37.8313,-122.2853,geonames
+United States,CA,FOOTHILL RANCH,"Foothill Ranch, CA",33.6864,-117.6609,geonames
+United States,CA,FOSTER CITY,"Foster City, CA",37.5585,-122.2711,geonames
+United States,CA,FREMONT,"Fremont, CA",37.5483,-121.9886,geonames
+United States,CA,GLENDALE,"Glendale, CA",34.1425,-118.2551,geonames
+United States,CA,GOLETA,"Goleta, CA",34.4358,-119.8276,geonames
+United States,CA,HERCULES,"Hercules, CA",38.0171,-122.2886,geonames
+United States,CA,IRVINE,"Irvine, CA",33.6695,-117.8231,geonames
+United States,CA,LA JOLLA,"La Jolla, CA",32.8473,-117.2742,geonames
+United States,CA,LAKE FOREST,"Lake Forest, CA",33.6470,-117.6892,geonames
+United States,CA,LIVERMORE,"Livermore, CA",37.6819,-121.7680,geonames
+United States,CA,LONG BEACH,"Long Beach, CA",33.7670,-118.1892,geonames
+United States,CA,LOS ALTOS,"Los Altos, CA",37.3852,-122.1141,geonames
+United States,CA,LOS ANGELES,"Los Angeles, CA",34.0522,-118.2437,geonames
+United States,CA,LOS GATOS,"Los Gatos, CA",37.2266,-121.9747,geonames
+United States,CA,MENLO PARK,"Menlo Park, CA",37.4538,-122.1822,geonames
+United States,CA,MILPITAS,"Milpitas, CA",37.4283,-121.9066,geonames
+United States,CA,MOUNTAIN VIEW,"Mountain View, CA",37.3860,-122.0838,geonames
+United States,CA,NEWPORT BEACH,"Newport Beach, CA",33.6189,-117.9290,geonames
+United States,CA,NOVATO,"Novato, CA",38.1074,-122.5697,geonames
+United States,CA,OAKLAND,"Oakland, CA",37.8044,-122.2708,geonames
+United States,CA,ORANGE,"Orange, CA",33.7878,-117.8531,geonames
+United States,CA,PALO ALTO,"Palo Alto, CA",37.4419,-122.1430,geonames
+United States,CA,PASADENA,"Pasadena, CA",34.1478,-118.1445,geonames
+United States,CA,PLEASANTON,"Pleasanton, CA",37.6624,-121.8747,geonames
+United States,CA,RANCHO CUCAMONGA,"Rancho Cucamonga, CA",34.1064,-117.5931,geonames
+United States,CA,REDWOOD CITY,"Redwood City, CA",37.4852,-122.2364,geonames
+United States,CA,RICHMOND,"Richmond, CA",37.9358,-122.3478,geonames
+United States,CA,SAN CLEMENTE,"San Clemente, CA",33.4270,-117.6120,geonames
+United States,CA,SAN DIEGO,"San Diego, CA",32.7157,-117.1647,geonames
+United States,CA,SAN FRANCISCO,"San Francisco, CA",37.7749,-122.4194,geonames
+United States,CA,SAN JOSE,"San Jose, CA",37.3394,-121.8950,geonames
+United States,CA,SAN MATEO,"San Mateo, CA",37.5630,-122.3255,geonames
+United States,CA,SAN RAMON,"San Ramon, CA",37.7799,-121.9780,geonames
+United States,CA,SANTA ANA,"Santa Ana, CA",33.7456,-117.8678,geonames
+United States,CA,SANTA CLARA,"Santa Clara, CA",37.3541,-121.9552,geonames
+United States,CA,SANTA MONICA,"Santa Monica, CA",34.0195,-118.4914,geonames
+United States,CA,SOUTH SAN FRANCISCO,"South San Francisco, CA",37.6547,-122.4077,geonames
+United States,CA,SUNNYVALE,"Sunnyvale, CA",37.3688,-122.0363,geonames
+United States,CA,THOUSAND OAKS,"Thousand Oaks, CA",34.1706,-118.8376,geonames
+United States,CA,TORRANCE,"Torrance, CA",33.8359,-118.3406,geonames
+United States,CA,VAN NUYS,"Van Nuys, CA",34.1867,-118.4490,geonames
+United States,CO,BROOMFIELD,"Broomfield, CO",39.9205,-105.0867,geonames
+United States,CO,DENVER,"Denver, CO",39.7392,-104.9847,geonames
+United States,CO,ENGLEWOOD,"Englewood, CO",39.6478,-104.9878,geonames
+United States,CO,GOLDEN,"Golden, CO",39.7555,-105.2211,geonames
+United States,CO,GREENWOOD VILLAGE,"Greenwood Village, CO",39.6172,-104.9508,geonames
+United States,CO,LAKEWOOD,"Lakewood, CO",39.7047,-105.0814,geonames
+United States,CO,LOVELAND,"Loveland, CO",40.3978,-105.0750,geonames
+United States,CO,WATKINS,"Watkins, CO",39.7122,-104.5941,zcta
+United States,CO,WESTMINSTER,"Westminster, CO",39.8366,-105.0372,geonames
+United States,CT,BLOOMFIELD,"Bloomfield, CT",41.8265,-72.7301,geonames
+United States,CT,BRIDGEPORT,"Bridgeport, CT",41.1792,-73.1894,geonames
+United States,CT,GREENWICH,"Greenwich, CT",41.0265,-73.6285,geonames
+United States,CT,MANCHESTER,"Manchester, CT",41.7759,-72.5215,geonames
+United States,CT,NORWALK,"Norwalk, CT",41.1176,-73.4079,geonames
+United States,CT,STAMFORD,"Stamford, CT",41.0534,-73.5387,geonames
+United States,CT,WALLINGFORD,"Wallingford, CT",41.4570,-72.8232,geonames
+United States,CT,WINDSOR,"Windsor, CT",41.8526,-72.6437,geonames
+United States,DC,WASHINGTON,"Washington, DC",38.8951,-77.0364,geonames
+United States,DE,NEWARK,"Newark, DE",39.6837,-75.7497,geonames
+United States,DE,WILMINGTON,"Wilmington, DE",39.7460,-75.5466,geonames
+United States,FL,BAY HARBOR ISLANDS,"Bay Harbor Islands, FL",25.8876,-80.1312,geonames
+United States,FL,BOCA RATON,"Boca Raton, FL",26.3587,-80.0831,geonames
+United States,FL,CLEARWATER,"Clearwater, FL",27.9658,-82.8001,geonames
+United States,FL,CORAL GABLES,"Coral Gables, FL",25.7215,-80.2684,geonames
+United States,FL,DAYTONA BEACH,"Daytona Beach, FL",29.2108,-81.0228,geonames
+United States,FL,DORAL,"Doral, FL",25.8195,-80.3553,geonames
+United States,FL,ESTERO,"Estero, FL",26.4381,-81.8067,geonames
+United States,FL,FORT LAUDERDALE,"Fort Lauderdale, FL",26.1223,-80.1434,geonames
+United States,FL,FORT MYERS,"Fort Myers, FL",26.6217,-81.8406,geonames
+United States,FL,HOLLYWOOD,"Hollywood, FL",26.0112,-80.1495,geonames
+United States,FL,JACKSONVILLE,"Jacksonville, FL",30.3322,-81.6556,geonames
+United States,FL,MIAMI,"Miami, FL",25.7743,-80.1937,geonames
+United States,FL,NAPLES,"Naples, FL",26.1423,-81.7960,geonames
+United States,FL,NORTH VENICE,"North Venice, FL",27.1518,-82.4226,zcta
+United States,FL,ORLANDO,"Orlando, FL",28.5383,-81.3792,geonames
+United States,FL,PLANTATION,"Plantation, FL",26.1342,-80.2318,geonames
+United States,FL,SARASOTA,"Sarasota, FL",27.3364,-82.5306,geonames
+United States,FL,ST PETERSBURG,"St. Petersburg, FL",27.7709,-82.6793,geonames
+United States,FL,SUNNY ISLES BEACH,"Sunny Isles Beach, FL",25.9506,-80.1228,geonames
+United States,FL,SUNRISE,"Sunrise, FL",26.1340,-80.1131,geonames
+United States,FL,TAMPA,"Tampa, FL",27.9475,-82.4584,geonames
+United States,FL,WINTER HAVEN,"Winter Haven, FL",28.0222,-81.7329,geonames
+United States,GA,ALPHARETTA,"Alpharetta, GA",34.0754,-84.2941,geonames
+United States,GA,ATLANTA,"Atlanta, GA",33.7490,-84.3880,geonames
+United States,GA,COLUMBUS,"Columbus, GA",32.4610,-84.9877,geonames
+United States,GA,DULUTH,"Duluth, GA",34.0029,-84.1446,geonames
+United States,GA,KENNESAW,"Kennesaw, GA",34.0234,-84.6155,geonames
+United States,GA,ROSWELL,"Roswell, GA",34.0232,-84.3616,geonames
+United States,GA,SAVANNAH,"Savannah, GA",32.0835,-81.0998,geonames
+United States,GA,SUWANEE,"Suwanee, GA",34.0515,-84.0713,geonames
+United States,GA,TOCCOA,"Toccoa, GA",34.5773,-83.3324,geonames
+United States,HI,HONOLULU,"Honolulu, HI",21.3069,-157.8583,geonames
+United States,IA,ANKENY,"Ankeny, IA",41.7297,-93.6058,geonames
+United States,IA,DES MOINES,"Des Moines, IA",41.6005,-93.6091,geonames
+United States,ID,BOISE,"Boise, ID",43.6135,-116.2035,geonames
+United States,IL,BANNOCKBURN,"Bannockburn, IL",42.1934,-87.8665,geonames
+United States,IL,BURR RIDGE,"Burr Ridge, IL",41.7489,-87.9184,geonames
+United States,IL,CHICAGO,"Chicago, IL",41.8500,-87.6500,geonames
+United States,IL,DEERFIELD,"Deerfield, IL",42.1711,-87.8445,geonames
+United States,IL,GLENWOOD,"Glenwood, IL",41.5425,-87.6023,geonames
+United States,IL,HOFFMAN ESTATES,"Hoffman Estates, IL",42.0428,-88.0798,geonames
+United States,IL,LAKE FOREST,"Lake Forest, IL",42.2586,-87.8406,geonames
+United States,IL,LINCOLNSHIRE,"Lincolnshire, IL",42.1900,-87.9084,geonames
+United States,IL,LISLE,"Lisle, IL",41.8011,-88.0748,geonames
+United States,IL,METTAWA,"Mettawa, IL",42.2334,-87.9259,geonames
+United States,IL,NAPERVILLE,"Naperville, IL",41.7859,-88.1473,geonames
+United States,IL,RICHMOND,"Richmond, IL",42.4759,-88.3059,geonames
+United States,IL,ROLLING MEADOWS,"Rolling Meadows, IL",42.0842,-88.0131,geonames
+United States,IL,ROSEMONT,"Rosemont, IL",41.9953,-87.8845,geonames
+United States,IL,WESTCHESTER,"Westchester, IL",41.8506,-87.8820,geonames
+United States,IN,CARMEL,"Carmel, IN",39.9784,-86.1180,geonames
+United States,IN,ELKHART,"Elkhart, IN",41.6820,-85.9767,geonames
+United States,IN,EVANSVILLE,"Evansville, IN",37.9748,-87.5559,geonames
+United States,IN,INDIANAPOLIS,"Indianapolis, IN",39.7684,-86.1580,geonames
+United States,IN,KOKOMO,"Kokomo, IN",40.4864,-86.1336,geonames
+United States,IN,ROANOKE,"Roanoke, IN",40.9626,-85.3733,geonames
+United States,IN,WEST LAFAYETTE,"West Lafayette, IN",40.4259,-86.9081,geonames
+United States,KS,ATCHISON,"Atchison, KS",39.5630,-95.1216,geonames
+United States,KS,LEAWOOD,"Leawood, KS",38.9667,-94.6169,geonames
+United States,KS,OVERLAND PARK,"Overland Park, KS",38.9822,-94.6708,geonames
+United States,KS,WICHITA,"Wichita, KS",37.6922,-97.3375,geonames
+United States,KY,BOWLING GREEN,"Bowling Green, KY",36.9903,-86.4436,geonames
+United States,KY,LEXINGTON,"Lexington, KY",37.9887,-84.4777,geonames
+United States,KY,LOUISVILLE,"Louisville, KY",38.2542,-85.7594,geonames
+United States,LA,COVINGTON,"Covington, LA",30.4755,-90.1004,geonames
+United States,LA,LAFAYETTE,"Lafayette, LA",30.2241,-92.0198,geonames
+United States,LA,MONROE,"Monroe, LA",32.5093,-92.1193,geonames
+United States,MA,ACTON,"Acton, MA",42.4851,-71.4328,geonames
+United States,MA,ALLSTON,"Allston, MA",42.3584,-71.1259,geonames
+United States,MA,ANDOVER,"Andover, MA",42.6584,-71.1370,geonames
+United States,MA,ATHOL,"Athol, MA",42.5959,-72.2267,geonames
+United States,MA,BOSTON,"Boston, MA",42.3584,-71.0598,geonames
+United States,MA,BURLINGTON,"Burlington, MA",42.5048,-71.1956,geonames
+United States,MA,CAMBRIDGE,"Cambridge, MA",42.3751,-71.1056,geonames
+United States,MA,CANTON,"Canton, MA",42.1584,-71.1448,geonames
+United States,MA,FRAMINGHAM,"Framingham, MA",42.2793,-71.4162,geonames
+United States,MA,HOPKINTON,"Hopkinton, MA",42.2287,-71.5226,geonames
+United States,MA,LEXINGTON,"Lexington, MA",42.4473,-71.2245,geonames
+United States,MA,MARLBOROUGH,"Marlborough, MA",42.3459,-71.5523,geonames
+United States,MA,NEEDHAM,"Needham, MA",42.2834,-71.2328,geonames
+United States,MA,NEWTON,"Newton, MA",42.3370,-71.2092,geonames
+United States,MA,NORWELL,"Norwell, MA",42.1618,-70.7939,geonames
+United States,MA,ROCKLAND,"Rockland, MA",42.1307,-70.9162,geonames
+United States,MA,SPRINGFIELD,"Springfield, MA",42.1015,-72.5898,geonames
+United States,MA,WALTHAM,"Waltham, MA",42.3765,-71.2356,geonames
+United States,MA,WATERTOWN,"Watertown, MA",42.3709,-71.1828,geonames
+United States,MA,WESTWOOD,"Westwood, MA",42.2140,-71.2245,geonames
+United States,MA,WILMINGTON,"Wilmington, MA",42.5465,-71.1737,geonames
+United States,MA,WOBURN,"Woburn, MA",42.4793,-71.1523,geonames
+United States,MD,BALTIMORE,"Baltimore, MD",39.2904,-76.6122,geonames
+United States,MD,BETHESDA,"Bethesda, MD",38.9807,-77.1003,geonames
+United States,MD,HANOVER,"Hanover, MD",39.1929,-76.7241,geonames
+United States,MD,HUNT VALLEY,"Hunt Valley, MD",39.4998,-76.6411,geonames
+United States,MD,NORTH BETHESDA,"North Bethesda, MD",39.0446,-77.1189,geonames
+United States,MD,ROCKVILLE,"Rockville, MD",39.0840,-77.1528,geonames
+United States,MD,SILVER SPRING,"Silver Spring, MD",38.9907,-77.0261,geonames
+United States,MI,ANN ARBOR,"Ann Arbor, MI",42.2776,-83.7409,geonames
+United States,MI,BENTON HARBOR,"Benton Harbor, MI",42.1167,-86.4542,geonames
+United States,MI,DEARBORN,"Dearborn, MI",42.3223,-83.1763,geonames
+United States,MI,DETROIT,"Detroit, MI",42.3314,-83.0457,geonames
+United States,MI,LANSING,"Lansing, MI",42.7325,-84.5555,geonames
+United States,MI,TROY,"Troy, MI",42.6056,-83.1499,geonames
+United States,MI,WARREN,"Warren, MI",42.4904,-83.0130,geonames
+United States,MN,EDEN PRAIRIE,"Eden Prairie, MN",44.8547,-93.4708,geonames
+United States,MN,MINNEAPOLIS,"Minneapolis, MN",44.9800,-93.2638,geonames
+United States,MN,MINNETONKA,"Minnetonka, MN",44.9133,-93.5033,geonames
+United States,MN,NEW PRAGUE,"New Prague, MN",44.5433,-93.5761,geonames
+United States,MN,RICHFIELD,"Richfield, MN",44.8833,-93.2830,geonames
+United States,MN,ST PAUL,"Saint Paul, MN",44.9444,-93.0933,geonames
+United States,MO,KANSAS CITY,"Kansas City, MO",39.0997,-94.5786,geonames
+United States,MO,LIBERTY,"Liberty, MO",39.2461,-94.4191,geonames
+United States,MO,MONETT,"Monett, MO",36.9290,-93.9277,geonames
+United States,MO,ST CHARLES,"Saint Charles, MO",38.7839,-90.4812,geonames
+United States,MO,ST LOUIS,"St. Louis, MO",38.6273,-90.1979,geonames
+United States,MT,BILLINGS,"Billings, MT",45.7833,-108.5007,geonames
+United States,NC,BURLINGTON,"Burlington, NC",36.0957,-79.4378,geonames
+United States,NC,CHAPEL HILL,"Chapel Hill, NC",35.9132,-79.0558,geonames
+United States,NC,CHARLOTTE,"Charlotte, NC",35.2271,-80.8431,geonames
+United States,NC,CLAREMONT,"Claremont, NC",35.7146,-81.1462,geonames
+United States,NC,DURHAM,"Durham, NC",35.9940,-78.8986,geonames
+United States,NC,HOUSTON,"Cary, NC",35.7915,-78.7811,hand
+United States,NC,MORRISVILLE,"Morrisville, NC",35.8235,-78.8256,geonames
+United States,NC,RALEIGH,"Raleigh, NC",35.7721,-78.6386,geonames
+United States,NC,STATESVILLE,"Statesville, NC",35.7826,-80.8873,geonames
+United States,NC,WINSTON-SALEM,"Winston-Salem, NC",36.0999,-80.2442,geonames
+United States,ND,MINOT,"Minot, ND",48.2325,-101.2963,geonames
+United States,NE,KEARNEY,"Kearney, NE",40.6995,-99.0815,geonames
+United States,NE,LINCOLN,"Lincoln, NE",40.8000,-96.6670,geonames
+United States,NE,OMAHA,"Omaha, NE",41.2563,-95.9404,geonames
+United States,NH,SALEM,"Salem, NH",42.7884,-71.2009,geonames
+United States,NJ,BEDMINSTER,"Bedminster, NJ",40.6807,-74.6454,geonames
+United States,NJ,BRANCHVILLE,"Branchville, NJ",41.1465,-74.7524,geonames
+United States,NJ,BRIDGEWATER,"Bridgewater, NJ",40.6008,-74.6482,geonames
+United States,NJ,CAMDEN,"Camden, NJ",39.9260,-75.1196,geonames
+United States,NJ,CHERRY HILL,"Cherry Hill, NJ",39.9348,-75.0307,geonames
+United States,NJ,EATONTOWN,"Eatontown, NJ",40.2962,-74.0510,geonames
+United States,NJ,FLORHAM PARK,"Florham Park, NJ",40.7879,-74.3882,geonames
+United States,NJ,FOLSOM,"Folsom, NJ",39.6021,-74.8427,geonames
+United States,NJ,JERSEY CITY,"Jersey City, NJ",40.7282,-74.0776,geonames
+United States,NJ,KENILWORTH,"Kenilworth, NJ",40.6765,-74.2907,geonames
+United States,NJ,MORRISTOWN,"Morristown, NJ",40.7968,-74.4815,geonames
+United States,NJ,NEW BRUNSWICK,"New Brunswick, NJ",40.4862,-74.4518,geonames
+United States,NJ,NEWARK,"Newark, NJ",40.7357,-74.1724,geonames
+United States,NJ,PARSIPPANY,"Parsippany, NJ",40.8579,-74.4260,geonames
+United States,NJ,PRINCETON,"Princeton, NJ",40.3487,-74.6590,geonames
+United States,NJ,ROSELAND,"Roseland, NJ",40.8207,-74.2938,geonames
+United States,NJ,SECAUCUS,"Secaucus, NJ",40.7895,-74.0565,geonames
+United States,NJ,SHORT HILLS,"Short Hills, NJ",40.7479,-74.3254,geonames
+United States,NJ,TEANECK,"Teaneck, NJ",40.8976,-74.0160,geonames
+United States,NJ,UNION,"Union, NJ",40.6976,-74.2632,geonames
+United States,NM,ALAMOGORDO,"Alamogordo, NM",32.8995,-105.9603,geonames
+United States,NM,SANTE FE,"Santa Fe, NM",35.6870,-105.9378,hand
+United States,NV,HENDERSON,"Henderson, NV",36.0397,-114.9819,geonames
+United States,NV,LAS VEGAS,"Las Vegas, NV",36.1750,-115.1372,geonames
+United States,NV,RENO,"Reno, NV",39.5296,-119.8138,geonames
+United States,NY,AMHERST,"Amherst, NY",42.9784,-78.7998,geonames
+United States,NY,ARMONK,"Armonk, NY",41.1265,-73.7140,geonames
+United States,NY,CORNING,"Corning, NY",42.1429,-77.0547,geonames
+United States,NY,DUNKIRK,"Dunkirk, NY",42.4795,-79.3339,geonames
+United States,NY,FARMINGDALE,"Farmingdale, NY",40.7326,-73.4454,geonames
+United States,NY,GARDEN CITY,"Garden City, NY",40.7268,-73.6343,geonames
+United States,NY,HAUPPAUGE,"Hauppauge, NY",40.8257,-73.2026,geonames
+United States,NY,HICKSVILLE,"Hicksville, NY",40.7684,-73.5251,geonames
+United States,NY,JERICHO,"Jericho, NY",40.7920,-73.5399,geonames
+United States,NY,LATHAM,"Latham, NY",42.7470,-73.7590,geonames
+United States,NY,LONG ISLAND CITY,"Long Island City, NY",40.7448,-73.9488,geonames
+United States,NY,MELVILLE,"Melville, NY",40.7934,-73.4151,geonames
+United States,NY,NEW HARTFORD,"New Hartford, NY",43.0734,-75.2877,geonames
+United States,NY,NEW YORK,"New York, NY",40.7143,-74.0060,hand
+United States,NY,NEWARK,"Newark, NY",43.0467,-77.0952,geonames
+United States,NY,OLD BETHPAGE,"Old Bethpage, NY",40.7626,-73.4532,geonames
+United States,NY,PEARL RIVER,"Pearl River, NY",41.0590,-74.0218,geonames
+United States,NY,POUGHKEEPSIE,"Poughkeepsie, NY",41.7004,-73.9210,geonames
+United States,NY,PURCHASE,"Purchase, NY",41.0409,-73.7146,geonames
+United States,NY,ROCHESTER,"Rochester, NY",43.1548,-77.6156,geonames
+United States,NY,SUFFERN,"Suffern, NY",41.1148,-74.1496,geonames
+United States,NY,TARRYTOWN,"Tarrytown, NY",41.0762,-73.8588,geonames
+United States,NY,VALLEY COTTAGE,"Valley Cottage, NY",41.1181,-73.9554,geonames
+United States,NY,WATERFORD,"Waterford, NY",42.7926,-73.6812,geonames
+United States,OH,AVON LAKE,"Avon Lake, OH",41.5053,-82.0282,geonames
+United States,OH,BATAVIA,"Batavia, OH",39.0770,-84.1769,geonames
+United States,OH,BOSTON HEIGHTS,"Boston Heights, OH",41.2648,-81.5132,geonames
+United States,OH,CINCINNATI,"Cincinnati, OH",39.1271,-84.5144,geonames
+United States,OH,CLEVELAND,"Cleveland, OH",41.4995,-81.6954,geonames
+United States,OH,COLUMBUS,"Columbus, OH",39.9612,-82.9988,geonames
+United States,OH,DELAWARE,"Delaware, OH",40.2987,-83.0680,geonames
+United States,OH,DUBLIN,"Dublin, OH",40.0992,-83.1141,geonames
+United States,OH,INDEPENDENCE,"Independence, OH",41.3687,-81.6379,geonames
+United States,OH,MARYSVILLE,"Marysville, OH",40.2364,-83.3671,geonames
+United States,OH,MASON,"Mason, OH",39.3601,-84.3099,geonames
+United States,OH,MAYFIELD HEIGHTS,"Mayfield Heights, OH",41.5192,-81.4579,geonames
+United States,OH,MAYFIELD VILLAGE,"Mayfield Village, OH",41.5532,-81.4743,zcta
+United States,OH,ORRVILLE,"Orrville, OH",40.8437,-81.7640,geonames
+United States,OH,WESTLAKE,"Westlake, OH",41.4553,-81.9179,geonames
+United States,OK,OKLAHOMA CITY,"Oklahoma City, OK",35.4676,-97.5164,geonames
+United States,OK,TULSA,"Tulsa, OK",36.1540,-95.9928,geonames
+United States,OR,BEAVERTON,"Beaverton, OR",45.4871,-122.8037,geonames
+United States,OR,GLADSTONE,"Gladstone, OR",45.3807,-122.5948,geonames
+United States,OR,HEPPNER,"Heppner, OR",45.3532,-119.5578,geonames
+United States,OR,PORTLAND,"Portland, OR",45.5234,-122.6762,geonames
+United States,PA,BERWYN,"Berwyn, PA",40.0448,-75.4388,geonames
+United States,PA,BLUE BELL,"Blue Bell, PA",40.1523,-75.2663,geonames
+United States,PA,CAMP HILL,"Camp Hill, PA",40.2398,-76.9200,geonames
+United States,PA,CLEARFIELD,"Clearfield, PA",41.0273,-78.4392,geonames
+United States,PA,CORAOPOLIS,"Coraopolis, PA",40.5184,-80.1667,geonames
+United States,PA,DUNMORE,"Dunmore, PA",41.4198,-75.6324,geonames
+United States,PA,HARRISBURG,"Harrisburg, PA",40.2737,-76.8844,geonames
+United States,PA,KENNETT SQUARE,"Kennett Square, PA",39.8468,-75.7116,geonames
+United States,PA,KING OF PRUSSIA,"King of Prussia, PA",40.0893,-75.3960,geonames
+United States,PA,MARIETTA,"Marietta, PA",40.0570,-76.5522,geonames
+United States,PA,MOON TOWNSHIP,"Moon Township, PA",40.5005,-80.2018,zcta
+United States,PA,NEW HOPE,"New Hope, PA",40.3643,-74.9513,geonames
+United States,PA,NEWTOWN,"Newtown, PA",40.2293,-74.9368,geonames
+United States,PA,PHILADELPHIA,"Philadelphia, PA",39.9524,-75.1636,geonames
+United States,PA,PITTSBURGH,"Pittsburgh, PA",40.4406,-79.9959,geonames
+United States,PA,RADNOR,"Radnor, PA",40.0462,-75.3599,geonames
+United States,PA,SAXONBURG,"Saxonburg, PA",40.7540,-79.8101,geonames
+United States,PA,SHIPPENSBURG,"Shippensburg, PA",40.0506,-77.5203,geonames
+United States,PA,SOUDERTON,"Souderton, PA",40.3118,-75.3252,geonames
+United States,PA,WARRENDALE,"Warrendale, PA",40.6749,-80.1085,zcta
+United States,PR,HATO REY,"Hato Rey, PR",18.4222,-66.0691,zcta
+United States,RI,PAWTUCKET,"Pawtucket, RI",41.8787,-71.3826,geonames
+United States,RI,PROVIDENCE,"Providence, RI",41.8240,-71.4128,geonames
+United States,RI,WESTERLY,"Westerly, RI",41.3776,-71.8273,geonames
+United States,RI,WOONSOCKET,"Woonsocket, RI",42.0029,-71.5148,geonames
+United States,SC,CHARLESTON,"Charleston, SC",32.7763,-79.9327,geonames
+United States,SC,FOUNTAIN INN,"Fountain Inn, SC",34.6890,-82.1957,geonames
+United States,SC,GREENVILLE,"Greenville, SC",34.8526,-82.3940,geonames
+United States,TN,CHATTANOOGA,"Chattanooga, TN",35.0456,-85.3097,geonames
+United States,TN,FRANKLIN,"Franklin, TN",35.9251,-86.8689,geonames
+United States,TN,GERMANTOWN,"Germantown, TN",35.0868,-89.8101,geonames
+United States,TN,GREENEVILLE,"Greeneville, TN",36.1632,-82.8310,geonames
+United States,TN,KNOXVILLE,"Knoxville, TN",35.9606,-83.9207,geonames
+United States,TN,MEMPHIS,"Memphis, TN",35.1495,-90.0490,geonames
+United States,TN,NASHVILLE,"Nashville, TN",36.1659,-86.7844,geonames
+United States,TX,ABILENE,"Abilene, TX",32.4487,-99.7331,geonames
+United States,TX,AUSTIN,"Austin, TX",30.2672,-97.7431,geonames
+United States,TX,CONROE,"Conroe, TX",30.3119,-95.4561,geonames
+United States,TX,COPPELL,"Coppell, TX",32.9546,-97.0150,geonames
+United States,TX,DALLAS,"Dallas, TX",32.7831,-96.8067,geonames
+United States,TX,DENTON,"Denton, TX",33.2148,-97.1331,geonames
+United States,TX,FORT WORTH,"Fort Worth, TX",32.7254,-97.3208,geonames
+United States,TX,GRAPEVINE,"Grapevine, TX",32.9343,-97.0781,geonames
+United States,TX,HOUSTON,"Houston, TX",29.7633,-95.3633,geonames
+United States,TX,IRVING,"Irving, TX",32.8140,-96.9489,geonames
+United States,TX,MIDLOTHIAN,"Midlothian, TX",32.4824,-96.9945,geonames
+United States,TX,NORTHLAKE,"Northlake, TX",33.1273,-97.2656,geonames
+United States,TX,PLANO,"Plano, TX",33.0198,-96.6989,geonames
+United States,TX,RICHARDSON,"Richardson, TX",32.9482,-96.7297,geonames
+United States,TX,ROUND ROCK,"Round Rock, TX",30.5083,-97.6789,geonames
+United States,TX,SAN ANTONIO,"San Antonio, TX",29.4241,-98.4936,geonames
+United States,TX,SOUTHLAKE,"Southlake, TX",32.9412,-97.1342,geonames
+United States,TX,SPRING,"Spring, TX",30.0799,-95.4172,geonames
+United States,TX,THE COLONY,"The Colony, TX",33.0890,-96.8864,geonames
+United States,TX,WESTLAKE,"Westlake, TX",32.9912,-97.1950,geonames
+United States,UT,DRAPER,"Draper, UT",40.5247,-111.8638,geonames
+United States,UT,LEHI,"Lehi, UT",40.3916,-111.8508,geonames
+United States,UT,MURRAY,"Murray, UT",40.6669,-111.8880,geonames
+United States,UT,SALT LAKE CITY,"Salt Lake City, UT",40.7608,-111.8911,geonames
+United States,VA,ARLINGTON,"Arlington, VA",38.8810,-77.1043,geonames
+United States,VA,BASSETT,"Bassett, VA",36.7593,-79.9903,geonames
+United States,VA,BLACKSBURG,"Blacksburg, VA",37.2296,-80.4139,geonames
+United States,VA,BLUEFIELD,"Bluefield, VA",37.2526,-81.2712,geonames
+United States,VA,CHESAPEAKE,"Chesapeake, VA",36.8190,-76.2749,geonames
+United States,VA,EDINBURG,"Edinburg, VA",38.8210,-78.5658,geonames
+United States,VA,FALLS CHURCH,"Falls Church, VA",38.8823,-77.1711,geonames
+United States,VA,GLEN ALLEN,"Glen Allen, VA",37.6660,-77.5064,geonames
+United States,VA,HAMPTON,"Hampton, VA",37.0299,-76.3452,geonames
+United States,VA,MCLEAN,"McLean, VA",38.9343,-77.1775,geonames
+United States,VA,MECHANICSVILLE,"Mechanicsville, VA",37.6088,-77.3733,geonames
+United States,VA,NEWPORT NEWS,"Newport News, VA",36.9804,-76.4297,geonames
+United States,VA,RESTON,"Reston, VA",38.9687,-77.3411,geonames
+United States,VA,RICHMOND,"Richmond, VA",37.5538,-77.4603,geonames
+United States,VA,ROANOKE,"Roanoke, VA",37.2710,-79.9414,geonames
+United States,VA,TYSONS,"Tysons, VA",38.9187,-77.2311,geonames
+United States,WA,BELLEVUE,"Bellevue, WA",47.6104,-122.2007,geonames
+United States,WA,REDMOND,"Redmond, WA",47.6740,-122.1215,geonames
+United States,WA,RENTON,"Renton, WA",47.4829,-122.2171,geonames
+United States,WA,SEATTLE,"Seattle, WA",47.6062,-122.3321,geonames
+United States,WI,BROOKFIELD,"Brookfield, WI",43.0606,-88.1065,geonames
+United States,WI,CUDAHY,"Cudahy, WI",42.9597,-87.8615,geonames
+United States,WI,KENOSHA,"Kenosha, WI",42.5847,-87.8212,geonames
+United States,WI,MIDDLETON,"Middleton, WI",43.0972,-89.5043,geonames
+United States,WI,MILWAUKEE,"Milwaukee, WI",43.0389,-87.9065,geonames
+United States,WI,MONDOVI,"Mondovi, WI",44.5677,-91.6710,geonames
+United States,WI,SUSSEX,"Sussex, WI",43.1339,-88.2220,geonames
+United States,WI,WAUKESHA,"Waukesha, WI",43.0117,-88.2315,geonames
+United States,WI,WAUWATOSA,"Wauwatosa, WI",43.0495,-88.0076,geonames

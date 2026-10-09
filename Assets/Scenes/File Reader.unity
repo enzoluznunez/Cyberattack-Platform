@@ -5901,6 +5901,64 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 771412005585546460, guid: 291a603162c0fef43af969b3e2e05d46, type: 3}
   m_PrefabInstance: {fileID: 1048234291}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1064308809
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1064308811}
+  - component: {fileID: 1064308810}
+  m_Layer: 0
+  m_Name: Map Carousel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1064308810
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1064308809}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aebd19aaad2bd47199bd2de786a54c9f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Study.Runtime::MapCarousel
+  distance: 0.55
+  belowEyes: 0.1
+  leanBack: 10
+  widestMapMetres: 0.8
+  oneBreachRadius: 0.004
+  thickness: 0.012
+  dotHeight: 0.004
+  smallestHold: 0.06
+  commitShare: 0.25
+  flickSpeed: 0.8
+  slideSeconds: 0.35
+  peekScale: 0.4
+  pointDepth: 0.06
+  pointSlack: 0.01
+--- !u!4 &1064308811
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1064308809}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!28 &1078427115
 Texture2D:
   m_ObjectHideFlags: 0
@@ -6239,6 +6297,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   manageDatasets: {fileID: 1166616950}
   apiUrlFile: cloud.url
+  apiKeyFile: cloud.key
 --- !u!1 &1166617000
 GameObject:
   m_ObjectHideFlags: 0
@@ -11785,3 +11844,4 @@ SceneRoots:
   - {fileID: 1662494103}
   - {fileID: 485031896}
   - {fileID: 2024053877}
+  - {fileID: 1064308811}

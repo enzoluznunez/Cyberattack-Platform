@@ -23,6 +23,13 @@ public class ViewCatalog : MonoBehaviour
              "gateway checks in X-Api-Key. Git ignores it, as it does gemini.key.")]
     public string apiKeyFile = "cloud.key";
 
+    // Whether the address and key are read, so anything else asking the
+    // database (the map) knows when it can.
+    public static bool Configured { get; private set; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => Configured = false;
+
     private void Start()
     {
         if (manageDatasets == null) manageDatasets = GetComponent<ManageDatasets>();
@@ -47,6 +54,7 @@ public class ViewCatalog : MonoBehaviour
             Debug.LogWarning($"[ViewCatalog] No '{apiKeyFile}' in StreamingAssets; requests carry no " +
                              "API key, which only a server on this machine will accept.");
 
+        Configured = true;
         yield return ListViews();
     }
 

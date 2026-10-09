@@ -8,6 +8,7 @@ import sheetcsv
 from metrics import (
     ATTACK_TYPES,
     BREACH_LIMIT,
+    COUNTRIES,
     DEFAULT_VIEW,
     DIVISION_COLORS,
     DIVISION_NAMES,
@@ -100,6 +101,7 @@ def test_years_narrow_the_columns(client, attacks):
     ("relationship=Subsidiary / Affiliate",
      lambda b: b["target_relationships"].map(lambda items: "Subsidiary / Affiliate" in items)),
     ("state=va", lambda b: b["state"] == "VA"),
+    ("country=Japan,Canada", lambda b: b["country"].isin(["Japan", "Canada"])),
     ("industry=Finance, Insurance, Real Estate&industry=Retail Trade",
      lambda b: b["division"].isin(["Finance, Insurance, Real Estate", "Retail Trade"])),
 ])
@@ -165,6 +167,7 @@ def test_an_empty_sheet_says_what_was_asked(client):
     ("/sheet?industry=Atlantis", "industry: 'Atlantis' is not one of: " + ", ".join(DIVISION_NAMES)),
     ("/sheet?since=2020&until=2010", "since (2020) is after until (2010)"),
     ("/sheet?state=Virginia", "state: 'Virginia' is not a two-letter state code, like VA"),
+    ("/map?country=Atlantis", "country: 'Atlantis' is not one of: " + ", ".join(COUNTRIES)),
     ("/sheet?bogus=1", "bogus: Extra inputs are not permitted (got '1')"),
 ])
 def test_a_rejection_is_a_sentence(client, path, said):
@@ -203,3 +206,47 @@ def test_breaches_by_ticker(client, breaches):
 
 def test_a_search_with_like_wildcards_takes_them_literally(client):
     assert client.get("/breaches?company=%25%25").json() == {"total": 0, "breaches": []}
+
+
+def test_the_map_counts_every_breach_once_in_its_country(client, breaches):
+    countries = client.get("/map").json()["countries"]
+    expected = breaches["country"].value_counts()
+    assert {c["country"]: c["breaches"] for c in countries} == expected.to_dict()
+    assert {c["country"]: c["code"] for c in countries} == {c: COUNTRIES[c] for c in expected.index}
+
+
+def test_the_map_lists_countries_and_cities_most_breaches_first(client):
+    countries = client.get("/map").json()["countries"]
+    assert countries[0]["country"] == "United States"
+    assert [c["breaches"] for c in countries] == sorted((c["breaches"] for c in countries), reverse=True)
+    for country in countries:
+        counts = [city["breaches"] for city in country["cities"]]
+        assert counts == sorted(counts, reverse=True)
+
+
+def test_a_city_dot_counts_the_breaches_headquartered_there(client, breaches):
+    countries = {c["country"]: c for c in client.get("/map").json()["countries"]}
+    for name, country in countries.items():
+        mine = breaches[breaches["country"] == name]
+        expected = mine.dropna(subset=["city"]).groupby("city").size().to_dict()
+        assert {city["city"]: city["breaches"] for city in country["cities"]} == expected
+    new_york = next(c for c in countries["United States"]["cities"] if c["city"] == "New York, NY")
+    assert new_york["breaches"] == int((breaches["city"] == "New York, NY").sum())
+
+
+def test_the_map_takes_the_sheets_filters(client, breaches):
+    body = client.get("/map?attack=Ransomware&since=2020").json()
+    kept = breaches[breaches["attack_types"].map(lambda items: "Ransomware" in items) & (breaches["year"] >= 2020)]
+    assert {c["country"]: c["breaches"] for c in body["countries"]} == kept["country"].value_counts().to_dict()
+    assert [c["country"] for c in client.get("/map?country=Japan").json()["countries"]] == ["Japan"]
+
+
+def test_a_map_of_nothing_is_an_answer(client):
+    response = client.get("/map?industry=Mining&attack=Credential Stuffing")
+    assert response.status_code == 200
+    assert response.json() == {"countries": []}
+
+
+def test_breaches_say_where_the_company_is(client):
+    toyota = client.get("/breaches?company=toyota").json()["breaches"][0]
+    assert (toyota["country"], toyota["city"]) == ("Japan", "Toyota")
