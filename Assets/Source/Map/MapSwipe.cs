@@ -1,8 +1,6 @@
 using Oculus.Interaction;
 using Oculus.Interaction.Grab;
-using Oculus.Interaction.GrabAPI;
 using Oculus.Interaction.HandGrab;
-using Oculus.Interaction.Input;
 using UnityEngine;
 
 // Makes a country's map the thing the user takes hold of: a pinch or a palm
@@ -35,8 +33,6 @@ public class MapSwipe : MonoBehaviour
         box.size = new Vector3(Mathf.Max(map.Size.x, smallestHold), Mathf.Max(map.Size.y, smallestHold), depth);
 
         Rigidbody body = map.gameObject.AddComponent<Rigidbody>();
-        body.isKinematic = true;
-        body.useGravity = false;
 
         var swipe = map.gameObject.AddComponent<MapSwipe>();
         swipe.Build(body, reach);
@@ -45,32 +41,18 @@ public class MapSwipe : MonoBehaviour
 
     private void Build(Rigidbody body, float reach)
     {
-        OneGrabTranslateTransformer slide = gameObject.AddComponent<OneGrabTranslateTransformer>();
-        slide.InjectOptionalConstraints(new OneGrabTranslateTransformer.OneGrabTranslateConstraints
-        {
-            ConstraintsAreRelative = false,
-            MinX = Pin(-reach),
-            MaxX = Pin(reach),
-            MinY = Pin(0f),
-            MaxY = Pin(0f),
-            MinZ = Pin(0f),
-            MaxZ = Pin(0f)
-        });
-
-        _grabbable = gameObject.AddComponent<Grabbable>();
-        _grabbable.InjectOptionalRigidbody(body);
-        _grabbable.InjectOptionalThrowWhenUnselected(false);
-        _grabbable.InjectOptionalKinematicWhileSelected(true);
-        _grabbable.MaxGrabPoints = 1;
-        _grabbable.InjectOptionalOneGrabTransformer(slide);
-
-        GrabbingRule pinch = new GrabbingRule(
-            HandFingerFlags.Thumb | HandFingerFlags.Index, GrabbingRule.DefaultPinchRule);
-
-        _handGrab = gameObject.AddComponent<HandGrabInteractable>();
-        _handGrab.InjectAllHandGrabInteractable(GrabTypeFlags.Pinch | GrabTypeFlags.Palm, body,
-            pinch, GrabbingRule.DefaultPalmRule);
-        _handGrab.InjectOptionalPointableElement(_grabbable);
+        (_grabbable, _handGrab) = SlideGrab.Attach(gameObject, body,
+            new OneGrabTranslateTransformer.OneGrabTranslateConstraints
+            {
+                ConstraintsAreRelative = false,
+                MinX = SlideGrab.Pin(-reach),
+                MaxX = SlideGrab.Pin(reach),
+                MinY = SlideGrab.Pin(0f),
+                MaxY = SlideGrab.Pin(0f),
+                MinZ = SlideGrab.Pin(0f),
+                MaxZ = SlideGrab.Pin(0f)
+            },
+            GrabTypeFlags.Pinch | GrabTypeFlags.Palm);
     }
 
     // Whether a hand may take hold: only the map in the slot, and not while
@@ -79,6 +61,4 @@ public class MapSwipe : MonoBehaviour
     {
         if (_handGrab != null && _handGrab.enabled != on) _handGrab.enabled = on;
     }
-
-    private static FloatConstraint Pin(float value) => new FloatConstraint { Constrain = true, Value = value };
 }

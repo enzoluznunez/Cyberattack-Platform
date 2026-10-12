@@ -5930,10 +5930,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aebd19aaad2bd47199bd2de786a54c9f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Study.Runtime::MapCarousel
-  distance: 0.55
-  belowEyes: 0.1
-  leanBack: 10
-  widestMapMetres: 0.8
+  gap: 0.05
+  mapBox: {x: 0.4, y: 0.4}
   oneBreachRadius: 0.004
   thickness: 0.012
   dotHeight: 0.004

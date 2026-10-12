@@ -145,13 +145,13 @@ def industry(cik, sic):
     return codes, codes.map(lambda code: division(int(code)) if pd.notna(code) else None)
 
 
-def located(raw, known_places=None):
+def located(raw):
     """(country, place, lat, lon) per breach, for its headquarters. Every
     breach has a country. A breach with a city has that city's place from
     places.csv, which is what the maps draw one dot for; a city places.csv does
     not list stops the rebuild, as an unknown name does. The one breach the
     export gives no city stays off the maps' dots but counts in its country."""
-    known_places = places.load() if known_places is None else known_places
+    known_places = places.load()
 
     country = pd.Series([country_of(r.strip(), s.strip()) for r, s in zip(raw["region"], raw["state_code"])],
                         index=raw.index, dtype="object", name="country")
@@ -171,7 +171,7 @@ def located(raw, known_places=None):
             pd.Series([f[2] if f else None for f in found], index=raw.index, dtype="float64"))
 
 
-def breaches(raw, sic, known_places=None):
+def breaches(raw, sic):
     """One row per breach, typed. The ID numbers, phone number, address lines,
     duplicate state names and the second auditor block are left behind in the
     export: nothing draws, filters or reads them."""
@@ -193,7 +193,7 @@ def breaches(raw, sic, known_places=None):
         raise ValueError("disclosed_to_sec holds something other than Yes or No")
 
     codes, divisions = industry(cik, sic)
-    country, city, lat, lon = located(raw, known_places)
+    country, city, lat, lon = located(raw)
     frame = pd.DataFrame({
         "breach_key": integer(raw["breach_key"]),
         "cik": cik,

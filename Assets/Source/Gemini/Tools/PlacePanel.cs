@@ -116,15 +116,11 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
         Transform cam = CameraRig.MainTransform;
         if (cam == null) { result["error"] = "The user's viewpoint could not be found."; return; }
 
-        Transform t = panel.transform;
-        Vector3 face = t.position - cam.position;
-        face.y = 0f;
-        if (face.sqrMagnitude < 1e-6f) {
+        if (!panel.SquareTo(cam.position)) {
             result["error"] = "The panel is too close to the user to square it up; move it first.";
             return;
         }
 
-        t.rotation = Quaternion.LookRotation(face.normalized);
         result["faced"] = true;
         StateChannel.Record("Panel", "turned the tool panel to face the user");
     }

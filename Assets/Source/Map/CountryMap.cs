@@ -8,9 +8,9 @@ using UnityEngine.Rendering;
 // stands in its local XY plane, east along +X and north along +Y, centred on
 // its outline; its back is at z = 0 and its face toward the viewer, at -Z.
 //
-// Every map shares one scale, so a larger country is a larger map, and every
-// dot shares one too: a dot's area is its city's breach count, so two dots of
-// one size mean the same count on any map. Each smaller dot stands a hair
+// Each map has its own scale, given in its Look, but every dot shares one: a
+// dot's area is its city's breach count, so two dots of one size mean the
+// same count on any map. Each smaller dot stands a hair
 // taller than the larger ones before it, so a small city is never buried
 // inside a large neighbour.
 public class CountryMap : MonoBehaviour
@@ -38,7 +38,9 @@ public class CountryMap : MonoBehaviour
         public BreachMap.City city;
     }
 
-    private const int DotSegments = 32;
+    // Enough for a round edge on a dot a few millimetres across; more is only
+    // more vertices, a few hundred cities over.
+    private const int DotSegments = 16;
 
     // How far each smaller dot stands above the one before it, and how far
     // the coast line sits off the face: enough to never fight for depth.
@@ -48,10 +50,8 @@ public class CountryMap : MonoBehaviour
     private readonly List<Dot> _dots = new List<Dot>();
 
     public MapAtlas.Country Shape { get; private set; }
-    public BreachMap.Country Data { get; private set; }
-    public IReadOnlyList<Dot> Dots => _dots;
 
-    // The outline's size in metres, at the shared scale.
+    // The outline's size in metres, at this map's scale.
     public Vector2 Size { get; private set; }
 
     // How far the face stands toward the viewer from the back, in metres.
@@ -63,14 +63,13 @@ public class CountryMap : MonoBehaviour
         go.transform.SetParent(parent, false);
         var map = go.AddComponent<CountryMap>();
         map.Shape = shape;
-        map.Data = data;
         map.Size = shape.bounds.size * look.metresPerKm;
         map.Thickness = look.thickness;
 
         var mesh = new Builder();
         Vector2 centre = shape.bounds.center;
         map.AddLand(mesh, look, centre);
-        map.AddDots(mesh, look, centre);
+        map.AddDots(mesh, data, look, centre);
 
         go.AddComponent<MeshFilter>().sharedMesh = mesh.Finish(shape.code);
         var renderer = go.AddComponent<MeshRenderer>();
@@ -86,7 +85,8 @@ public class CountryMap : MonoBehaviour
     {
         for (int i = _dots.Count - 1; i >= 0; i--)
         {
-            if ((_dots[i].centre - local).magnitude > _dots[i].radius + slack) continue;
+            float reach = _dots[i].radius + slack;
+            if ((_dots[i].centre - local).sqrMagnitude > reach * reach) continue;
             found = _dots[i];
             return true;
         }
@@ -136,24 +136,22 @@ public class CountryMap : MonoBehaviour
     }
 
     // A round column per city, standing out of the face.
-    private void AddDots(Builder mesh, Look look, Vector2 centre)
+    private void AddDots(Builder mesh, BreachMap.Country data, Look look, Vector2 centre)
     {
-        _dots.Clear();
-        if (Data != null)
-            foreach (BreachMap.City city in Data.cities)
+        foreach (BreachMap.City city in data.cities)
+        {
+            if (!Shape.TryPlace(city.lon, city.lat, out Vector2 km))
             {
-                if (!Shape.TryPlace(city.lon, city.lat, out Vector2 km))
-                {
-                    Debug.LogWarning($"[CountryMap] {city.name} is off the {Shape.name} map; it has no dot.");
-                    continue;
-                }
-                _dots.Add(new Dot
-                {
-                    centre = (km - centre) * look.metresPerKm,
-                    radius = look.dotRadius * Mathf.Sqrt(Mathf.Max(city.breaches, 1)),
-                    city = city
-                });
+                Debug.LogWarning($"[CountryMap] {city.name} is off the {Shape.name} map; it has no dot.");
+                continue;
             }
+            _dots.Add(new Dot
+            {
+                centre = (km - centre) * look.metresPerKm,
+                radius = look.dotRadius * Mathf.Sqrt(Mathf.Max(city.breaches, 1)),
+                city = city
+            });
+        }
         _dots.Sort((a, b) => b.radius.CompareTo(a.radius));
 
         float face = -look.thickness;

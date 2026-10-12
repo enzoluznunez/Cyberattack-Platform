@@ -157,10 +157,8 @@ public abstract class AgenticTool : Function {
         if (data == null) { result["error"] = "No dataset is open."; return false; }
 
         int found = -1, hits = 0;
-        var names = new List<object>();
         for (int b = blockMin; b <= blockMax; b++) {
             string title = data.GroupTitleAt(columns, b) ?? "";
-            names.Add(title);
             if (!string.Equals(title, token, StringComparison.OrdinalIgnoreCase)) continue;
             found = b;
             hits++;
@@ -184,6 +182,8 @@ public abstract class AgenticTool : Function {
         result["error"] = TitleExistsOnAxis(token, !columns)
             ? $"No {what} called '{token}', but there is a {other} called '{token}'; pass it as '{other}' instead."
             : $"No {what} called '{token}'.";
+        var names = new List<object>();
+        for (int b = blockMin; b <= blockMax; b++) names.Add(data.GroupTitleAt(columns, b) ?? "");
         result[columns ? "columns" : "rows"] = names;
         return false;
     }

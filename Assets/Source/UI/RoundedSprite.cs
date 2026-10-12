@@ -52,7 +52,9 @@ public static class RoundedSprite
         return sprite;
     }
 
-    public static void Apply(Image image, float radiusUnits)
+    // 'back' draws it with the back-face material, for the black backs behind
+    // panels and buttons; everything else takes the front one.
+    public static void Apply(Image image, float radiusUnits, bool back = false)
     {
         if (image == null) return;
 
@@ -60,7 +62,10 @@ public static class RoundedSprite
         image.type = Image.Type.Sliced;
         image.fillCenter = true;
         image.pixelsPerUnitMultiplier = 1f;
-        PanelUI.ApplyFront(image);
+
+        Material backMat = back ? PanelUI.BackMaterial : null;
+        if (backMat != null) image.material = backMat;
+        else PanelUI.ApplyFront(image);
     }
 
     private static byte Coverage(float dist, float radius)

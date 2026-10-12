@@ -31,8 +31,6 @@ public abstract class PanelUI : MonoBehaviour
 
     private bool _layoutDirty = true;
 
-    protected void InvalidateLayout() => _layoutDirty = true;
-
     protected virtual void ResolveDeferredLayout() { }
 
     protected void ShowCanvas()
@@ -164,6 +162,9 @@ public abstract class PanelUI : MonoBehaviour
     private bool _grabbableSearched;
     private bool _grabbedLook;
     private Vector3 _restScale = Vector3.one;
+
+    // The panel's scale at rest, without the swell it takes while held.
+    public Vector3 RestScale => _grabbedLook ? _restScale : transform.localScale;
 
     private void ApplyGrabLook()
     {
@@ -309,12 +310,9 @@ public abstract class PanelUI : MonoBehaviour
         Image back = rt.GetComponent<Image>();
         if (back == null) back = rt.gameObject.AddComponent<Image>();
 
-        RoundedSprite.Apply(back, Style.PanelInnerRadius);
+        RoundedSprite.Apply(back, Style.PanelInnerRadius, back: true);
         back.color = Style.Black;
         back.raycastTarget = false;
-
-        Material mat = BackMaterial;
-        if (mat != null) back.material = mat;
 
         rt.SetAsLastSibling();
     }
@@ -505,12 +503,33 @@ public abstract class PanelUI : MonoBehaviour
         }
 
         Vector3 forward = CameraRig.Flatten(cam.forward, Vector3.forward);
-        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+        PlaceGroup(cam.position + forward * zOffsetFromCamera, Quaternion.LookRotation(forward));
+    }
 
-        transform.position = cam.position + forward * zOffsetFromCamera + right * XOffsetFromCamera;
+    // Turns the panel, with whatever stands beside it, square to a viewer at
+    // 'eye' without moving the two as a whole. False when the viewer is too
+    // close to tell which way that is.
+    public bool SquareTo(Vector3 eye)
+    {
+        Vector3 centre = GroupCentre;
+        Vector3 face = centre - eye;
+        face.y = 0f;
+        if (face.sqrMagnitude < 1e-6f) return false;
 
-        Vector3 face = CameraRig.Flatten(transform.position - cam.position, forward);
-        transform.rotation = Quaternion.LookRotation(face);
+        PlaceGroup(centre, Quaternion.LookRotation(face.normalized));
+        return true;
+    }
+
+    // The middle of the panel and whatever stands beside it: the panel sits
+    // XOffsetFromCamera along its own right of it.
+    private Vector3 GroupCentre => transform.position - transform.right * XOffsetFromCamera;
+
+    // Both placements square the group, not the panel alone, so a panel set off
+    // to one side stands in the plane its neighbour does and the two face the
+    // user as one.
+    private void PlaceGroup(Vector3 centre, Quaternion rotation)
+    {
+        transform.SetPositionAndRotation(centre + rotation * Vector3.right * XOffsetFromCamera, rotation);
     }
 
 }

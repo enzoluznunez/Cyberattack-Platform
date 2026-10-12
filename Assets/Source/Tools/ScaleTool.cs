@@ -1,10 +1,10 @@
 using UnityEngine;
 using Oculus.Interaction;
 
-public class ScaleTool : Tool
+public class ScaleTool : GrabTool
 {
-    private const float MinScale = 0.01f;
-    private const float MaxScale = 2f;
+    public const float MinScale = 0.01f;
+    public const float MaxScale = 2f;
 
     private static ITransformer ScaleTransformerFor(CreateSheet sheet)
     {
@@ -20,12 +20,7 @@ public class ScaleTool : Tool
         return scale;
     }
 
-    private static TransformerUtils.ConstrainedAxis Pin(float value) =>
-        new TransformerUtils.ConstrainedAxis
-        {
-            ConstrainAxis = true,
-            AxisRange = new TransformerUtils.FloatRange { Min = value, Max = value }
-        };
+    private static TransformerUtils.ConstrainedAxis Pin(float value) => Range(value, value);
 
     private static TransformerUtils.ConstrainedAxis Range(float min, float max) =>
         new TransformerUtils.ConstrainedAxis
@@ -60,70 +55,14 @@ public class ScaleTool : Tool
             ZAxis = Range(MinScale, MaxScale)
         };
 
-    private bool _armPending;
-
     protected override ToolType Kind => ToolType.Scale;
 
-    protected override void OnToolStart()
+    protected override EditKind RecordKind => EditKind.Scale;
+
+    protected override string Describe(float distance) => "resized the sheet";
+
+    protected override void Arm()
     {
-        if (sheetManager == null) return;
-        sheetManager.OnSheetsChanged += ApplyGrabEnabled;
-        sheetManager.OnSheetMoveCommitted += OnSheetMoveCommitted;
-    }
-
-    protected override void OnToolDestroy()
-    {
-        if (sheetManager == null) return;
-        sheetManager.OnSheetsChanged -= ApplyGrabEnabled;
-        sheetManager.OnSheetMoveCommitted -= OnSheetMoveCommitted;
-    }
-
-    protected override void OnResetTool()
-    {
-        if (sheetManager != null) sheetManager.ResetGrabs();
-    }
-
-    protected override void OnActiveChanged(bool active)
-    {
-        if (sheetManager == null) return;
-        if (active) { _armPending = true; return; }
-        _armPending = false;
-        sheetManager.SetGrabbable(false);
-    }
-
-    private void OnSheetMoveCommitted(CreateSheet sheet, Vector3 prePos, Quaternion preRot, Vector3 preScale)
-    {
-        if (!Active || sheet == null || toolManager == null || sheetManager == null) return;
-
-        float distance = sheetManager.transform
-            .TransformVector(sheet.transform.localPosition - prePos).magnitude;
-
-        Report("resized the sheet");
-
-        ManageDatasets.ActiveEdits.PushMove(new MoveRecord
-        {
-            sheetId = sheet.sheetId,
-            prePos = prePos,
-            preRot = preRot,
-            preScale = preScale,
-            postPos = sheet.transform.localPosition,
-            postRot = sheet.transform.localRotation,
-            postScale = sheet.transform.localScale,
-            distance = distance
-        }, EditKind.Scale);
-    }
-
-    private void ApplyGrabEnabled()
-    {
-        if (Active) _armPending = true;
-    }
-
-    private void LateUpdate()
-    {
-        if (!_armPending) return;
-        _armPending = false;
-        if (!Active || sheetManager == null) return;
-
         sheetManager.SetGrabbable(true);
         sheetManager.SetTwoGrab(ScaleTransformerFor);
     }

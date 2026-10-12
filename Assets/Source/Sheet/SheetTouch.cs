@@ -12,21 +12,10 @@ public class SheetTouch : MonoBehaviour
     [Tooltip("How far the fingertip must withdraw before the bar stops responding. Keep above hoverEnter.")]
     public float hoverExit = 0.05f;
 
-    [Tooltip("Seconds between sweeps for poke interactors that appear after start.")]
-    public float rescanSeconds = 2f;
-
     [Tooltip("Furthest a fingertip can credibly be from the head, in metres. Guards against parked interactors.")]
     public float maxReachFromHead = 1.2f;
 
-    private struct Source
-    {
-        public PokeInteractor poke;
-        public IHand hand;
-    }
-
     private ReadSheets _hub;
-    private readonly List<Source> _pokes = new List<Source>();
-    private float _nextScan;
 
     private PokeInteractor _driver;
     private CreateCube _cube;
@@ -40,16 +29,15 @@ public class SheetTouch : MonoBehaviour
     {
         if (_hub == null) return;
 
-        Rescan();
-
         if (!_hub.Listening) { Drop(); return; }
 
         if (_driver != null && !Track(_driver)) Drop();
         if (_driver != null) return;
 
-        for (int i = 0; i < _pokes.Count; i++)
+        IReadOnlyList<Fingertips.Source> pokes = Fingertips.All;
+        for (int i = 0; i < pokes.Count; i++)
         {
-            Source source = _pokes[i];
+            Fingertips.Source source = pokes[i];
             if (!Live(source)) continue;
             if (!Acquire(source)) continue;
             _driver = source.poke;
@@ -57,27 +45,11 @@ public class SheetTouch : MonoBehaviour
         }
     }
 
-    private void Rescan()
+    // Live, and within reach of the head: a parked interactor is not a finger.
+    private bool Live(Fingertips.Source source)
     {
-        if (Time.unscaledTime < _nextScan && _pokes.Count > 0) return;
-        _nextScan = Time.unscaledTime + Mathf.Max(rescanSeconds, 0.25f);
-
-        _pokes.Clear();
-
-        PokeInteractor[] found = FindObjectsByType<PokeInteractor>(FindObjectsSortMode.None);
-        for (int i = 0; i < found.Length; i++)
-        {
-            IHand hand = found[i].GetComponentInParent<IHand>();
-            if (hand == null) continue;
-            _pokes.Add(new Source { poke = found[i], hand = hand });
-        }
-    }
-
-    private bool Live(Source source)
-    {
+        if (!source.Live) return false;
         PokeInteractor poke = source.poke;
-        if (poke == null || !poke.isActiveAndEnabled) return false;
-        if (source.hand == null || !source.hand.IsTrackedDataValid) return false;
 
         Transform head = CameraRig.MainTransform;
         if (head == null) return false;
@@ -86,19 +58,20 @@ public class SheetTouch : MonoBehaviour
             maxReachFromHead * maxReachFromHead;
     }
 
-    private Source Current()
+    private Fingertips.Source Current()
     {
-        for (int i = 0; i < _pokes.Count; i++)
-            if (_pokes[i].poke == _driver) return _pokes[i];
+        IReadOnlyList<Fingertips.Source> pokes = Fingertips.All;
+        for (int i = 0; i < pokes.Count; i++)
+            if (pokes[i].poke == _driver) return pokes[i];
         return default;
     }
 
-    private static Vector3 WristOf(Source source, Vector3 tip) =>
+    private static Vector3 WristOf(Fingertips.Source source, Vector3 tip) =>
         source.hand != null && source.hand.GetJointPose(HandJointId.HandWristRoot, out Pose wrist)
             ? wrist.position
             : tip;
 
-    private bool Acquire(Source source)
+    private bool Acquire(Fingertips.Source source)
     {
         PokeInteractor poke = source.poke;
         Vector3 tip = poke.Origin;
@@ -113,7 +86,7 @@ public class SheetTouch : MonoBehaviour
 
     private bool Track(PokeInteractor poke)
     {
-        Source source = Current();
+        Fingertips.Source source = Current();
         if (!Live(source)) return false;
 
         Vector3 tip = poke.Origin;

@@ -62,19 +62,24 @@ SHAPES = {
     "DK": ["DNK"], "CH": ["CHE"], "PA": ["PAN"],
 }
 
-# The United States' insets, as boxes of longitude and latitude (west, south,
-# east, north) with the scale and the place, in the lower 48's kilometres,
-# their centre is moved to. Alaska's box runs past 180°, where the Aleutians
-# cross it; its longitudes are taken west of -180 rather than east of 180.
-US_INSETS = [
-    {"name": "Alaska", "box": [-190.0, 50.0, -129.0, 72.0], "center": [-152.0, 63.0], "scale": 0.35,
-     "to": [-1750.0, -1450.0]},
-    {"name": "Hawaii", "box": [-161.0, 18.5, -154.5, 22.5], "center": [-157.5, 20.5], "scale": 1.0,
-     "to": [-700.0, -1550.0]},
-    {"name": "Puerto Rico", "box": [-68.0, 17.5, -65.0, 18.7], "center": [-66.5, 18.2], "scale": 1.0,
-     "to": [1550.0, -1600.0]},
-]
-US_MAINLAND = {"box": [-126.0, 24.0, -66.0, 50.0], "center": [-96.0, 38.0], "scale": 1.0, "to": [0.0, 0.0]}
+# The countries drawn in insets, each frame a box of longitude and latitude
+# (west, south, east, north) with the scale and the place, in the mainland's
+# kilometres, its centre is moved to; the first frame whose box holds a point
+# draws it. Alaska's box runs past 180°, where the Aleutians cross it; its
+# longitudes are taken west of -180 rather than east of 180. Every other
+# country is one frame, centred on its largest landmass.
+FRAMES = {
+    "US": [
+        # Alaska
+        {"box": [-190.0, 50.0, -129.0, 72.0], "center": [-152.0, 63.0], "scale": 0.35, "to": [-1750.0, -1450.0]},
+        # Hawaii
+        {"box": [-161.0, 18.5, -154.5, 22.5], "center": [-157.5, 20.5], "scale": 1.0, "to": [-700.0, -1550.0]},
+        # Puerto Rico
+        {"box": [-68.0, 17.5, -65.0, 18.7], "center": [-66.5, 18.2], "scale": 1.0, "to": [1550.0, -1600.0]},
+        # The lower 48
+        {"box": [-126.0, 24.0, -66.0, 50.0], "center": [-96.0, 38.0], "scale": 1.0, "to": [0.0, 0.0]},
+    ],
+}
 
 # The places each map is checked by: the app projects these itself and warns
 # when it lands somewhere else.
@@ -86,7 +91,7 @@ CHECKS = {
 
 def project(lon, lat, lon0, lat0):
     """Lambert azimuthal equal-area on the sphere, in kilometres east and north
-    of (lon0, lat0). The app's MapProjection.cs is the same formula."""
+    of (lon0, lat0). The app's MapAtlas.Project is the same formula."""
     p, l = math.radians(lat), math.radians(lon - lon0)
     p0 = math.radians(lat0)
     k = math.sqrt(2.0 / (1.0 + math.sin(p0) * math.sin(p) + math.cos(p0) * math.cos(p) * math.cos(l)))
@@ -100,16 +105,21 @@ def place(lon, lat, frame):
     return frame["to"][0] + s * x, frame["to"][1] + s * y
 
 
-def in_box(lon, lat, box):
-    if box[0] < -180 and lon > 0:
-        lon -= 360.0
-    return box[0] <= lon <= box[2] and box[1] <= lat <= box[3]
+def unwrap(lon, frame):
+    """The longitude as the frame's box takes it: west of -180 for a box that
+    reaches past it."""
+    return lon - 360.0 if "box" in frame and frame["box"][0] < -180 and lon > 0 else lon
+
+
+def in_box(lon, lat, frame):
+    box = frame["box"]
+    return box[0] <= unwrap(lon, frame) <= box[2] and box[1] <= lat <= box[3]
 
 
 def frame_of(lon, lat, frames):
     """The frame a point is drawn in: the first whose box holds it, or a frame
     with no box, which holds everything. None when no frame holds it."""
-    return next((f for f in frames if "box" not in f or in_box(lon, lat, f["box"])), None)
+    return next((f for f in frames if "box" not in f or in_box(lon, lat, f)), None)
 
 
 def read_shapes(path):
@@ -142,20 +152,14 @@ def projected(polygon, frames):
         return None
 
     def ring(coords):
-        out = []
-        for lon, lat in coords:
-            if "box" in frame and frame["box"][0] < -180 and lon > 0:
-                lon -= 360.0
-            out.append(place(lon, lat, frame))
-        return out
+        return [place(unwrap(lon, frame), lat, frame) for lon, lat in coords]
 
     return Polygon(ring(polygon.exterior.coords), [ring(r.coords) for r in polygon.interiors])
 
 
 def frames_for(code, geometry):
-    if code == "US":
-        insets = [{"box": i["box"], "center": i["center"], "scale": i["scale"], "to": i["to"]} for i in US_INSETS]
-        return insets + [dict(US_MAINLAND)]
+    if code in FRAMES:
+        return [dict(f) for f in FRAMES[code]]
     # Centred on the largest landmass, so a country's mainland is drawn with
     # the least distortion.
     main = max(polygons(geometry), key=lambda p: p.area).centroid
@@ -166,8 +170,8 @@ def outline(code, geometry):
     """The country's land, flat and in kilometres, with far-off and invisible
     islands left off and the coast simplified to what the app can show."""
     frames = frames_for(code, geometry)
-    # A US island no frame holds is left off: the northwestern Hawaiian
-    # chain runs a thousand kilometres past the main islands, as specks.
+    # An island no frame holds is left off: the northwestern Hawaiian chain
+    # runs a thousand kilometres past the main islands, as specks.
     parts = [p.buffer(0) for p in (projected(p, frames) for p in polygons(geometry)) if p is not None]
 
     area = sum(p.area for p in parts)
@@ -178,19 +182,27 @@ def outline(code, geometry):
 
     # Grown out from the mainland, an island at a time: an island stays when
     # it is near any island already kept, so a chain (Indonesia, the Ryukyus)
-    # is kept whole while a territory across an ocean is left off.
+    # is kept whole while a territory across an ocean is left off. A country
+    # drawn in insets keeps every island its frames hold.
     seen = sorted((p for p in parts if p.area >= smallest), key=lambda p: -p.area)
     kept = [seen.pop(0)]
     grew = True
     while grew and seen:
         grew = False
         for p in list(seen):
-            if code == "US" or any(p.distance(k) <= reach for k in kept):
+            if code in FRAMES or any(p.distance(k) <= reach for k in kept):
                 kept.append(p)
                 seen.remove(p)
                 grew = True
 
-    land = unary_union(kept).simplify(tolerance, preserve_topology=True)
+    # The app fits each map to one box, so the coast is simplified to what
+    # that box can show: a 400th of the country's longer side is about a
+    # millimetre on the map. Canada, drawn at the cap a shared scale needed,
+    # was 15,000 points the app built while the user swiped.
+    union = unary_union(kept)
+    west, south, east, north = union.bounds
+    detail = max(max(east - west, north - south) / 400.0, tolerance)
+    land = union.simplify(detail, preserve_topology=True)
     # Lakes too small to see would only add triangles.
     land = unary_union([Polygon(p.exterior, [r for r in p.interiors if Polygon(r).area >= smallest])
                         for p in polygons(land)])

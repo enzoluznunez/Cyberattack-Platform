@@ -65,11 +65,9 @@ public static class UIButton
         rt.offsetMax = Vector2.zero;
 
         Image back = Ensure<Image>(rt.gameObject);
-        RoundedSprite.Apply(back, h.Radius);
+        RoundedSprite.Apply(back, h.Radius, back: true);
         back.color = Style.Black;
         back.raycastTarget = false;
-        Material backMat = PanelUI.BackMaterial;
-        if (backMat != null) back.material = backMat;
 
         rt.SetAsLastSibling();
 
@@ -88,10 +86,7 @@ public static class UIButton
         if (h.Frame != null) RoundedSprite.Apply(h.Frame, radius);
         if (h.Inner != null) RoundedSprite.Apply(h.Inner, Style.InnerRadius(radius));
 
-        if (h.Back == null) return;
-        RoundedSprite.Apply(h.Back, radius);
-        Material backMat = PanelUI.BackMaterial;
-        if (backMat != null) h.Back.material = backMat;
+        if (h.Back != null) RoundedSprite.Apply(h.Back, radius, back: true);
     }
 
     // A square at the right end of a row, drawn the way every other surface here

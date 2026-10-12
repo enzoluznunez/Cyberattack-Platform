@@ -29,7 +29,8 @@ def test_every_country_has_a_map(drawn):
 
 
 def test_every_place_lands_on_its_country(drawn):
-    """Within a few kilometres of the coast, which simplifying it may move."""
+    """Within a millimetre of the coast on the app's map, which simplifying it
+    may move: a 400th of the country's longer side, and never under 5 km."""
     trees, off = {}, []
     for (country, _, city), (place, lat, lon) in places.load().items():
         m = drawn[country]
@@ -38,6 +39,8 @@ def test_every_place_lands_on_its_country(drawn):
         point = shapely.Point(maps.place(lon, lat, frame))
         tree = trees.setdefault(country, land(m))
         nearest = tree.geometries[tree.nearest(point)]
-        if nearest.distance(point) > 5.0:
+        xs, ys = m["vertices"][0::2], m["vertices"][1::2]
+        allowed = max(max(max(xs) - min(xs), max(ys) - min(ys)) / 400.0, 5.0)
+        if nearest.distance(point) > allowed:
             off.append((country, city, round(nearest.distance(point), 1)))
     assert off == []

@@ -8,7 +8,6 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
     private const float DefaultDistance = 0.15f;
     private const float MinDistance = 0.001f;
     private const float MaxDistance = 100f;
-    private const float GapCells = 0.5f;
 
     public class Args {
         [Doc("Which way to slide the sheet, from the user's point of view; 'forward' is away from them.")]

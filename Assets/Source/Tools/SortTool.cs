@@ -210,7 +210,6 @@ public class SortTool : Tool
 
         IReadOnlyList<int> live = columns ? src.ColumnOrder : src.RowOrder;
         var preOrder = new List<int>(live);
-        DataSource.SortMode preMode = columns ? src.ColumnSortMode : src.RowSortMode;
 
         // Plan and walk in block space so a grouped axis steps a whole metric at a
         // time; the recorded order stays line-level, so undo is unchanged.
@@ -226,7 +225,7 @@ public class SortTool : Tool
             if (preBlocks[i] != targetBlocks[i]) changed++;
         LastReorderedLines = changed;
 
-        ManageDatasets.ActiveEdits.PushReorder(columns, preOrder, preMode, changed);
+        ManageDatasets.ActiveEdits.PushReorder(columns, preOrder, changed);
         Report($"set the order of {changed} {DataSource.GroupNoun(src, columns)}s");
 
         var final = new List<int>(targetOrder);
@@ -257,8 +256,8 @@ public class SortTool : Tool
 
     private static void Apply(DataSource src, bool columns, IReadOnlyList<int> order)
     {
-        if (columns) src.SetColumnOrder(order, DataSource.SortMode.Manual);
-        else src.SetRowOrder(order, DataSource.SortMode.Manual);
+        if (columns) src.SetColumnOrder(order);
+        else src.SetRowOrder(order);
     }
 
     private struct OrderStep
@@ -322,7 +321,6 @@ public class SortTool : Tool
         if (from < 0 || from >= blocks || to < 0 || to >= blocks) return false;
 
         var preOrder = new List<int>(order);
-        DataSource.SortMode preMode = columns ? src.ColumnSortMode : src.RowSortMode;
 
         int blockMin = piece == null ? 0 : (columns ? piece.colMin : piece.rowMin) / size;
 
@@ -345,7 +343,7 @@ public class SortTool : Tool
 
         if (StateChannel.UserDriven) StalePositions.MarkDirty(columns);
 
-        ManageDatasets.ActiveEdits.PushSort(columns, preOrder, preMode, from, to);
+        ManageDatasets.ActiveEdits.PushSort(columns, preOrder, from, to);
 
         if (columns) src.MoveColumn(from * size, to * size);
         else src.MoveRow(from, to);

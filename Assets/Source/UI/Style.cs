@@ -111,5 +111,5 @@ public static class Style
         return c;
     }
 
-    private static Color Hex(byte r, byte g, byte b) => new Color32(r, g, b, 255);
+    internal static Color Hex(byte r, byte g, byte b) => new Color32(r, g, b, 255);
 }

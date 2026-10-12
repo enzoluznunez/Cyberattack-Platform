@@ -26,7 +26,6 @@ public sealed class MapAtlas
     {
         public string name;
         public string code;
-        public float areaKm2;
         public Rect bounds;
         public Frame[] frames;
         public float[] vertices;
@@ -81,18 +80,13 @@ public sealed class MapAtlas
 
     private readonly Dictionary<string, Country> _byName = new Dictionary<string, Country>();
 
-    public IEnumerable<Country> Countries => _byName.Values;
-
     public Country Find(string name) =>
         name != null && _byName.TryGetValue(name, out Country c) ? c : null;
 
-    // The widest map's width in kilometres: what the shared scale is set from.
-    public float WidestKm { get; private set; }
-    public float TallestKm { get; private set; }
-
     // Parsing is a few megabytes of JSON, so it is done off the main thread;
-    // the text is read on it, as a TextAsset has to be.
-    public static string ReadText()
+    // the bytes are read on it, as a TextAsset's have to be. They are handed
+    // over as UTF-8, which the parser reads directly, rather than as a string.
+    public static byte[] ReadBytes()
     {
         TextAsset asset = Resources.Load<TextAsset>(ResourcePath);
         if (asset == null)
@@ -100,12 +94,12 @@ public sealed class MapAtlas
             Debug.LogError($"[MapAtlas] No outlines at Resources/{ResourcePath}; run pipeline/maps.py.");
             return null;
         }
-        string text = asset.text;
+        byte[] bytes = asset.bytes;
         Resources.UnloadAsset(asset);
-        return text;
+        return bytes;
     }
 
-    public static MapAtlas Parse(string json)
+    public static MapAtlas Parse(byte[] json)
     {
         var atlas = new MapAtlas();
         using JsonDocument doc = JsonDocument.Parse(json);
@@ -119,7 +113,6 @@ public sealed class MapAtlas
             {
                 name = m.GetProperty("country").GetString(),
                 code = m.GetProperty("code").GetString(),
-                areaKm2 = m.GetProperty("areaKm2").GetSingle(),
                 bounds = Rect.MinMaxRect(b[0].GetSingle(), b[1].GetSingle(), b[2].GetSingle(), b[3].GetSingle()),
                 frames = Frames(m.GetProperty("frames")),
                 vertices = Floats(m.GetProperty("vertices")),
@@ -127,8 +120,6 @@ public sealed class MapAtlas
                 outlines = Rings(m.GetProperty("outlines"))
             };
             atlas._byName[country.name] = country;
-            atlas.WidestKm = Mathf.Max(atlas.WidestKm, country.bounds.width);
-            atlas.TallestKm = Mathf.Max(atlas.TallestKm, country.bounds.height);
             Check(country, m.GetProperty("checks"));
         }
         return atlas;

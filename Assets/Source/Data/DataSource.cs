@@ -6,7 +6,6 @@ using UnityEngine;
 public abstract class DataSource : MonoBehaviour
 {
 
-    public enum SortMode { Original, Manual }
 
     public IReadOnlyList<string> ColumnTitles => _columnTitles;
     public IReadOnlyList<string> RowTitles => _rowTitles;
@@ -63,17 +62,6 @@ public abstract class DataSource : MonoBehaviour
     {
         string title = data != null ? data.TitleAt(columns, visIndex) : null;
         return string.IsNullOrEmpty(title) ? $"{(columns ? "column" : "row")} {visIndex + 1}" : title;
-    }
-    public static List<string> TitlesFor(DataSource data, bool columns, IReadOnlyList<int> dataIndexes)
-    {
-        IReadOnlyList<string> titles = columns ? data.ColumnTitles : data.RowTitles;
-        var list = new List<string>(dataIndexes.Count);
-        for (int i = 0; i < dataIndexes.Count; i++)
-        {
-            int d = dataIndexes[i];
-            list.Add(d >= 0 && d < titles.Count ? titles[d] : null);
-        }
-        return list;
     }
 
     // -1 when the line is not on the sheet, which now covers a hidden metric as
@@ -272,12 +260,6 @@ public abstract class DataSource : MonoBehaviour
         return size > 1 ? visIndex / size : visIndex;
     }
 
-    public int SeriesOf(bool columns, int visIndex)
-    {
-        int size = GroupSize(columns);
-        return size > 1 ? visIndex % size : 0;
-    }
-
     public void GroupSpan(bool columns, int group, out int lo, out int hi)
     {
         int size = GroupSize(columns);
@@ -398,9 +380,6 @@ public abstract class DataSource : MonoBehaviour
         return a.Substring(0, i);
     }
 
-    public SortMode ColumnSortMode => _columnSortMode;
-    public SortMode RowSortMode => _rowSortMode;
-
     public bool IsLoaded => _isLoaded;
 
     public string RawText => _rawText;
@@ -440,8 +419,6 @@ public abstract class DataSource : MonoBehaviour
 
     protected List<int> _columnOrder = new List<int>();
     protected List<int> _rowOrder = new List<int>();
-    protected SortMode _columnSortMode = SortMode.Original;
-    protected SortMode _rowSortMode = SortMode.Original;
 
     protected bool _isLoaded;
 
@@ -554,8 +531,6 @@ public abstract class DataSource : MonoBehaviour
     // filter alone, because hiding a metric is the Filter tool's edit to undo.
     public void ResetOrder()
     {
-        _columnSortMode = SortMode.Original;
-        _rowSortMode = SortMode.Original;
         InitIdentity(_columnOrder, ColumnCount);
         InitIdentity(_rowOrder, RowCount);
         RaiseOrderChanged();
@@ -565,10 +540,9 @@ public abstract class DataSource : MonoBehaviour
     // is shorter than the dataset. It is spliced back over the slots the visible
     // columns hold, which leaves every hidden metric exactly where it was: undo a
     // filter after a sort and the metric returns to its place, not to the end.
-    public bool SetColumnOrder(IReadOnlyList<int> order, SortMode mode)
+    public bool SetColumnOrder(IReadOnlyList<int> order)
     {
         if (!SpliceVisibleColumns(order)) return false;
-        _columnSortMode = mode;
         RaiseOrderChanged();
         return true;
     }
@@ -591,16 +565,15 @@ public abstract class DataSource : MonoBehaviour
 
     private static bool IsRearrangementOf(IReadOnlyList<int> order, List<int> of)
     {
-        var seen = new HashSet<int>();
+        var allowed = new HashSet<int>(of);
         for (int i = 0; i < order.Count; i++)
-            if (!of.Contains(order[i]) || !seen.Add(order[i])) return false;
+            if (!allowed.Remove(order[i])) return false;
         return true;
     }
 
-    public bool SetRowOrder(IReadOnlyList<int> order, SortMode mode)
+    public bool SetRowOrder(IReadOnlyList<int> order)
     {
         if (!SpliceVisibleRows(order)) return false;
-        _rowSortMode = mode;
         RaiseOrderChanged();
         return true;
     }
@@ -613,13 +586,13 @@ public abstract class DataSource : MonoBehaviour
         bool moved = _columnGroupSize > 1
             ? MoveGroupWithin(arrangement, fromPos / _columnGroupSize, toPos / _columnGroupSize, _columnGroupSize)
             : MoveWithin(arrangement, fromPos, toPos);
-        if (moved) SetColumnOrder(arrangement, SortMode.Manual);
+        if (moved) SetColumnOrder(arrangement);
     }
 
     public void MoveRow(int fromPos, int toPos)
     {
         List<int> arrangement = new List<int>(_visibleRows);
-        if (MoveWithin(arrangement, fromPos, toPos)) SetRowOrder(arrangement, SortMode.Manual);
+        if (MoveWithin(arrangement, fromPos, toPos)) SetRowOrder(arrangement);
     }
 
     private bool SpliceVisibleRows(IReadOnlyList<int> order)
@@ -739,8 +712,6 @@ public abstract class DataSource : MonoBehaviour
     private void RaiseLoadComplete(bool loaded)
     {
         _isLoaded = loaded;
-        _columnSortMode = SortMode.Original;
-        _rowSortMode = SortMode.Original;
         _hiddenGroups.Clear();
         _hiddenRows.Clear();
         InitIdentity(_columnOrder, ColumnCount);

@@ -15,6 +15,16 @@ public class ToolPanelUI : PanelUI
     private RectTransform _primaryRect;
     private RectTransform _panelRootRect;
 
+    // The panel's top part, the tool tiles, which keeps its size as the cards
+    // below it come and go; the maps stand beside it.
+    public RectTransform PrimaryRect => _primaryRect;
+
+    // The panel and the maps at its right open as one, centred where the user
+    // looks, so the panel itself opens left of centre. Without a map drawn
+    // beside it, it opens centred.
+    protected override float XOffsetFromCamera =>
+        MapCarousel.Instance != null && MapCarousel.Instance.Ready ? -MapCarousel.Instance.SideWidth * 0.5f : 0f;
+
     private OptionsCard _toolCard;
     private OptionsCard _assistantCard;
     private readonly List<OptionsCard> _stack = new List<OptionsCard>();
@@ -918,38 +928,6 @@ public class ToolPanelUI : PanelUI
             list.Add(buttons[i].name, buttons[i].label, buttons[i].onClick);
 
         list.SetSelected(-1);
-        return list;
-    }
-
-    // A scrollable column of toggles in a tool's pane, for options that are not
-    // exclusive: unlike a toggle row, any number can be on, so the caller keeps
-    // the handles and lights them itself.
-    // 'name' lets one tool keep more than one list: each replaces only the list
-    // it named, so rebuilding the metrics does not take the categories with it.
-    public ButtonList AddOptionList(ToolType tool, float height, string name = "OptionList")
-    {
-        GameObject content = GetToolContent(tool);
-        if (content == null) return null;
-
-        ReplaceNamed(content.transform, name);
-
-        GameObject host = new GameObject(name);
-        host.transform.SetParent(content.transform, false);
-        RectTransform rect = host.AddComponent<RectTransform>();
-
-        UILayout.FixedHeight(host, height);
-
-        ButtonList list = new ButtonList(rect, new ButtonList.Options
-        {
-            axis = ButtonList.Axis.Vertical,
-            sizing = ButtonList.Sizing.Measured,
-            alignment = TextAnchor.UpperLeft,
-            itemHeight = Style.Subbutton.y,
-            backed = true,
-            scrollable = true
-        });
-
-        host.transform.SetAsLastSibling();
         return list;
     }
 

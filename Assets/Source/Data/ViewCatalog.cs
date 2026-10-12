@@ -121,10 +121,8 @@ public class ViewCatalog : MonoBehaviour
             return;
         }
 
-        // The rail draws the newest entry at the top, so the reply is walked
-        // backwards to arrive in the server's order, top to bottom. The whole
-        // catalogue goes in as one batch: the rail rebuilds itself on every
-        // change.
+        // The reply is walked backwards, so the newest entry, listed last,
+        // is the server's first.
         var entries = new List<(string, string, string)>(catalog.views.Count);
         for (int i = catalog.views.Count - 1; i >= 0; i--)
         {

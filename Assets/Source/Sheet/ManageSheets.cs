@@ -82,10 +82,6 @@ public class ManageSheets : MonoBehaviour
     public float BaseY => _baseY;
     public bool IsBuilt => _sheets.Count > 0;
 
-    // Whether the table has found its place in front of the user; until then
-    // its transform is wherever the scene left it.
-    public bool IsAnchored => _anchored;
-
     private bool _recenterHooked;
 
     private void OnEnable()
@@ -255,8 +251,9 @@ public class ManageSheets : MonoBehaviour
     private static bool SameLines(List<int> built, IReadOnlyList<int> now)
     {
         if (built.Count != now.Count) return false;
+        var lines = new HashSet<int>(built);
         for (int i = 0; i < now.Count; i++)
-            if (!built.Contains(now[i])) return false;
+            if (!lines.Contains(now[i])) return false;
         return true;
     }
 
@@ -281,7 +278,6 @@ public class ManageSheets : MonoBehaviour
 
         CreateSheet s = go.GetComponent<CreateSheet>();
         if (s == null) s = go.AddComponent<CreateSheet>();
-        s.MarkDetached();
         s.sheetId = -1;
         s.SetGrabbable(false);
         s.SetPickable(false);
@@ -357,8 +353,8 @@ public class ManageSheets : MonoBehaviour
                 if (_bound == null) return UndoResult.Unreachable;
                 SuppressNextReflow();
                 bool reordered = e.reorderIsColumn
-                    ? _bound.SetColumnOrder(e.reorderPreOrder, e.reorderPreMode)
-                    : _bound.SetRowOrder(e.reorderPreOrder, e.reorderPreMode);
+                    ? _bound.SetColumnOrder(e.reorderPreOrder)
+                    : _bound.SetRowOrder(e.reorderPreOrder);
                 return reordered ? UndoResult.Applied : UndoResult.Stale;
         }
 
@@ -387,22 +383,6 @@ public class ManageSheets : MonoBehaviour
                     break;
 
             }
-        }
-    }
-
-    public void CubesInLine(bool columns, int visLine, List<CreateCube> into)
-    {
-        if (into == null) return;
-        for (int i = 0; i < _sheets.Count; i++)
-        {
-            CreateSheet s = _sheets[i];
-            bool contains = columns
-                ? visLine >= s.colMin && visLine <= s.colMax
-                : visLine >= s.rowMin && visLine <= s.rowMax;
-            if (!contains) continue;
-
-            IReadOnlyList<CreateCube> cubes = s.CubesInLine(columns, visLine);
-            for (int j = 0; j < cubes.Count; j++) into.Add(cubes[j]);
         }
     }
 
@@ -774,11 +754,6 @@ public class ManageSheets : MonoBehaviour
         pos = t.localPosition;
         rot = t.localRotation;
         scale = t.localScale;
-    }
-
-    public Vector3 CommittedPositionOf(Transform target)
-    {
-        return _transformGlides.TryGetValue(target, out TransformGlide g) ? g.toPos : target.position;
     }
 
     public void CompleteTransformMotion(Transform target)
@@ -1197,17 +1172,41 @@ public class ManageSheets : MonoBehaviour
         _root.SetParent(transform, false);
     }
 
+    // The sheet the last dataset was drawn on, put away rather than destroyed:
+    // a country or dataset switch builds the next one on it, reusing its cubes
+    // and labels instead of making hundreds of objects anew in one frame.
+    private CreateSheet _spare;
+
     private CreateSheet NewSheet()
     {
         EnsureRoot();
-        GameObject go = sheetPrefab != null ? Instantiate(sheetPrefab, _root) : new GameObject("Sheet");
-        if (go.transform.parent != _root) go.transform.SetParent(_root, false);
-
-        CreateSheet s = go.GetComponent<CreateSheet>();
-        if (s == null) s = go.AddComponent<CreateSheet>();
+        CreateSheet s = TakeSpare();
+        if (s == null)
+        {
+            GameObject made = sheetPrefab != null ? Instantiate(sheetPrefab, _root) : new GameObject("Sheet");
+            if (made.transform.parent != _root) made.transform.SetParent(_root, false);
+            s = made.GetComponent<CreateSheet>();
+            if (s == null) s = made.AddComponent<CreateSheet>();
+        }
+        GameObject go = s.gameObject;
         s.SetGrabbable(_sheetsGrabbable);
         s.sheetId = NextFreeId();
         go.name = $"Sheet_{s.sheetId}";
+        return s;
+    }
+
+    // The spare, woken and standing where a newly made sheet would.
+    private CreateSheet TakeSpare()
+    {
+        CreateSheet s = _spare;
+        _spare = null;
+        if (s == null) return null;
+
+        Transform from = sheetPrefab != null ? sheetPrefab.transform : null;
+        s.gameObject.SetActive(true);
+        s.ResetForReuse(from != null ? from.localPosition : Vector3.zero,
+            from != null ? from.localRotation : Quaternion.identity,
+            from != null ? from.localScale : Vector3.one);
         return s;
     }
 
@@ -1227,7 +1226,16 @@ public class ManageSheets : MonoBehaviour
         if (_reflow != null) { StopCoroutine(_reflow); _reflow = null; }
         _pieceGlides.Clear();
         for (int i = 0; i < _sheets.Count; i++)
-            if (_sheets[i] != null) Destroy(_sheets[i].gameObject);
+        {
+            CreateSheet s = _sheets[i];
+            if (s == null) continue;
+            if (_spare == null)
+            {
+                _spare = s;
+                s.gameObject.SetActive(false);
+            }
+            else Destroy(s.gameObject);
+        }
         _sheets.Clear();
         _builtColumns.Clear();
         _builtRows.Clear();

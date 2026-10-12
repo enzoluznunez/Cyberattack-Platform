@@ -56,6 +56,10 @@ def load(path=PLACES_FILE):
 CANADA_PROVINCES = {"A0": "01", "A1": "02", "A2": "03", "A3": "04", "A4": "05", "A5": "07",
                     "A6": "08", "A7": "09", "A8": "10", "A9": "11", "B0": "12"}
 
+# How the export's state code reads as a GeoNames admin code, for the countries
+# whose cities are looked up within one.
+ADMIN_CODES = {"US": lambda state: state, "CA": CANADA_PROVINCES.get}
+
 # The words a city's name is abbreviated by, written out the way GeoNames does.
 EXPANSIONS = {"ST": "SAINT", "FT": "FORT", "MT": "MOUNT"}
 
@@ -117,7 +121,7 @@ def draft(breaches_raw, geo_dir):
             continue
 
         iso = COUNTRIES[country]
-        admin = state if iso == "US" else CANADA_PROVINCES.get(state) if iso == "CA" else None
+        admin = ADMIN_CODES[iso](state) if iso in ADMIN_CODES else None
         hit = next((lookup[(iso, admin, name)] for lookup in geonames for name in match_names(key)
                     if (iso, admin, name) in lookup), None)
         if hit:

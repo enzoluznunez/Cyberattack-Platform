@@ -206,7 +206,9 @@ public sealed class OpenSheet : AgenticTool {
         Description = "Draw one of the breach database's sheets, narrowed by filters, as a new dataset in the room: " +
                       "only ransomware, only 2018 to 2023, only breaches that exposed SSNs, only one industry, and so " +
                       "on. Filters choose which breaches are counted; they never change what the rows and columns " +
-                      "are. With no filters this switches to the sheet already listed rather than drawing a copy. " +
+                      "are. With no filters this switches to the sheet already listed rather than drawing a copy, " +
+                      "unless the map has narrowed the listed sheets to its country; then it draws the sheet for " +
+                      "every country as a new dataset. " +
                       "The open dataset is left as it is, and ListDatasets will show the new one afterwards.",
         Parameters = WithViews(BreachFilters.Named(ParametersFor(typeof(Args))))
     };
@@ -240,8 +242,11 @@ public sealed class OpenSheet : AgenticTool {
 
         // Unfiltered, the sheet is the one already listed: switch to it, reading
         // it first if nobody has opened it yet, rather than drawing a duplicate.
+        // While the map narrows the listed sheets to its country, though, the
+        // listed one is not every country's, so the whole sheet is drawn anew.
         // Filtered, the listed sheet's title names the new one.
         bool unfiltered = !bound.Any && !sized;
+        bool everywhere = false;
         string url = ViewCatalog.SheetUrl(view);
         string title = view;
         Task<bool> reading = null;
@@ -251,6 +256,10 @@ public sealed class OpenSheet : AgenticTool {
             if (index < 0) return;
             title = datasets.Datasets[index].label;
             if (!unfiltered) return;
+            if (datasets.Datasets[index].Narrowed) {
+                everywhere = true;
+                return;
+            }
             listed = url;
             if (!datasets.Datasets[index].loaded) reading = datasets.EnsureLoaded(index);
         }).ConfigureAwait(false);
@@ -263,7 +272,7 @@ public sealed class OpenSheet : AgenticTool {
             if (bound.per.HasValue) query += $"&per={bound.per.Value}";
         }
 
-        string narrowed = bound.Summary();
+        string narrowed = everywhere ? "every country" : bound.Summary();
         label = narrowed.Length > 0 ? $"{title}: {narrowed}" : title;
 
         try {

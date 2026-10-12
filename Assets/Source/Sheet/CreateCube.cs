@@ -29,9 +29,6 @@ public class CreateCube : MonoBehaviour
 
     public bool IsVisible => _visible;
 
-    public Vector3 TopCenter =>
-        transform.position + transform.up * (transform.lossyScale.y * 0.5f);
-
     private static readonly Vector3[] Verts =
     {
         new Vector3(-0.5f,  0.5f, -0.5f), new Vector3( 0.5f,  0.5f, -0.5f),

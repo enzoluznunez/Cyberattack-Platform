@@ -1,8 +1,5 @@
 using Oculus.Interaction;
 using Oculus.Interaction.Grab;
-using Oculus.Interaction.GrabAPI;
-using Oculus.Interaction.HandGrab;
-using Oculus.Interaction.Input;
 using UnityEngine;
 
 [RequireComponent(typeof(BoxCollider), typeof(Rigidbody))]
@@ -77,27 +74,8 @@ public class SortLineProxy : MonoBehaviour
             grip.size = columns ? new Vector3(cell, height, handle) : new Vector3(handle, height, cell);
         }
 
-        Rigidbody body = GetComponent<Rigidbody>();
-        body.isKinematic = true;
-        body.useGravity = false;
-
-        OneGrabTranslateTransformer slide = gameObject.AddComponent<OneGrabTranslateTransformer>();
-        slide.InjectOptionalConstraints(Limits(back, forward));
-
-        _grabbable = gameObject.AddComponent<Grabbable>();
-        _grabbable.InjectOptionalRigidbody(body);
-        _grabbable.InjectOptionalThrowWhenUnselected(false);
-        _grabbable.InjectOptionalKinematicWhileSelected(true);
-        _grabbable.MaxGrabPoints = 1;
-        _grabbable.InjectOptionalOneGrabTransformer(slide);
-
-        GrabbingRule pinch = new GrabbingRule(
-            HandFingerFlags.Thumb | HandFingerFlags.Index, GrabbingRule.DefaultPinchRule);
-
-        HandGrabInteractable handGrab = gameObject.AddComponent<HandGrabInteractable>();
-        handGrab.InjectAllHandGrabInteractable(GrabTypeFlags.Pinch, body,
-            pinch, GrabbingRule.DefaultPalmRule);
-        handGrab.InjectOptionalPointableElement(_grabbable);
+        _grabbable = SlideGrab.Attach(gameObject, GetComponent<Rigidbody>(), Limits(back, forward),
+            GrabTypeFlags.Pinch).grabbable;
     }
 
     private OneGrabTranslateTransformer.OneGrabTranslateConstraints Limits(float back, float forward)
@@ -105,19 +83,17 @@ public class SortLineProxy : MonoBehaviour
         var limits = new OneGrabTranslateTransformer.OneGrabTranslateConstraints
         {
             ConstraintsAreRelative = true,
-            MinX = Pin(0f),
-            MaxX = Pin(0f),
-            MinY = Pin(0f),
-            MaxY = Pin(0f),
-            MinZ = Pin(0f),
-            MaxZ = Pin(0f)
+            MinX = SlideGrab.Pin(0f),
+            MaxX = SlideGrab.Pin(0f),
+            MinY = SlideGrab.Pin(0f),
+            MaxY = SlideGrab.Pin(0f),
+            MinZ = SlideGrab.Pin(0f),
+            MaxZ = SlideGrab.Pin(0f)
         };
 
-        if (columns) { limits.MinX = Pin(back); limits.MaxX = Pin(forward); }
-        else { limits.MinZ = Pin(back); limits.MaxZ = Pin(forward); }
+        if (columns) { limits.MinX = SlideGrab.Pin(back); limits.MaxX = SlideGrab.Pin(forward); }
+        else { limits.MinZ = SlideGrab.Pin(back); limits.MaxZ = SlideGrab.Pin(forward); }
 
         return limits;
     }
-
-    private static FloatConstraint Pin(float value) => new FloatConstraint { Constrain = true, Value = value };
 }

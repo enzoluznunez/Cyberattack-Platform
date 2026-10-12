@@ -63,20 +63,13 @@ public sealed class Undo : AgenticTool<Undo.Args> {
 
         if (!string.IsNullOrWhiteSpace(args.tool)) {
             string requested = args.tool.Trim().ToLowerInvariant();
-            EditKind? expected = requested switch {
-                "move" => EditKind.Move,
-                "rotate" => EditKind.Rotate,
-                "scale" => EditKind.Scale,
-                "sort" => EditKind.Sort,
-                "filter" => EditKind.Filter,
-                "profile" => EditKind.Profile,
-                _ => null
-            };
-            if (expected == null) {
+            // Names only: TryParse alone would also take "3" or "move, rotate".
+            if (!System.Enum.TryParse(requested, true, out EditKind expected) ||
+                !string.Equals(expected.ToString(), requested, System.StringComparison.OrdinalIgnoreCase)) {
                 result["error"] = $"Unknown tool '{args.tool}'. Use move, rotate, scale, sort, filter, or profile.";
                 return;
             }
-            if (top.kind != expected.Value) {
+            if (top.kind != expected) {
                 Refuse(result, "matching newest edit",
                     $"The newest edit is from the {Edit.KindName(top.kind)} tool, not the {requested} tool. Undo always " +
                     "removes the newest edit first. Ask the user which they meant, then call again without 'tool'.");

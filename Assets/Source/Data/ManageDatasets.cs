@@ -11,9 +11,7 @@ public class ManageDatasets : MonoBehaviour
     public ManageSheets sheetManager;
     public ManageTools toolManager;
 
-    public event Action OnDatasetsChanged;
     public event Action<int> OnActiveDatasetChanged;
-    public event Action<string> OnDatasetLoadFailed;
 
     public class Dataset
     {
@@ -30,7 +28,9 @@ public class ManageDatasets : MonoBehaviour
         // A listed sheet is drawn for one country at a time, the one the map is
         // showing, and each country is a reading of its own: its own parse, its
         // own edits and its own undo history, kept for when the map comes back
-        // to it. Everything else is one reading under the empty key.
+        // to it. A sheet is small and the same size for every country, so every
+        // country read is kept for the session. Everything else is one reading
+        // under the empty key.
         internal sealed class Reading
         {
             public DataSource source;
@@ -46,6 +46,9 @@ public class ManageDatasets : MonoBehaviour
             get => _country;
             set => _country = catalogued ? value ?? "" : "";
         }
+
+        // Whether reads are narrowed to one country: only a listed sheet is.
+        public bool Narrowed => _country.Length > 0;
 
         internal Reading Current
         {
@@ -165,39 +168,25 @@ public class ManageDatasets : MonoBehaviour
     // The dataset with this payload, or -1 when none has it.
     public int IndexOf(string payload) => _datasets.FindIndex(d => d.payload == payload);
 
-    // A dataset the app knows of but has not read. It is listed straight away and
-    // costs nothing until it is opened.
-    public void AddCatalogEntry(string file, string label, string description)
-    {
-        if (AddCatalogEntryQuietly(file, label, description)) OnDatasetsChanged?.Invoke();
-    }
-
-    // The rail is torn down and rebuilt on every change, so a whole index is
-    // listed in one go and announced once rather than once per sheet.
+    // Datasets the app knows of but has not read. They are listed straight away
+    // and cost nothing until they are opened.
     public void AddCatalogEntries(IEnumerable<(string file, string label, string description)> entries)
     {
         if (entries == null) return;
 
-        bool added = false;
         foreach ((string file, string label, string description) in entries)
-            added |= AddCatalogEntryQuietly(file, label, description);
-
-        if (added) OnDatasetsChanged?.Invoke();
-    }
-
-    private bool AddCatalogEntryQuietly(string file, string label, string description)
-    {
-        if (string.IsNullOrEmpty(file) || IndexOf(file) >= 0) return false;
-
-        _datasets.Add(new Dataset
         {
-            payload = file,
-            label = string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label,
-            catalogued = true,
-            description = description,
-            Country = _country
-        });
-        return true;
+            if (string.IsNullOrEmpty(file) || IndexOf(file) >= 0) continue;
+
+            _datasets.Add(new Dataset
+            {
+                payload = file,
+                label = string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label,
+                catalogued = true,
+                description = description,
+                Country = _country
+            });
+        }
     }
 
     private readonly Dictionary<Dataset, TaskCompletionSource<bool>> _awaitingLoad =
@@ -256,7 +245,8 @@ public class ManageDatasets : MonoBehaviour
         if (index < 0) return;
 
         // A reading for a country the map has since left is kept, or let go
-        // of, quietly: nothing on screen is waiting for it.
+        // of, quietly: SetCountry asked again for whatever was waiting on it,
+        // for the country the map is on now.
         if (read.reading != dataset.Current)
         {
             if (ok) read.reading.loaded = true;
@@ -281,22 +271,20 @@ public class ManageDatasets : MonoBehaviour
                 if (index == _active && sheetManager != null) sheetManager.SetDataSource(null);
                 Notices.Show(this, "Sheet Unavailable",
                     reason ?? $"{dataset.label} could not be read.");
-                OnDatasetsChanged?.Invoke();
+                if (requested) ReadOpenInstead(dataset);
                 return;
             }
 
-            string payload = dataset.payload;
             RemoveDataset(index);
-            OnDatasetLoadFailed?.Invoke(payload);
             Notices.Show(this, "Not Read",
                 reason ?? "That dataset could not be read.");
+            if (requested) ReadOpenInstead(dataset);
             return;
         }
 
         dataset.loaded = true;
 
         StateChannel.Record("Dataset", $"loaded a new dataset, {dataset.label}");
-        OnDatasetsChanged?.Invoke();
         // The open dataset reread for a new country is shown again in place.
         if (requested) Activate(index);
     }
@@ -316,7 +304,11 @@ public class ManageDatasets : MonoBehaviour
         else if (wasActive) _active = -1;
 
         foreach (Dataset.Reading reading in dataset.Readings)
+        {
+            if (reading.source is Parser reader) _reads.Remove(reader);
             if (reading.source != null) Destroy(reading.source.gameObject);
+        }
+        SettleLoad(dataset, false);
 
         if (wasActive)
         {
@@ -329,7 +321,6 @@ public class ManageDatasets : MonoBehaviour
 
         if (dataset.loaded)
             StateChannel.Record("Dataset", $"closed the dataset {dataset.label}");
-        OnDatasetsChanged?.Invoke();
         if (wasActive && _datasets.Count == 0) OnActiveDatasetChanged?.Invoke(-1);
     }
 
@@ -341,15 +332,15 @@ public class ManageDatasets : MonoBehaviour
         // Any switch supersedes a read still pending from an earlier request,
         // including asking for the dataset already open.
         _requested = null;
-        if (index == _active) return;
+        if (index == _active && _datasets[index].loaded) return;
 
-        // A listed sheet is read here, the first time it is asked for. The
-        // parse finishes on a later frame and lands back in OnDatasetLoadResult,
+        // A listed sheet is read here, the first time it is asked for, and the
+        // open one again when its read for this country failed. The parse
+        // finishes on a later frame and lands back in OnDatasetLoadResult,
         // which switches to it then, unless something else was asked for since.
         if (!_datasets[index].loaded)
         {
-            _requested = _datasets[index];
-            BeginLoad(_datasets[index]);
+            Request(_datasets[index]);
             return;
         }
 
@@ -360,8 +351,7 @@ public class ManageDatasets : MonoBehaviour
     // sheet reread for another country goes through again.
     private void Activate(int index)
     {
-        if (sheetManager != null) sheetManager.CommitPendingGrabs();
-        if (toolManager != null) toolManager.DeselectTool();
+        SettleHands();
 
         _active = index;
         Dataset next = _datasets[index];
@@ -420,26 +410,72 @@ public class ManageDatasets : MonoBehaviour
         // settled into that one's history before the readings change.
         Dataset active = ActiveDataset;
         bool narrowed = active != null && active.catalogued;
-        if (narrowed)
-        {
-            if (sheetManager != null) sheetManager.CommitPendingGrabs();
-            if (toolManager != null) toolManager.DeselectTool();
-        }
+        if (narrowed) SettleHands();
 
         _country = country;
         foreach (Dataset dataset in _datasets) dataset.Country = country;
 
+        // A read still awaited is now awaited for this country. The read for
+        // the country left behind still lands, into that country's reading.
+        foreach (Dataset waiting in new List<Dataset>(_awaitingLoad.Keys))
+        {
+            if (waiting.loaded) SettleLoad(waiting, true);
+            else BeginLoad(waiting);
+        }
+
         if (narrowed)
         {
-            if (active.loaded) Activate(_active);
+            if (active.loaded)
+            {
+                // Shown again only when no other sheet is on its way: that
+                // one is shown below instead, and only one is activated.
+                if (_requested == active) _requested = null;
+                if (_requested == null) Activate(_active);
+            }
             else
             {
                 if (sheetManager != null) sheetManager.SetDataSource(null);
-                _requested = active;
-                BeginLoad(active);
+                // Reread for this country unless another sheet was asked for
+                // and is still on its way: that one is still the one wanted.
+                if (_requested == null) Request(active);
             }
         }
-        OnDatasetsChanged?.Invoke();
+
+        if (_requested != null)
+        {
+            if (_requested.loaded)
+            {
+                int index = _datasets.IndexOf(_requested);
+                _requested = null;
+                Activate(index);
+            }
+            else BeginLoad(_requested);
+        }
+    }
+
+    // Reads a dataset that is to be shown once it lands.
+    private void Request(Dataset dataset)
+    {
+        _requested = dataset;
+        BeginLoad(dataset);
+    }
+
+    // A sheet that was asked for would not read. SetCountry may have cleared the
+    // open sheet off the table and left its reread to the sheet asked for; that
+    // reread is started now, or the table would stay empty.
+    private void ReadOpenInstead(Dataset failed)
+    {
+        if (_requested != null || _active < 0 || _active >= _datasets.Count) return;
+        Dataset open = _datasets[_active];
+        if (open != failed && !open.loaded) Request(open);
+    }
+
+    // Finishes any move in hand and puts the tool down, before what the table
+    // shows changes under them.
+    private void SettleHands()
+    {
+        if (sheetManager != null) sheetManager.CommitPendingGrabs();
+        if (toolManager != null) toolManager.DeselectTool();
     }
 
     // Gives back everything the parse held, and leaves the entry listed.

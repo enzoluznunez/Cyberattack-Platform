@@ -16,9 +16,6 @@ public class CreateSheet : MonoBehaviour
     private static readonly float[] Lightness =
         { 0f, 0.127f, 0.233f, 0.346f, 0.466f, 0.593f, 0.724f, 0.860f, 1f };
 
-    private static readonly List<CreateSheet> _all = new List<CreateSheet>();
-    public static IReadOnlyList<CreateSheet> All => _all;
-
     public int sheetId = -1;
     public int rowMin, rowMax, colMin, colMax;
 
@@ -46,11 +43,9 @@ public class CreateSheet : MonoBehaviour
 
     private readonly List<BarTarget> _bars = new List<BarTarget>();
     private Coroutine _grow;
-    private bool _detached;
     private float _cellSize;
     private float _groupGap;
     private int _groupSize = 1;
-    private float _height;
     private float _baseY;
 
     private bool _wasGrabbed;
@@ -58,7 +53,6 @@ public class CreateSheet : MonoBehaviour
     private Quaternion _grabRot;
     private Vector3 _grabScale;
 
-    public IReadOnlyList<CreateCube> Cubes => _live;
     public int RowCount => rowMax - rowMin + 1;
     public int ColCount => colMax - colMin + 1;
     public float CellSize => _cellSize;
@@ -74,8 +68,6 @@ public class CreateSheet : MonoBehaviour
 
     public static float Center(int min, int max, float cellSize, int groupSize, float groupGap) =>
         (Raw(min, cellSize, groupSize, groupGap) + Raw(max, cellSize, groupSize, groupGap)) * 0.5f;
-
-    public static float Center(int min, int max, float cellSize) => Center(min, max, cellSize, 1, 0f);
 
     public int GroupSizeOn(bool columns) => columns ? _groupSize : 1;
     public float GroupGapOn(bool columns) => columns ? _groupGap : 0f;
@@ -144,9 +136,6 @@ public class CreateSheet : MonoBehaviour
         return LineOffset(columns, block * size) + BlockInset(columns);
     }
 
-    public Vector3 LocalOf(int visRow, int visCol) =>
-        new Vector3(LineCoord(true, visCol), 0f, LineCoord(false, visRow));
-
     public bool Contains(int visRow, int visCol) =>
         visRow >= rowMin && visRow <= rowMax && visCol >= colMin && visCol <= colMax;
 
@@ -169,7 +158,6 @@ public class CreateSheet : MonoBehaviour
         _cellSize = cellSize;
         _groupSize = data.ColumnGroupSize;
         _groupGap = _groupSize > 1 ? groupGap : 0f;
-        _height = height;
         _baseY = baseY;
 
         IReadOnlyList<int> rowOrder = data.RowOrder;
@@ -396,9 +384,6 @@ public class CreateSheet : MonoBehaviour
             if (_live[i] != null) _live[i].transform.localRotation = Quaternion.identity;
     }
 
-    public void SetHoverTint(int axis, int min, int max) =>
-        SetHoverTint(axis, min, max, Style.PreviewSwell);
-
     // What the bars are lit with now, or null when that is not known (after a
     // build). A tool re-sends its tint every frame the finger moves, so an
     // unchanged one is not walked across every bar again.
@@ -453,6 +438,24 @@ public class CreateSheet : MonoBehaviour
     {
         _grabbedLook = false;
         _restScale = transform.localScale;
+    }
+
+    // Puts a sheet kept from an earlier dataset back as a fresh one would stand,
+    // so its cubes and labels can be built again in place rather than made anew.
+    // Anything else hung on it (the Sort tool's line handles) went with the old
+    // sheet, and goes now.
+    public void ResetForReuse(Vector3 localPosition, Quaternion localRotation, Vector3 localScale)
+    {
+        CompleteGrow();
+        _bars.Clear();
+        _wasGrabbed = false;
+        ClearTint();
+        transform.SetLocalPositionAndRotation(localPosition, localRotation);
+        transform.localScale = localScale;
+        ForgetGrabLook();
+
+        foreach (SortLineProxy proxy in GetComponentsInChildren<SortLineProxy>(true))
+            Destroy(proxy.gameObject);
     }
 
     public void SetCubeColliders(bool on)
@@ -601,19 +604,7 @@ public class CreateSheet : MonoBehaviour
         return _pool[index];
     }
 
-    private void OnEnable()
-    {
-        if (!_detached && !_all.Contains(this)) _all.Add(this);
-        StartPendingGrow();
-    }
-
-    private void OnDisable() => _all.Remove(this);
-
-    public void MarkDetached()
-    {
-        _detached = true;
-        _all.Remove(this);
-    }
+    private void OnEnable() => StartPendingGrow();
 
     private static int Key(int visRow, int visCol) => (visRow << 16) | (visCol & 0xFFFF);
 }
