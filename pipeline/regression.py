@@ -26,8 +26,10 @@ SNAPSHOT = Path(__file__).with_name("regression") / "answers.json"
 def requests():
     paths = ["/health", "/map"]
 
-    for region in US_REGIONS:
-        paths.append(f"/sheet?region={region}")
+    # A large metro, a middling one, one spread over many cities, and a
+    # one-breach metro.
+    for metro in ("New York, NY", "Boston, MA", "San Jose, CA", "Dallas, TX", "Abilene, TX"):
+        paths.append(f"/sheet?metro={metro}")
 
     for company in ("walmart", "sam's club", "target", "equifax", "%%", "zz-no-such-company"):
         paths.append(f"/breaches?company={company}")
@@ -49,8 +51,8 @@ def requests():
     # of the contract too.
     paths += [
         "/sheet",
-        "/sheet?region=Canada",
-        "/sheet?region=US West&since=2020",
+        "/sheet?metro=Atlantis, ZZ",
+        "/sheet?metro=Boston, MA&since=2020",
         "/breaches?attack=Hacking",
         "/breaches?industry=Atlantis",
         f"/breaches?since={FIRST_YEAR - 1}",

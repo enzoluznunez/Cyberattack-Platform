@@ -26,6 +26,14 @@ def test_every_breach_with_a_ticker_survives_cleaning(raw, breaches):
     assert breaches["breach_key"].is_unique
 
 
+@pytest.fixture(scope="module")
+def kept(raw, breaches):
+    """The export's breach rows for the breaches cleaning keeps: those it
+    leaves out, for having no ticker, are checked above, not by every count."""
+    keys = set(breaches["breach_key"])
+    return raw[0][raw[0]["breach_key"].str.strip().astype(int).isin(keys)]
+
+
 def test_every_breach_has_a_ticker(breaches):
     assert breaches["ticker"].notna().all()
     # A share class follows a dot: BRK.A, BF.B.
@@ -96,8 +104,8 @@ def test_the_year_range_is_the_data_range(breaches):
     assert breaches["year"].max() == LAST_YEAR
 
 
-def test_unreported_is_missing_not_zero(raw, breaches):
-    blank = raw[0]["number_of_records_lost"].str.strip().isin(["", "."]).sum()
+def test_unreported_is_missing_not_zero(kept, breaches):
+    blank = kept["number_of_records_lost"].str.strip().isin(["", "."]).sum()
     assert breaches["records_lost"].isna().sum() == blank
 
 
@@ -146,14 +154,14 @@ def test_only_companies_no_export_classifies_lack_an_industry(raw, breaches):
     assert breaches["division"].isna().sum() == len(unclassified)
 
 
-def test_every_breach_has_a_country(raw, breaches):
+def test_every_breach_has_a_country(kept, breaches):
     assert breaches["country"].isin(list(COUNTRIES)).all()
-    us = raw[0]["region"].str.strip().str.startswith("US ")
+    us = kept["region"].str.strip().str.startswith("US ")
     assert (breaches["country"] == "United States").sum() == us.sum()
 
 
-def test_every_breach_with_a_city_is_placed(raw, breaches):
-    blank = raw[0]["city"].map(places.city_key).isna()
+def test_every_breach_with_a_city_is_placed(kept, breaches):
+    blank = kept["city"].map(places.city_key).isna()
     assert breaches["city"].isna().sum() == blank.sum() == 1
     assert breaches["lat"].notna().sum() == breaches["lon"].notna().sum() == len(breaches) - 1
     assert breaches["lat"].dropna().between(-90, 90).all()
@@ -193,9 +201,9 @@ def test_a_country_metrics_lacks_stops_the_rebuild(raw, sic):
         clean.breaches(changed, sic)
 
 
-def test_book_value_and_stock_price_are_carried(raw, breaches):
+def test_book_value_and_stock_price_are_carried(kept, breaches):
     by_key = breaches.set_index("breach_key")
-    reported = raw[0][(raw[0]["book_value"].str.strip() != "") & (raw[0]["stock_price"].str.strip() != "")]
+    reported = kept[(kept["book_value"].str.strip() != "") & (kept["stock_price"].str.strip() != "")]
     row = reported.iloc[0]
     assert by_key.loc[int(row["breach_key"]), "book_value_usd"] == float(row["book_value"])
     assert by_key.loc[int(row["breach_key"]), "stock_price_usd"] == float(row["stock_price"])
