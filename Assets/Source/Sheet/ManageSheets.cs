@@ -60,6 +60,7 @@ public class ManageSheets : MonoBehaviour
     private int _rowCount;
     private int _colCount;
     private float _cellSize;
+    private float _rowPitch;
     private float _groupGap;
     private float _baseY;
 
@@ -170,6 +171,7 @@ public class ManageSheets : MonoBehaviour
         if (_rowCount == 0 || _colCount == 0) { ClearProjection(); ClearSheets(); return; }
 
         _cellSize = cubeSide + cubeGap;
+        _rowPitch = RowPitch(data);
         _groupGap = data.ColumnGroupSize > 1 ? groupGap : 0f;
         _baseY = data.ZeroFraction * maximumHeight;
 
@@ -199,7 +201,7 @@ public class ManageSheets : MonoBehaviour
             lineSnapshot = null;
             CreateSheet root = NewSheet();
             root.Build(data, cubeMaterial, 0, maxRow, 0, maxCol,
-                _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
+                _cellSize, _rowPitch, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
             root.PlayGrow(GrowDuration());
             _sheets.Add(root);
         }
@@ -222,6 +224,24 @@ public class ManageSheets : MonoBehaviour
         _placementPending = !ApplyPlacement();
         RebuildProjection();
         OnSheetsChanged?.Invoke();
+    }
+
+    // Room left between one row's title and the next, in metres.
+    private const float RowTitleGap = 0.01f;
+
+    // How far apart the rows stand: a bar and its gap, or, when the titles
+    // are on, the longest row title and a little room, since the titles run
+    // along the rows and would otherwise reach into their neighbours'.
+    private float RowPitch(DataSource data)
+    {
+        float pitch = _cellSize;
+        if (!showLabels || data == null) return pitch;
+
+        IReadOnlyList<string> titles = data.RowTitles;
+        float longest = 0f;
+        for (int i = 0; i < titles.Count; i++)
+            longest = Mathf.Max(longest, SheetLabels.TitleLength(titles[i], _cellSize));
+        return Mathf.Max(pitch, longest + RowTitleGap);
     }
 
     // The columns and rows that were on the sheet when it was last built, by data index.
@@ -312,7 +332,7 @@ public class ManageSheets : MonoBehaviour
     private void RebuildSheet(CreateSheet sheet)
     {
         sheet.Build(_bound, cubeMaterial, sheet.rowMin, sheet.rowMax, sheet.colMin, sheet.colMax,
-            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
+            _cellSize, _rowPitch, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
     }
 
     public CreateSheet SheetAt(int visRow, int visCol)
@@ -636,7 +656,7 @@ public class ManageSheets : MonoBehaviour
         }
 
         view.Build(_bound, cubeMaterial, rMin, rMax, cMin, cMax,
-            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
+            _cellSize, _rowPitch, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
         view.SetPickable(false);
 
         return PlaceProjection(p);
@@ -801,7 +821,7 @@ public class ManageSheets : MonoBehaviour
     private float PieceRadius(CreateSheet piece)
     {
         float halfCols = piece.ColCount * _cellSize * 0.5f;
-        float halfRows = piece.RowCount * _cellSize * 0.5f;
+        float halfRows = piece.RowCount * _rowPitch * 0.5f;
         return Mathf.Sqrt(halfCols * halfCols + halfRows * halfRows);
     }
 
@@ -1158,14 +1178,6 @@ public class ManageSheets : MonoBehaviour
         for (int i = 0; i < _sheets.Count; i++) _sheets[i].ClearTint();
     }
 
-    // Lights the given rows' bars on every sheet, or clears every light when
-    // there are none.
-    public void SetRowGlow(ICollection<int> dataRows)
-    {
-        if (dataRows == null || dataRows.Count == 0) { ClearHoverTint(); return; }
-        for (int i = 0; i < _sheets.Count; i++) _sheets[i].SetRowGlow(dataRows, Style.PreviewSwell);
-    }
-
     public void PlaySwitchGrow()
     {
         float duration = GrowDuration();
@@ -1266,7 +1278,7 @@ public class ManageSheets : MonoBehaviour
     {
         if (!TryGetCameraBasis(out Vector3 camPos, out Quaternion yaw)) return false;
 
-        float halfDepth = Mathf.Max(_rowCount - 1, 0) * _cellSize * 0.5f;
+        float halfDepth = Mathf.Max(_rowCount - 1, 0) * _rowPitch * 0.5f;
 
         _anchorCenter = camPos + yaw * new Vector3(
             0f, 0f, Mathf.Max(minimumZOffsetFromCamera, 0f) + halfDepth);

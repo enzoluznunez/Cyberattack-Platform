@@ -6,7 +6,8 @@ using UnityEngine;
 // Where the breached companies are headquartered, as /map answers: the six
 // regions west to east, each with the colour the national map draws it in,
 // and every city with a breach, with its metro and the colour its pin and its
-// bars share.
+// bars share. Read once and shared: the map draws from it, and the sheets are
+// listed from its metros.
 public static class BreachMap
 {
     public sealed class Region
@@ -27,13 +28,58 @@ public static class BreachMap
         public int breaches;
     }
 
+    public sealed class Metro
+    {
+        public string name;
+        public string region;
+        public int breaches;
+    }
+
     public sealed class Answer
     {
         public readonly List<Region> regions = new List<Region>();
         public readonly List<City> cities = new List<City>();
+
+        // Every metro, its region and its breaches, largest first within
+        // each region, and the regions west to east.
+        public List<Metro> Metros()
+        {
+            var byName = new Dictionary<string, Metro>();
+            foreach (City city in cities)
+            {
+                if (string.IsNullOrEmpty(city.metro)) continue;
+                if (!byName.TryGetValue(city.metro, out Metro metro))
+                    byName[city.metro] = metro = new Metro { name = city.metro, region = city.region };
+                metro.breaches += city.breaches;
+            }
+            var order = regions.ConvertAll(r => r.region);
+            var metros = new List<Metro>(byName.Values);
+            metros.Sort((a, b) =>
+            {
+                int byRegion = order.IndexOf(a.region).CompareTo(order.IndexOf(b.region));
+                if (byRegion != 0) return byRegion;
+                return a.breaches != b.breaches
+                    ? b.breaches.CompareTo(a.breaches)
+                    : string.CompareOrdinal(a.name, b.name);
+            });
+            return metros;
+        }
     }
 
-    public static async Task<Answer> Fetch()
+    private static Task<Answer> _shared;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => _shared = null;
+
+    // The one read of /map; asked again after a failure, so a later caller
+    // tries again.
+    public static Task<Answer> Fetch()
+    {
+        if (_shared == null || _shared.IsFaulted || _shared.IsCanceled) _shared = Read();
+        return _shared;
+    }
+
+    private static async Task<Answer> Read()
     {
         string json = await CyberApi.Get("/map").ConfigureAwait(false);
         return Parse(json);

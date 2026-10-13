@@ -76,7 +76,7 @@ public static class SystemPrompt {
     private const string Datasets =
         "# Datasets and change\n" +
         "Numbers are per-dataset: several datasets can be open at once (ListDatasets lists them), and after switching datasets you must call ListDatasets again for the new ids before using numbers. " +
-        "The national sheet and each region's sheet are listed and read at startup. One ListDatasets marks 'read' false is still being read or could not be read yet, and is still available and one SetDataset call away; open it rather than saying there is no data. " +
+        "There is one sheet per metro, all listed at startup; each region's largest is read then, the rest when first opened. One ListDatasets marks 'read' false is still being read or could not be read yet, and is still available and one SetDataset call away; open it rather than saying there is no data. " +
         "Each dataset keeps its own tool edits and undo history; switching datasets restores them, so switching is always safe. " +
         "Between your calls, '[tool]' messages report what the user changed by hand. Together with each result's 'did', those are the complete record of what has happened. " +
         "Watch for changes that invalidate what you are holding: switching dataset changes every number, and the dataset changing shape clears its edits. When one happens, work from that new reality silently. " +
@@ -88,12 +88,12 @@ public static class SystemPrompt {
     private const string Breaches =
         "# The breach database\n" +
         "Every sheet is drawn from one database of cyber breaches disclosed by publicly listed US companies " +
-        "from 2004 to 2024: 1,191 breaches at 770 companies, each with its attack type, the information it " +
+        "from 2004 to 2024: 1,167 breaches at 754 companies, each with its attack type, the information it " +
         "exposed, when it was disclosed, and the company's figures as they stood at the breach.\n" +
-        "There is one sheet per US region — West, Southwest, Midwest, Southeast, Mid Atlantic and New England — " +
-        "each listed as a dataset from the start and fetched the first time it is opened. Every breach at a " +
-        "company headquartered in the region is a row, labelled by the company's ticker (or its name when it " +
-        "has none) and the day it was disclosed, so one company breached twice has two rows. The six columns " +
+        "There is one sheet per metro, named for it ('New York, NY'), each listed as a dataset from the start. " +
+        "Every breach at a company headquartered in the metro is a row, labelled by the company's ticker " +
+        "and the day it was disclosed ('MSFT 2019/03/12'), so one company breached twice has two rows; a " +
+        "breach at a company that traded under no ticker then is not in the database. The six columns " +
         "are its revenue, net income, assets, book value and market cap, in dollars, and its stock price, in " +
         "dollars per share.\n" +
         "A bar's height is not its figure but the figure's place among every US breach: the share of all US " +
@@ -105,13 +105,15 @@ public static class SystemPrompt {
         "not missing. Figures are in different units across columns, so never total or average across them.\n" +
         "At the tool panel's right is the map, part of the panel: it moves with it and is hidden while the " +
         "panel is closed. A slider under it moves through seven maps, one at a time: the United States, then " +
-        "the six regions west to east. Each metro a breached company is headquartered in has a flat round pin " +
-        "whose area is its breach count. The land is black edged in white; only the pins are coloured. " +
+        "the six regions west to east. The maps are flat, white land edged in black. The national map fills " +
+        "each region with its colour and has no pins; on a region's map each metro a breached company is " +
+        "headquartered in has a flat round pin, in its colour, whose area is its breach count. " +
         "Alaska and Hawaii are in the West and Puerto Rico in the Southeast, moved below the lower 48 as on most " +
         "US maps. Each region's map is the national map cut along its borders, so a pin near a border can be " +
-        "cut in two. Every map has its sheet, and sliding to a map opens it: a region's holds every breach in " +
-        "the region, the United States' every US breach, region by region west to east. To show a map and its " +
-        "sheet, call ShowMap; SetDataset switches the sheet and the map follows. A breach's " +
+        "cut in two. Sliding to a region's map opens its largest metro's sheet, and the user pokes another " +
+        "pin to open that metro's; the national map shows no sheet, and the user pokes a region on it to " +
+        "slide there. To show a region's map, call ShowMap; SetDataset opens a metro's sheet and the map " +
+        "slides to its region. A breach's " +
         "place is its company's headquarters, not where the attack happened; say so if it matters.\n" +
         "The sheets carry figures; they never say what happened. For anything about particular breaches or " +
         "companies — what happened, when, which subsidiary was hit, how many records, what it cost, where it " +
@@ -125,15 +127,11 @@ public static class SystemPrompt {
         "border. On a region's map, a pin is its metro's colour, " +
         "and every bar of a breach at a company there is the same colour, so colour ties a row to its place on " +
         "the map. Each region gives its ten largest metros a colour of their own and draws the rest black; " +
-        "a metro is one colour on every map and sheet. On the national map a pin is its region's colour " +
-        "instead, and pins that would overlap at its smaller scale are merged within their region; on the " +
-        "national sheet a bar is its region's colour, matching those pins. A bar's " +
-        "shade darkens toward the bottom of its column's range. Pointing at a pin lights its bars; pointing " +
-        "at a bar rings its pin. " +
+        "a metro is one colour on every map and sheet. The national map colours regions, not metros. A bar's " +
+        "shade darkens toward the bottom of its column's range. " +
         "Nothing can repaint them: colour is what the " +
         "data is, not an edit, so there is no tool for it. Never name a metro from a colour you were told " +
-        "about — read it: DescribeSheet gives the metros on the sheet, largest first (the regions, on the " +
-        "national sheet).\n" +
+        "about — read it: DescribeSheet gives the metro on the sheet.\n" +
         "A sheet may hold more than it shows, on either axis: CallFilterTool takes columns off the sheet with " +
         "axis 'column' and rows off with axis 'row', and brings them back the same way. While something is off, " +
         "no read can see it and no tool can act on it. So when the user asks about a row or column that " +

@@ -11,8 +11,8 @@ public sealed class ShowMap : AgenticTool<ShowMap.Args> {
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "ShowMap",
         Description = "Slide the map to the United States or one of its regions, as if the user had slid the map's slider to it. " +
-                      "Every map brings its sheet onto the table: a region's, or for the United States every " +
-                      "US breach, so this is also how to show another region's bars.",
+                      "A region's map opens its largest metro's sheet; the United States map takes the sheet off " +
+                      "the table. To open a particular metro's sheet, call SetDataset.",
         Parameters = WithMaps(ParametersFor(typeof(Args)))
     };
 
@@ -32,7 +32,7 @@ public sealed class ShowMap : AgenticTool<ShowMap.Args> {
             return;
         }
         result["showing"] = args.map.Trim();
-        result["note"] = "The map slides there and its sheet is opened; row and column numbers " +
+        result["note"] = "The map slides there and its sheet, if any, is opened; row and column numbers " +
                          "change, so read the sheet with DescribeSheet before using them.";
     }
 }

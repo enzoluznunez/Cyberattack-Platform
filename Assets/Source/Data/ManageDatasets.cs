@@ -279,6 +279,21 @@ public class ManageDatasets : MonoBehaviour
         Activate(index);
     }
 
+    // Takes the sheet off the table: no dataset is open and nothing is drawn,
+    // and a read still pending is not shown when it lands. The national map
+    // shows no sheet.
+    public void CloseActive()
+    {
+        _requested = null;
+        if (_active < 0) return;
+
+        SettleHands();
+        _active = -1;
+        TryStep("sheetManager", () => { if (sheetManager != null) sheetManager.SetDataSource(null); });
+        OnActiveDatasetChanged?.Invoke(-1);
+        StateChannel.RecordState("dataset", "no dataset is open; the table is empty");
+    }
+
     // Shows a read dataset on the table.
     private void Activate(int index)
     {

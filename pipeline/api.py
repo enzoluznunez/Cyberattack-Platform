@@ -189,13 +189,13 @@ class Filters(BaseModel):
 
 
 class SheetQuery(BaseModel):
-    """One region's sheet, or with no region the whole United States'. It takes
+    """One metro's sheet, by the name /map gives it ('New York, NY'). It takes
     no filters: a bar's height is its place among every US breach, so a sheet
     of fewer breaches would measure them against the same whole."""
 
     model_config = {"extra": "forbid"}
 
-    region: RegionName | None = None
+    metro: str = Field(min_length=1)
 
 
 class BreachQuery(Filters):
@@ -315,59 +315,34 @@ def ranks(rows, column):
 
 
 def breach_label(row):
-    """What a breach's row is called: its company's ticker, or its name where
-    it has none, and the day it was disclosed, which tells one company's
-    breaches apart."""
-    return f"{row['ticker'] or row['company']} ({row['disclosed_on'].isoformat()})"
+    """What a breach's row is called: its company's ticker and the day it was
+    disclosed, which tells one company's breaches apart."""
+    return f"{row['ticker']} {row['disclosed_on']:%Y/%m/%d}"
 
 
-def region_sheet(rows, region):
-    """One row per breach in the region, its six figures and their heights;
-    with region None, every US breach. Within a region rows run metro by
-    metro, largest metro first, so a metro's bars stand together; the black
-    metros follow. Within a metro they run city by city, so lighting one pin's
-    breaches lights one block, and within a city oldest first.
-
-    The national sheet runs region by region, west to east, each as its own
-    sheet runs, and is coloured as the national map is: a row's category and
-    colour are its region's, so the regions' bars match their pins. None when
-    there is no breach to draw."""
+def metro_sheet(rows, metro):
+    """One row per breach in the metro, its six figures and their heights, in
+    the colour the metro's pin is drawn in. Rows run city by city, so a city's
+    breaches stand together, and within a city oldest first. None when the
+    metro holds no breach."""
     placed = {column: ranks(rows, column) for column in METRICS}
     color = metro_colors(rows)
-    here = [row for row in rows if region is None or row["region"] == region]
+    here = [row for row in rows if row["metro"] == metro]
     if not here:
         return None
 
-    size = {}
-    for row in here:
-        size[row["metro"]] = size.get(row["metro"], 0) + 1
-
-    def order(row):
-        metro = row["metro"]
-        grey = metro is None or color[metro] == OTHER_METRO_COLOR
-        return (US_REGIONS.index(row["region"]), grey, -size[metro], metro or "", row["city"] or "",
-                row["disclosed_on"], row["breach_key"])
-
-    def category(row):
-        if region is None:
-            return region_title(row["region"]), REGION_COLORS[row["region"]]
-        return row["metro"], color.get(row["metro"], OTHER_METRO_COLOR)
-
-    lines = []
-    for row in sorted(here, key=order):
-        name, shade = category(row)
-        lines.append((breach_label(row), name, row["city"], shade,
-                      [row[column] for column in METRICS],
-                      [placed[column].get(row["breach_key"]) for column in METRICS]))
+    lines = [(breach_label(row), metro, row["city"], color.get(metro, OTHER_METRO_COLOR),
+              [row[column] for column in METRICS],
+              [placed[column].get(row["breach_key"]) for column in METRICS])
+             for row in sorted(here, key=lambda row: (row["city"] or "", row["disclosed_on"], row["breach_key"]))]
     return sheetcsv.render("Breach / Figure", list(METRICS.values()), lines)
 
 
 @app.get("/sheet", response_class=PlainTextResponse)
 def sheet(query: Annotated[SheetQuery, Query()]):
-    region = query.region.value if query.region else None
-    text = region_sheet(us_breaches(), region)
+    text = metro_sheet(us_breaches(), query.metro)
     if text is None:
-        raise HTTPException(404, f"no breaches in {region_title(region) if region else 'the United States'}")
+        raise HTTPException(404, f"there is no metro called '{query.metro}'; /map lists them")
     return text
 
 

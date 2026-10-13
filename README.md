@@ -1,20 +1,21 @@
 # Instructions for Getting Started
 
 This is a data visualization project for Meta Quest, built in Unity, for exploring
-cyberattacks on publicly listed US companies: 1,191 breaches at 770 companies. A sheet of
+cyberattacks on publicly listed US companies: 1,167 breaches at 754 companies. A sheet of
 breach data stands in front of you in passthrough, you reshape it with your hands, and a
 voice assistant can drive the same tools when asked — and look up individual breaches.
 
-Beside the sheet stands a map: the United States first, then its six regions west to
-east, each a cut of the national map. Every city a breached company is headquartered in
-has a pin sized by its number of breaches; cities whose pins would overlap are merged into
-one metro, drawn as one flat pin. Pinch the slider under the map and slide it to move to
-another map. Each map brings its sheet: one row for every breach in the region, or in the
-whole country for the United States, and a column for each of six figures (revenue, net
-income, assets, book value, market cap, stock price), every bar as tall as its figure's
-place among all US breaches. Each region colours its ten largest metros, pins and bars
-alike, and draws the rest black; the United States map and sheet are coloured by region.
-Point a fingertip at a pin to light its bars, or at a bar to ring its pin.
+Beside the sheet stands a map, flat and white like the tool panel: the United States
+first, its six regions filled in their colours, then each region on its own, west to
+east. Pinch the slider under the map and slide it to move between maps, or poke a region
+on the United States map to go to it. On a region's map every metro (cities whose pins
+would overlap, merged) has a flat pin sized by its number of breaches. The sheet on the
+table is one metro's: the region's largest when you arrive, and whichever pin you poke
+after that. It has one row per breach, titled by ticker and disclosure date, and a column
+for each of six figures (revenue, net income, assets, book value, market cap, stock
+price), every bar as tall as its figure's place among all US breaches. Each region colours
+its ten largest metros, pins and bars alike, and draws the rest black. The United States
+map shows no sheet.
 
 ## Prerequisites
 
@@ -90,8 +91,8 @@ Without it the app still runs and every sheet still works; only the assistant fa
 4. In the headset, accept the microphone prompt at launch. Denying it leaves everything
    working except voice.
 
-Done when you are standing in passthrough with the United States sheet open and the map
-of the United States beside the tool panel. A "No Map" notice or an empty table means the
+Done when you are standing in passthrough with the map of the United States beside the
+tool panel; the table stays empty until you slide to a region. A "No Map" notice means the
 database could not be reached — check the headset's internet connection and `cloud.key`
 — not that the build failed.
 

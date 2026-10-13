@@ -124,16 +124,10 @@ public class SheetLabels
 
     private const float UpwardTiltDegrees = 45f;
 
-    // A row title is turned this far off the sheet's edge, seen from above,
-    // and runs out from it: rows stand a bar's width apart, too close for a
-    // breach's name and date laid along the edge, but slanted titles stand
-    // side by side like a spreadsheet's angled headers.
-    private const float RowSlantDegrees = 30f;
-
     private static Quaternion Facing(bool columns, bool high) =>
         (columns
             ? Quaternion.Euler(0f, high ? 180f : 0f, 0f)
-            : Quaternion.Euler(0f, (high ? -90f : 90f) + RowSlantDegrees, 0f))
+            : Quaternion.Euler(0f, high ? -90f : 90f, 0f))
         * Quaternion.Euler(UpwardTiltDegrees, 0f, 0f);
 
     private void ApplyEdges(Dictionary<int, TextMeshPro> map, float edge, bool columns, bool high)
@@ -216,8 +210,33 @@ public class SheetLabels
         return "'" + t.Substring(2);
     }
 
+    // How long a title runs, in the sheet's metres, at the size titles are
+    // drawn on a sheet of this cell size: its glyphs' advances in the body
+    // font, as TextMeshPro sets them. The sheet spaces its rows by the longest.
+    public static float TitleLength(string text, float cellSize)
+    {
+        if (string.IsNullOrEmpty(text)) return 0f;
+
+        TMP_FontAsset font = Style.BodyFont;
+        float units;
+        if (font != null && font.faceInfo.pointSize > 0f)
+        {
+            font.TryAddCharacters(text, out _);
+            float advance = 0f;
+            foreach (char c in text)
+                advance += font.characterLookupTable.TryGetValue(c, out TMP_Character glyph)
+                    ? glyph.glyph.metrics.horizontalAdvance * glyph.glyph.scale
+                    : font.faceInfo.pointSize * 0.6f;
+            // A TextMeshPro in the world draws a point a tenth of a unit.
+            units = advance * Style.Body / font.faceInfo.pointSize * font.faceInfo.scale * 0.1f;
+        }
+        else units = text.Length * Style.Body * 0.06f;
+
+        return units * Style.WorldTextScale * (cellSize > 0f ? cellSize / ReferenceCellSize : 1f);
+    }
+
     public void Rebuild(DataSource data, int rowMin, int rowMax, int colMin, int colMax,
-        float cellSize, float groupGap, float cubeSide, float baseY, SheetLabelStyle style)
+        float cellSize, float rowPitch, float groupGap, float cubeSide, float baseY, SheetLabelStyle style)
     {
         _used = 0;
         _colLabel.Clear();
@@ -236,12 +255,12 @@ public class SheetLabels
         if (data != null && style.show && cellSize > 0f)
         {
             float centerX = CreateSheet.Center(colMin, colMax, cellSize, _colGroupSize, groupGap);
-            float centerZ = CreateSheet.Center(rowMin, rowMax, cellSize, 1, 0f);
+            float centerZ = CreateSheet.Center(rowMin, rowMax, rowPitch, 1, 0f);
             float half = cubeSide * 0.5f;
             float y = baseY;
 
             float ColX(int vc) => CreateSheet.Raw(vc, cellSize, _colGroupSize, groupGap) - centerX;
-            float RowZ(int vr) => CreateSheet.Raw(vr, cellSize, 1, 0f) - centerZ;
+            float RowZ(int vr) => CreateSheet.Raw(vr, rowPitch, 1, 0f) - centerZ;
 
             _margin = cellSize;
             _lowZ = RowZ(rowMin) - half - style.gap;
@@ -262,7 +281,7 @@ public class SheetLabels
                 string text = grouped ? Tick(data.SeriesTitleAt(true, vc)) : colTitles[dCol];
                 TextMeshPro label = Place(text,
                     new Vector3(ColX(vc), y, edgeZ), style.color,
-                    Facing(true, _cols.high), grouped ? TickScale : 1f, true);
+                    Facing(true, _cols.high), grouped ? TickScale : 1f);
                 if (label != null) _colLabel[vc] = label;
             }
 
@@ -275,7 +294,7 @@ public class SheetLabels
                     if (lo < colMin || lo > colMax) continue;
                     TextMeshPro label = Place(data.GroupTitleAt(true, g),
                         new Vector3(ColX(lo), y, groupZ), style.color,
-                        Facing(true, _cols.high), 1f, true);
+                        Facing(true, _cols.high));
                     if (label == null) continue;
                     _colGroup[g] = label;
                     CentreGroup(g);
@@ -292,7 +311,7 @@ public class SheetLabels
                 if (dRow < 0 || dRow >= rowTitles.Count) continue;
                 TextMeshPro label = Place(rowTitles[dRow],
                     new Vector3(edgeX, y, RowZ(vr)), style.color,
-                    Facing(false, _rows.high), 1f, false);
+                    Facing(false, _rows.high));
                 if (label != null) _rowLabel[vr] = label;
             }
         }
@@ -301,11 +320,8 @@ public class SheetLabels
             if (_pool[i] != null) _pool[i].gameObject.SetActive(false);
     }
 
-    // A column title is centred under its column. A row title starts at the
-    // sheet's edge and runs out from it, whichever side it is on, since the
-    // slant turns its reading direction outward on both.
     private TextMeshPro Place(string text, Vector3 localPosition, Color color, Quaternion facing,
-        float scale, bool centred)
+        float scale = 1f)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
 
@@ -314,8 +330,6 @@ public class SheetLabels
 
         label.text = text;
         label.color = color;
-        label.alignment = centred ? TextAlignmentOptions.Center : TextAlignmentOptions.Left;
-        label.rectTransform.pivot = new Vector2(centred ? 0.5f : 0f, 0.5f);
 
         Transform t = label.transform;
         t.localPosition = localPosition;

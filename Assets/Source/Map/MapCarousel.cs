@@ -20,10 +20,12 @@ using UnityEngine;
 // is the national map cut along its borders, drawn as large as fits a box the
 // panel's size.
 //
-// The map is the sheet on the table: when a map settles, its sheet is opened,
-// every breach in the region or, for the national map, in the country; and
-// when the sheet is switched another way the map slides to it. A pin and its
-// bars are one colour, and pointing at either lights the other.
+// A region's map holds one metro's sheet on the table at a time: when it
+// settles it opens its largest metro's, and poking another metro's pin opens
+// that one's. The national map shows no sheet; poking one of its regions slides
+// to that region's map. When the sheet is switched another way, by the
+// assistant, the map slides to its metro's region. A pin and its bars are one
+// colour.
 public class MapCarousel : MonoBehaviour
 {
     public static MapCarousel Instance { get; private set; }
@@ -36,10 +38,8 @@ public class MapCarousel : MonoBehaviour
     [Tooltip("Width and height of the box each map is fitted into, in metres: the panel's own size, " +
              "so a map is never larger than the panel beside it.")]
     public Vector2 mapBox = new Vector2(0.4f, 0.4f);
-    [Tooltip("Radius of a city with one breach, in metres. A pin's area grows with its count.")]
+    [Tooltip("Radius of a metro with one breach, in metres. A pin's area grows with its count.")]
     public float oneBreachRadius = 0.004f;
-    [Tooltip("How thick the land is, in metres.")]
-    public float thickness = 0.012f;
 
     [Header("Slide")]
     [Tooltip("Seconds a map takes to slide one place.")]
@@ -47,19 +47,18 @@ public class MapCarousel : MonoBehaviour
     [Tooltip("Size of a map coming in from either side, against the one in the middle.")]
     [Range(0.1f, 1f)] public float peekScale = 0.4f;
 
-    [Header("Pointing at a city")]
-    [Tooltip("How close a fingertip has to come to the map's face, in metres.")]
-    public float pointDepth = 0.06f;
-    [Tooltip("How far outside a pin a fingertip still names it, in metres.")]
-    public float pointSlack = 0.01f;
+    [Header("Poking a pin or a region")]
+    [Tooltip("How near the map's face a fingertip has to come to poke it, in metres.")]
+    public float pokeDepth = 0.015f;
+    [Tooltip("How far outside a pin a fingertip still pokes it, in metres.")]
+    public float pokeSlack = 0.005f;
 
-    // The tool panel's own colours: black land edged in white, as the panel
-    // is a black face in a white border. Only the pins are coloured.
-    public static readonly Color Land = Style.Black;
-    public static readonly Color LandSide = Style.White;
-    public static readonly Color Coast = Style.White;
-    public static readonly Color Border = Style.White;
-    public static readonly Color Halo = Style.White;
+    // The tool panel's own colours: a white face edged in black over a black
+    // back. Only the pins and the national map's regions are coloured.
+    public static readonly Color Land = Style.White;
+    public static readonly Color Back = Style.Black;
+    public static readonly Color Coast = Style.Black;
+    public static readonly Color Border = Style.Black;
 
     public bool Ready => _areas.Count > 0;
 
@@ -79,19 +78,16 @@ public class MapCarousel : MonoBehaviour
 
     private Transform _slot;
     private TextMeshPro _title;
-    private TextMeshPro _cityLabel;
-    private Transform _halo;
-    private string _labelled;
     private TextMeshPro _scaleLabel;
     private CreateCube _scaleBar;
     private SlideBar _slider;
 
-    // The city whose bars a fingertip is on at the sheet, whose pin the map
-    // rings; and the pin a fingertip is on at the map, whose bars the sheet
-    // lights.
-    private string _barCity;
-    private string _glowing;
-    private ReadSheets _readSheets;
+    // The metro whose sheet is on the table, while a region's map is up.
+    private string _metro;
+
+    // Which fingertips were already touching the map last frame: a poke is a
+    // fingertip arriving, not one resting there.
+    private readonly HashSet<int> _touching = new HashSet<int>();
 
     private readonly Vector3[] _corners = new Vector3[4];
 
@@ -118,11 +114,6 @@ public class MapCarousel : MonoBehaviour
     {
         if (Instance == this) Instance = null;
         if (ManageDatasets.Instance != null) ManageDatasets.Instance.OnActiveDatasetChanged -= OnSheetChanged;
-        if (_readSheets != null)
-        {
-            _readSheets.OnHover -= OnBarHover;
-            _readSheets.OnCleared -= OnBarCleared;
-        }
     }
 
     private async void Start()
@@ -162,12 +153,6 @@ public class MapCarousel : MonoBehaviour
         Build();
 
         if (ManageDatasets.Instance != null) ManageDatasets.Instance.OnActiveDatasetChanged += OnSheetChanged;
-        _readSheets = FindAnyObjectByType<ReadSheets>();
-        if (_readSheets != null)
-        {
-            _readSheets.OnHover += OnBarHover;
-            _readSheets.OnCleared += OnBarCleared;
-        }
 
         _index = 0;
         _position = _index;
@@ -178,19 +163,18 @@ public class MapCarousel : MonoBehaviour
     {
         _step = mapBox.x * 0.75f;
 
-        // The bars' own material, drawn from both sides: a map's walls follow
-        // its coast whichever way round the outline runs.
+        // The bars' own material, drawn from both sides: a map's outline runs
+        // either way round, and its back is seen from behind.
         Material material = new Material(Resources.Load<Material>("Materials/SheetMaterial")) { name = "Map" };
         material.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
 
         _look = new RegionMap.Look
         {
             dotRadius = oneBreachRadius,
-            thickness = thickness,
             coastWidth = 0.0012f,
             borderWidth = 0.0018f,
             land = Land,
-            landSide = LandSide,
+            back = Back,
             coast = Coast,
             border = Border,
             material = material
@@ -201,7 +185,7 @@ public class MapCarousel : MonoBehaviour
         _slot.gameObject.SetActive(false);
 
         _title = Label(_slot, "Title", Style.TitleFont, 1.6f);
-        _title.transform.localPosition = new Vector3(0f, mapBox.y * 0.5f + 0.05f, -thickness);
+        _title.transform.localPosition = new Vector3(0f, mapBox.y * 0.5f + 0.05f, RegionMap.FaceZ);
 
         // A stop for each map along the map's width, the thumb a stop wide.
         // The slider runs along its own X, which is east here; turned so its
@@ -217,12 +201,6 @@ public class MapCarousel : MonoBehaviour
         _scaleLabel = Label(_slot, "Scale", Style.BodyFont, 1f);
         _scaleLabel.alignment = TextAlignmentOptions.Left;
         _scaleLabel.rectTransform.pivot = new Vector2(0f, 0.5f);
-
-        _cityLabel = Label(_slot, "City", Style.BodyFont, 1.2f);
-        _cityLabel.gameObject.SetActive(false);
-
-        _halo = HaloRing(_slot, material);
-        _halo.gameObject.SetActive(false);
     }
 
     private void LateUpdate()
@@ -252,14 +230,14 @@ public class MapCarousel : MonoBehaviour
                 FinishSlide();
             }
             else if (_sliding) FinishSlide();
-            Glow(null);
+            _touching.Clear();
             return;
         }
 
         Slide();
         if (!_sliding && !_held) BuildNext();
         Layout();
-        Point();
+        Poke();
     }
 
     // Makes one map that has not been made yet, nearest the middle first, a
@@ -392,83 +370,73 @@ public class MapCarousel : MonoBehaviour
                 pair.Value.gameObject.SetActive(false);
     }
 
-    // A fingertip at the map names the pin it is on and lights that pin's
-    // bars on the sheet; a fingertip at the sheet rings the pin of the bar it
-    // is on.
-    private void Point()
+    // A fingertip arriving at the map's face pokes what it lands on: on a
+    // region's map, one of the region's own pins, which opens its metro's
+    // sheet; on the national map, a region, which slides to its map. Only
+    // the map at rest in the middle can be poked.
+    private void Poke()
     {
         bool idle = !_sliding && !_held;
         RegionMap map = idle ? MapFor(_areas[_index]) : null;
-        RegionMap.Dot dot = default;
-        bool pointed = false;
-        float face = -thickness;
+        IReadOnlyList<Fingertips.Source> tips = Fingertips.All;
 
-        if (map != null)
+        for (int i = 0; i < tips.Count; i++)
         {
-            float best = float.MaxValue;
-            foreach (Fingertips.Source source in Fingertips.All)
+            Fingertips.Source source = tips[i];
+            bool touching = false;
+            Vector3 local = default;
+            if (map != null && source.Live)
             {
-                if (!source.Live) continue;
-                Vector3 local = map.transform.InverseTransformPoint(source.poke.Origin);
-                if (Mathf.Abs(local.z - face) > pointDepth) continue;
-                if (!map.TryDotAt(local, pointSlack, out RegionMap.Dot hit)) continue;
-                float distanceSq = ((Vector2)local - hit.centre).sqrMagnitude;
-                if (distanceSq >= best) continue;
-                best = distanceSq;
-                dot = hit;
-                pointed = true;
+                local = map.transform.InverseTransformPoint(source.poke.Origin);
+                touching = Mathf.Abs(local.z - RegionMap.FaceZ) <= pokeDepth &&
+                           Mathf.Abs(local.x) <= mapBox.x * 0.5f && Mathf.Abs(local.y) <= mapBox.y * 0.5f;
+            }
+
+            bool arrived = touching && !_touching.Contains(i);
+            if (touching) _touching.Add(i);
+            else _touching.Remove(i);
+            if (!arrived) continue;
+
+            if (map.Area.IsNational)
+            {
+                if (map.TryRegionAt(local, out string region)) Show(region, out _);
+            }
+            else if (map.TryDotAt(local, pokeSlack, out RegionMap.Dot dot) && dot.region == map.Area.region)
+            {
+                OpenMetro(dot.name);
             }
         }
-
-        Glow(pointed ? dot : (RegionMap.Dot?)null);
-
-        bool ringed = pointed || (map != null && _barCity != null && map.TryDotOf(_barCity, out dot));
-        if (ringed != _cityLabel.gameObject.activeSelf) _cityLabel.gameObject.SetActive(ringed);
-        if (ringed != _halo.gameObject.activeSelf) _halo.gameObject.SetActive(ringed);
-        if (!ringed) { _labelled = null; return; }
-
-        if (dot.name != _labelled)
-        {
-            _labelled = dot.name;
-            int count = dot.breaches, cities = dot.cities.Count;
-            string around = cities > 1 ? $"\n<size=70%>{cities} cities</size>" : "";
-            _cityLabel.text = $"{dot.name}\n<size=80%>{Formatter.Count(count)} " +
-                              $"{(count == 1 ? "breach" : "breaches")}</size>{around}";
-        }
-        _cityLabel.transform.localPosition = new Vector3(dot.centre.x, dot.centre.y + dot.radius + 0.025f, face - 0.01f);
-        _halo.localPosition = new Vector3(dot.centre.x, dot.centre.y, face - 0.002f);
-        _halo.localScale = new Vector3(dot.radius, dot.radius, 1f);
     }
 
-    // Lights the open sheet's bars for a pin's breaches, once each time the
-    // pin pointed at changes.
-    private void Glow(RegionMap.Dot? dot)
+    // Opens a metro's sheet, and says so on the map's title.
+    private void OpenMetro(string metro)
     {
-        string name = dot?.name;
-        if (name == _glowing) return;
-        _glowing = name;
-        List<string> cities = dot?.cities;
+        if (string.IsNullOrEmpty(metro)) return;
+        _metro = metro;
+        Title(_areas[_index]);
 
-        ManageSheets sheets = Scene.Sheets;
-        DataSource data = Scene.Data;
-        if (sheets == null) return;
-
-        var rows = new HashSet<int>();
-        if (cities != null && data != null)
-            for (int r = 0; r < data.RowCount; r++)
-                if (cities.Contains(data.RowCityAt(r))) rows.Add(r);
-        sheets.SetRowGlow(rows);
+        ManageDatasets datasets = Scene.Datasets;
+        if (datasets == null) return;
+        int index = datasets.IndexOf(ViewCatalog.SheetUrl(metro));
+        if (index >= 0 && index != datasets.ActiveIndex) datasets.SwitchDataset(index);
     }
 
-    private void OnBarHover(ReadSheets.Reading reading)
+    // The map's name, its breaches and, on a region's map, the metro whose
+    // sheet is on the table.
+    private void Title(MapAtlas.Area area)
     {
-        DataSource data = Scene.Data;
-        _barCity = reading.valid && data != null ? data.RowCityAt(reading.dataRow) : null;
+        int breaches = 0;
+        foreach (BreachMap.Region region in _answer.regions)
+            if (area.IsNational || region.region == area.region) breaches += region.breaches;
+        string count = $"{Formatter.Count(breaches)} {(breaches == 1 ? "breach" : "breaches")}";
+        _title.text = area.IsNational || string.IsNullOrEmpty(_metro)
+            ? $"{area.name}\n<size=60%>{count}</size>"
+            : $"{area.name}\n<size=60%>{count} · showing {_metro}</size>";
     }
 
-    private void OnBarCleared() => _barCity = null;
-
-    // The map now in the middle, which opens its sheet.
+    // The map now in the middle. A region's map opens the sheet of the metro
+    // already on the table if it is one of the region's, else its largest
+    // metro's; the national map takes the sheet off the table.
     private void Settle()
     {
         MapAtlas.Area area = _areas[_index];
@@ -477,44 +445,47 @@ public class MapCarousel : MonoBehaviour
         float barMetres = barKm * metresPerKm;
         float barY = -mapBox.y * 0.5f - ScaleDrop;
         float barLeft = -mapBox.x * 0.5f;
-        _scaleBar.SetBox(new Vector3(barLeft + barMetres * 0.5f, barY, -thickness * 0.5f),
-            new Vector3(barMetres, 0.003f, thickness));
-        _scaleLabel.transform.localPosition = new Vector3(barLeft + barMetres + 0.01f, barY, -thickness);
+        _scaleBar.SetBox(new Vector3(barLeft + barMetres * 0.5f, barY, RegionMap.FaceZ * 0.5f),
+            new Vector3(barMetres, 0.003f, -RegionMap.FaceZ));
+        _scaleLabel.transform.localPosition = new Vector3(barLeft + barMetres + 0.01f, barY, RegionMap.FaceZ);
         _scaleLabel.text = $"{barKm:#,0.##} km";
-
-        int breaches = 0, cities = 0;
-        foreach (BreachMap.Region region in _answer.regions)
-            if (area.IsNational || region.region == area.region) breaches += region.breaches;
-        foreach (BreachMap.City city in _answer.cities)
-            if (area.IsNational || city.region == area.region) cities++;
-        _title.text = $"{area.name}\n<size=60%>{Formatter.Count(breaches)} {(breaches == 1 ? "breach" : "breaches")}" +
-                      $" · {cities} {(cities == 1 ? "city" : "cities")}</size>";
 
         bool first = _settled == null;
         bool changed = _settled != area.name;
         _settled = area.name;
 
-        OpenSheet(area.region);
-
-        string state = area.IsNational
-            ? $"the map shows the whole United States ({breaches} breaches), its pins coloured by region, " +
-              "and the sheet on the table is the national one, every US breach coloured by its region"
-            : $"the map shows the {area.name} region ({breaches} breaches), its pins coloured by metro, " +
-              $"and the sheet on the table is the {area.name}'s";
+        string state;
+        if (area.IsNational)
+        {
+            _metro = null;
+            Title(area);
+            if (Scene.Datasets != null) Scene.Datasets.CloseActive();
+            state = "the map shows the whole United States, its regions in their colours, and no sheet is on " +
+                    "the table; poking a region on it slides to that region's map";
+        }
+        else
+        {
+            if (MetroRegion(_metro) != area.region) _metro = ViewCatalog.LargestMetro(_answer, area.region);
+            OpenMetro(_metro);
+            state = $"the map shows the {area.name} region, its pins coloured by metro, and the sheet on the " +
+                    $"table is the {_metro} metro's; poking another pin opens that metro's sheet";
+        }
         // The map it opens on is known, not announced; a slide is news.
         if (first) StateChannel.SetState("map", state);
         else if (changed) StateChannel.RecordState("map", state);
     }
 
-    private static void OpenSheet(string region)
+    // The region a metro is in, or null.
+    private string MetroRegion(string metro)
     {
-        ManageDatasets datasets = Scene.Datasets;
-        if (datasets == null) return;
-        int index = datasets.IndexOf(ViewCatalog.SheetUrl(region));
-        if (index >= 0 && index != datasets.ActiveIndex) datasets.SwitchDataset(index);
+        if (string.IsNullOrEmpty(metro)) return null;
+        foreach (BreachMap.City city in _answer.cities)
+            if (city.metro == metro) return city.region;
+        return null;
     }
 
-    // A sheet switched another way, by the assistant, brings its map with it.
+    // A sheet switched another way, by the assistant, brings its metro's
+    // region with it.
     private void OnSheetChanged(int index)
     {
         if (!Ready) return;
@@ -522,12 +493,16 @@ public class MapCarousel : MonoBehaviour
         if (datasets == null || index < 0 || index >= datasets.DatasetCount) return;
 
         string payload = datasets.Datasets[index].payload;
-        foreach (MapAtlas.Area area in _areas)
-            if (ViewCatalog.SheetUrl(area.region) == payload)
-            {
-                Show(area.name, out _);
-                return;
-            }
+        foreach (BreachMap.Metro metro in _answer.Metros())
+        {
+            if (ViewCatalog.SheetUrl(metro.name) != payload) continue;
+            _metro = metro.name;
+            MapAtlas.Area area = _areas.Find(a => a.region == metro.region);
+            if (area == null) return;
+            if (_areas[_index] == area && !_sliding) Title(area);
+            else Show(area.name, out _);
+            return;
+        }
     }
 
     // Slides the maps to one by name ('United States', 'West', or 'US West'),
@@ -625,39 +600,5 @@ public class MapCarousel : MonoBehaviour
         cube.SetColor(Land);
         go.GetComponent<BoxCollider>().enabled = false;
         return cube;
-    }
-
-    // A white ring for a pin of radius one, set around whichever pin is
-    // pointed at, on the map or through its bars; scaled to the pin.
-    private static Transform HaloRing(Transform parent, Material material)
-    {
-        const int segments = 32;
-        const float inner = 1.15f, outer = 1.6f;
-        var vertices = new List<Vector3>(segments * 2);
-        var colors = new List<Color>(segments * 2);
-        var triangles = new List<int>(segments * 6);
-        for (int k = 0; k < segments; k++)
-        {
-            float a = k * Mathf.PI * 2f / segments;
-            var dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
-            vertices.Add(dir * inner);
-            vertices.Add(dir * outer);
-            colors.Add(Halo);
-            colors.Add(Halo);
-            int i = k * 2, j = (k + 1) % segments * 2;
-            triangles.AddRange(new[] { i, j, i + 1, i + 1, j, j + 1 });
-        }
-        var mesh = new Mesh { name = "Halo" };
-        mesh.SetVertices(vertices);
-        mesh.SetColors(colors);
-        mesh.SetTriangles(triangles, 0);
-
-        var go = new GameObject("Halo", typeof(MeshFilter), typeof(MeshRenderer));
-        go.transform.SetParent(parent, false);
-        go.GetComponent<MeshFilter>().sharedMesh = mesh;
-        var renderer = go.GetComponent<MeshRenderer>();
-        renderer.sharedMaterial = material;
-        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        return go.transform;
     }
 }

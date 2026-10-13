@@ -5,13 +5,13 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
 
-// Lists the national sheet and one sheet per US region at startup: each
-// becomes a listed dataset whose payload is the /sheet URL that draws it. The
-// national sheet is opened and the rest are read behind it, so sliding to a
-// region finds its sheet already read. So a listed sheet is the database as it
-// stood when the app started rather than an export of how it once stood. The
-// regions are the generated contract's, west to east, the order the map slides
-// through them.
+// Lists one sheet per metro at startup, from the metros /map names: each
+// becomes a listed dataset whose payload is the /sheet URL that draws it. A
+// listed sheet is the database as it stood when the app started rather than
+// an export of how it once stood. Nothing is opened, since the app starts on
+// the national map, which shows no sheet; each region's largest metro, the
+// sheet a region's map opens on, is read behind it, so sliding to a region
+// never waits on the network. Another metro is read when its pin is poked.
 public class ViewCatalog : MonoBehaviour
 {
     public ManageDatasets manageDatasets;
@@ -56,7 +56,16 @@ public class ViewCatalog : MonoBehaviour
                              "API key, which only a server on this machine will accept.");
 
         Configured = true;
-        ListRegions();
+
+        System.Threading.Tasks.Task<BreachMap.Answer> map = BreachMap.Fetch();
+        while (!map.IsCompleted) yield return null;
+        if (map.Status != System.Threading.Tasks.TaskStatus.RanToCompletion)
+        {
+            // The map says so in its own notice.
+            Debug.LogWarning($"[ViewCatalog] No metros to list: {map.Exception?.GetBaseException().Message}");
+            yield break;
+        }
+        ListMetros(map.Result);
     }
 
     // Where the database is and how to be let in are configuration, not data:
@@ -80,44 +89,38 @@ public class ViewCatalog : MonoBehaviour
         }
     }
 
-    private void ListRegions()
+    private void ListMetros(BreachMap.Answer map)
     {
-        var entries = new List<(string, string, string)>(CyberContract.Regions.Length + 1);
-        entries.Add((SheetUrl(null), NationalTitle,
-            "Every breach at a company headquartered in the United States, a row each, region by region " +
-            "west to east: its revenue, net income, assets, book value, market cap and stock price, each " +
-            "bar as tall as its place among every US breach, and coloured by its region."));
-        foreach (string region in CyberContract.Regions)
+        List<BreachMap.Metro> metros = map.Metros();
+        var entries = new List<(string, string, string)>(metros.Count);
+        foreach (BreachMap.Metro metro in metros)
         {
-            string title = Title(region);
-            entries.Add((SheetUrl(region), title,
-                $"Every breach at a company headquartered in the {title}, a row each: its revenue, net " +
-                "income, assets, book value, market cap and stock price, each bar as tall as its place " +
-                "among every US breach."));
+            entries.Add((SheetUrl(metro.name), metro.name,
+                $"Every breach at a company headquartered in the {metro.name} metro ({Title(metro.region)}), " +
+                "a row each: its revenue, net income, assets, book value, market cap and stock price, each " +
+                "bar as tall as its place among every US breach."));
         }
         manageDatasets.AddCatalogEntries(entries);
-        Debug.Log($"[ViewCatalog] Listed {entries.Count} sheets; opening the national one and reading " +
-                  "the rest behind it.");
+        Debug.Log($"[ViewCatalog] Listed {entries.Count} metros; reading each region's largest behind it.");
 
-        // The app opens on the national map with the national sheet.
-        if (manageDatasets.ActiveIndex < 0 && entries.Count > 0)
-            manageDatasets.SwitchDataset(manageDatasets.IndexOf(entries[0].Item1));
+        var read = new HashSet<string>();
+        foreach (BreachMap.Metro metro in metros)
+            if (read.Add(metro.region)) manageDatasets.Preload(manageDatasets.IndexOf(SheetUrl(metro.name)));
+    }
 
-        // The others are read now rather than on the slide that opens them, so
-        // a slide never waits on the network.
-        for (int i = 1; i < entries.Count; i++)
-            manageDatasets.Preload(manageDatasets.IndexOf(entries[i].Item1));
+    // The largest metro of a region, whose sheet its map opens on, or null.
+    public static string LargestMetro(BreachMap.Answer map, string region)
+    {
+        foreach (BreachMap.Metro metro in map.Metros())
+            if (metro.region == region) return metro.name;
+        return null;
     }
 
     // 'US West' -> 'West', as the map and the rail name it.
     public static string Title(string region) =>
         region != null && region.StartsWith("US ", StringComparison.Ordinal) ? region.Substring(3) : region;
 
-    public const string NationalTitle = "United States";
-
-    // The request that draws one region's sheet, or with no region the
-    // national one.
-    public static string SheetUrl(string region) =>
-        CyberApi.BaseUrl.TrimEnd('/') + "/sheet" +
-        (string.IsNullOrEmpty(region) ? "" : "?region=" + Uri.EscapeDataString(region));
+    // The request that draws one metro's sheet.
+    public static string SheetUrl(string metro) =>
+        CyberApi.BaseUrl.TrimEnd('/') + "/sheet?metro=" + Uri.EscapeDataString(metro);
 }

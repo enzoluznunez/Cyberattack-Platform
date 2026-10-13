@@ -26,12 +26,10 @@ def us(breaches):
     return breaches[breaches["country"] == US]
 
 
-def sheet(client, region):
-    """A region's sheet, or with region None the national one, as (directives,
-    figure titles, rows), each row (label, figures, heights) as the text cells
-    it arrived as."""
-    path = "/sheet" if region is None else f"/sheet?region={region}"
-    directives, header, rows = sheetcsv.read(client.get(path).text)
+def sheet(client, metro):
+    """A metro's sheet as (directives, figure titles, rows), each row (label,
+    figures, heights) as the text cells it arrived as."""
+    directives, header, rows = sheetcsv.read(client.get("/sheet", params={"metro": metro}).text)
     n = int(directives["heights"][0])
     return directives, header[1:1 + n], [(row[0], row[1:1 + n], row[1 + n:]) for row in rows]
 
@@ -41,24 +39,38 @@ def test_health_counts_both_tables(client, breaches, fundamentals):
         "status": "ok", "breaches": len(breaches), "company_years": len(fundamentals)}
 
 
-@pytest.mark.parametrize("region", US_REGIONS)
-def test_a_region_sheet_has_a_row_for_every_breach_in_it(client, us, region):
-    directives, titles, rows = sheet(client, region)
-    assert titles == list(METRICS.values())
-    assert len(rows) == int((us["region"] == region).sum())
-    assert len(directives["metro"]) == len(directives["city"]) == len(directives["color"]) == len(rows)
+@pytest.fixture(scope="module")
+def metros(us):
+    """Every metro, by its breach count, largest first."""
+    return us.dropna(subset=["metro"]).groupby("metro").size().sort_values(ascending=False)
 
 
-def test_a_pins_rows_stand_together(client):
-    directives, _, _ = sheet(client, "US West")
+def test_a_metro_sheet_has_a_row_for_every_breach_in_it(client, us, metros):
+    for metro in [metros.index[0], metros.index[len(metros) // 2], metros.index[-1]]:
+        directives, titles, rows = sheet(client, metro)
+        assert titles == list(METRICS.values())
+        assert len(rows) == metros[metro]
+        assert set(directives["metro"]) == {metro}
+        assert len(directives["city"]) == len(directives["color"]) == len(rows)
+
+
+def test_a_row_is_called_by_its_ticker_and_disclosure_day(client, us):
+    directives, _, rows = sheet(client, "New York, NY")
+    here = us[us["metro"] == "New York, NY"]
+    expected = sorted(f"{t} {d:%Y/%m/%d}" for t, d in zip(here["ticker"], here["disclosed_on"]))
+    assert sorted(label for label, _, _ in rows) == expected
+
+
+def test_a_citys_rows_stand_together(client):
+    directives, _, _ = sheet(client, "New York, NY")
     cities = directives["city"]
     blocks = [c for i, c in enumerate(cities) if i == 0 or cities[i - 1] != c]
     assert len(blocks) == len(set(blocks))
 
 
 def test_the_cells_are_the_figures_and_unreported_is_blank(client, us):
-    _, _, rows = sheet(client, "US New England")
-    here = us[us["region"] == "US New England"]
+    _, _, rows = sheet(client, "Boston, MA")
+    here = us[us["metro"] == "Boston, MA"]
     figures = sorted("" if pd.isna(v) else f"{v:.4f}" for v in here["revenue_usd"])
     assert sorted(cells[0] for _, cells, _ in rows) == figures
     for _, cells, heights in rows:
@@ -70,7 +82,7 @@ def test_a_height_is_a_place_among_every_us_breach(client, us):
     height is the share of breaches at or below its figure."""
     for column, title in METRICS.items():
         figures = us[column].dropna()
-        largest = us.loc[figures.idxmax(), "region"]
+        largest = us.loc[figures.idxmax(), "metro"]
         _, titles, rows = sheet(client, largest)
         at = titles.index(title)
         assert max(float(h[at]) for _, _, h in rows if h[at]) == 1.0
@@ -80,53 +92,35 @@ def test_a_height_is_a_place_among_every_us_breach(client, us):
                 assert float(heights[at]) == pytest.approx(expected, abs=1e-4)
 
 
-def test_a_metros_rows_stand_together_coloured_largest_first(client):
-    directives, _, _ = sheet(client, "US Mid Atlantic")
-    metros, colors = directives["metro"], directives["color"]
-    blocks = [m for i, m in enumerate(metros) if i == 0 or metros[i - 1] != m]
-    assert len(blocks) == len(set(blocks))
-    assert metros[0] == "New York, NY"
-    first_grey = colors.index(OTHER_METRO_COLOR)
-    assert OTHER_METRO_COLOR not in colors[:first_grey]
-    assert set(colors[first_grey:]) == {OTHER_METRO_COLOR}
+def test_a_metros_sheet_is_the_colour_of_its_pin(client):
+    pins = {city["metro"]: city["color"] for city in client.get("/map").json()["cities"]}
+    for metro in ["New York, NY", "San Jose, CA", "Boston, MA"]:
+        directives, _, _ = sheet(client, metro)
+        assert set(directives["color"]) == {pins[metro]}
 
 
-def test_a_metro_is_one_colour_on_every_sheet_and_map(client):
-    seen = {}
+def test_each_region_colours_its_ten_largest_metros_and_blacks_the_rest(client):
+    cities = client.get("/map").json()["cities"]
     for region in US_REGIONS:
-        directives, _, _ = sheet(client, region)
-        for metro, color in zip(directives["metro"], directives["color"]):
-            if metro:
-                assert seen.setdefault(metro, color) == color, metro
-    for city in client.get("/map").json()["cities"]:
-        assert seen[city["metro"]] == city["color"], city["city"]
+        size, color = {}, {}
+        for city in cities:
+            if city["region"] == region:
+                size[city["metro"]] = size.get(city["metro"], 0) + city["breaches"]
+                color[city["metro"]] = city["color"]
+        ranked = sorted(size, key=lambda m: (-size[m], m))
+        assert len({color[m] for m in ranked[:10]}) == min(10, len(ranked)), region
+        assert OTHER_METRO_COLOR not in {color[m] for m in ranked[:10]}, region
+        assert {color[m] for m in ranked[10:]} <= {OTHER_METRO_COLOR}, region
 
 
-def test_each_region_colours_its_ten_largest_metros(client):
-    for region in US_REGIONS:
-        directives, _, _ = sheet(client, region)
-        coloured = {m for m, c in zip(directives["metro"], directives["color"]) if c != OTHER_METRO_COLOR}
-        expected = min(10, len(set(directives["metro"])))
-        assert len(coloured) == len(set(directives["color"]) - {OTHER_METRO_COLOR}) == expected, region
-
-
-def test_the_national_sheet_holds_every_us_breach_region_by_region(client, us):
-    directives, titles, rows = sheet(client, None)
-    assert titles == list(METRICS.values())
-    assert len(rows) == len(us)
-    blocks = [m for i, m in enumerate(directives["metro"]) if i == 0 or directives["metro"][i - 1] != m]
-    assert blocks == [region_title(region) for region in US_REGIONS]
-
-
-def test_the_national_sheet_is_coloured_as_the_national_map(client):
-    directives, _, _ = sheet(client, None)
-    regions = {r["title"]: r["color"] for r in client.get("/map").json()["regions"]}
-    assert all(regions[m] == c for m, c in zip(directives["metro"], directives["color"]))
+def test_an_unknown_metro_is_a_404(client):
+    response = client.get("/sheet", params={"metro": "Atlantis, ZZ"})
+    assert response.status_code == 404
 
 
 @pytest.mark.parametrize("path, said", [
-    ("/sheet?region=Canada", "region: 'Canada' is not one of: " + ", ".join(US_REGIONS)),
-    ("/sheet?region=US West&since=2020", "since: Extra inputs are not permitted (got '2020')"),
+    ("/sheet", "metro: Field required"),
+    ("/sheet?metro=Boston, MA&since=2020", "since: Extra inputs are not permitted (got '2020')"),
     ("/breaches?attack=Hacking", "attack: 'Hacking' is not one of: " + ", ".join(ATTACK_TYPES)),
     ("/breaches?industry=Atlantis", "industry: 'Atlantis' is not one of: " + ", ".join(DIVISION_NAMES)),
     ("/breaches?since=2020&until=2010", "since (2020) is after until (2010)"),

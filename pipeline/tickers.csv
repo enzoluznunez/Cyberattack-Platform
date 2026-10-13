@@ -1,0 +1,214 @@
+breach_key,company,disclosed,ticker,source
+1,GOOGLE INC.,2010-01-12,GOOG,Google Inc. traded as GOOG; by 2023 its parent Alphabet trades as GOOG
+18,METROPOLITAN LIFE INSURANCE CO,2020-08-10,MET,"subsidiary of MetLife, NYSE: MET"
+21,AVON PRODUCTS INC,2020-07-28,NTCO,"subsidiary of Natura &Co, NYSE: NTCO, from January 2020"
+25,"TWITTER, INC.",2020-07-15,TWTR,"fundamentals export, same CIK"
+31,Cosan Ltd.,2020-05-28,CZZ,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+35,MAGELLAN HEALTH INC,2020-05-12,MGLN,"fundamentals export, same CIK"
+38,"GAIN Capital Holdings, Inc.",2020-05-08,GCAP,"fundamentals export, same CIK"
+56,CIRCOR INTERNATIONAL INC,2020-03-02,CIR,"fundamentals export, same CIK"
+67,MEXICAN PETROLEUM,2020-01-21,,Pemex has no traded stock
+69,"AutoWeb, Inc.",2020-01-13,AUTO,"fundamentals export, same CIK"
+76,"AVID TECHNOLOGY, INC.",2019-12-24,AVID,"fundamentals export, same CIK"
+77,"TWITTER, INC.",2019-12-21,TWTR,"fundamentals export, same CIK"
+84,MAGELLAN HEALTH INC,2019-12-04,MGLN,"fundamentals export, same CIK"
+92,US XPRESS ENTERPRISES INC,2019-11-14,USX,"fundamentals export, same CIK"
+99,HESKA CORP,2019-11-06,HSKA,"fundamentals export, same CIK"
+102,"20230930-DK-Butterfly-1, Inc.",2019-10-29,BBBY,"20230930-DK-Butterfly-1 was Bed Bath & Beyond, BBBY"
+106,FERRO CORP,2019-10-23,FOE,"fundamentals export, same CIK"
+107,TETRAPHASE PHARMACEUTICALS INC,2019-10-22,TTPH,"fundamentals export, same CIK"
+109,Tribune Publishing Co,2019-10-18,TPCO,"fundamentals export, same CIK"
+118,"Zendesk, Inc.",2019-10-02,ZEN,"fundamentals export, same CIK"
+121,MAGELLAN HEALTH INC,2019-09-17,MGLN,"fundamentals export, same CIK"
+122,MAGELLAN HEALTH INC,2019-09-17,MGLN,"fundamentals export, same CIK"
+125,"Forterra, Inc.",2019-09-13,FRTA,"fundamentals export, same CIK"
+126,ZYNGA INC,2019-09-12,ZNGA,"fundamentals export, same CIK"
+141,Covia Holdings Corp,2019-08-01,CVIA,Covia traded as CVIA before its 2020 bankruptcy
+148,Medico International Inc.,2019-07-17,,Medico International's 10-K: its stock 'is not yet quoted on any markets or exchanges'
+149,SPRINT LLC,2019-07-16,S,Sprint Corp traded as S
+154,"PCM, INC.",2019-06-19,PCMI,"fundamentals export, same CIK"
+155,TECH DATA CORP,2019-06-19,TECD,"fundamentals export, same CIK"
+158,"AVALARA, INC.",2019-06-07,AVLR,"fundamentals export, same CIK"
+161,Xperi Corp,2019-05-31,XPER,Xperi Corp traded as XPER
+167,SPRINT LLC,2019-03-27,S,Sprint Corp traded as S
+169,SHAW COMMUNICATIONS INC,2019-05-08,SJR,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+173,Care.com Inc,2019-04-24,CRCM,"fundamentals export, same CIK"
+174,"Liberty Expedia Holdings, Inc.",2019-04-19,LEXEA,"fundamentals export, same CIK"
+182,"AeroGrow International, Inc.",2019-04-04,AERO,AeroGrow traded as AERO
+184,"Forterra, Inc.",2019-04-02,FRTA,"fundamentals export, same CIK"
+190,Momentive Performance Materials Inc.,2019-03-22,,Momentive Performance Materials Inc. had no traded stock; its parent MPM Holdings did
+196,"WINDSTREAM HOLDINGS, INC.",2020-11-18,,Windstream emerged from bankruptcy privately held in September 2020
+202,"Southeastern Grocers, Inc.",2020-09-25,,Southeastern Grocers was privately held; its 2021 listing was withdrawn
+205,TAILORED BRANDS INC,2020-10-26,TLRDQ,"Tailored Brands traded over the counter as TLRDQ in bankruptcy, August to December 2020"
+209,TERMINIX GLOBAL HOLDINGS INC,2020-10-19,TMX,"fundamentals export, same CIK"
+213,"Sinclair Broadcast Group, LLC",2020-10-05,SBGI,Sinclair Broadcast Group traded as SBGI
+216,"TWENTY-FIRST CENTURY FOX, INC.",2019-02-28,FOXA,Twenty-First Century Fox traded as FOXA from July 2013
+217,CITRIX SYSTEMS INC,2019-03-08,CTXS,"fundamentals export, same CIK"
+220,"Del Taco Restaurants, Inc.",2019-02-21,TACO,Del Taco traded as TACO
+227,Centric Brands Inc.,2018-12-07,CTRC,Centric Brands traded as CTRC before its 2020 bankruptcy
+234,"PROSPER MARKETPLACE, INC",2018-11-26,,Prosper Marketplace has no traded stock
+235,FHC Holdings Corp,2018-11-19,FRAN,"FHC Holdings was Francesca's Holdings, FRAN"
+236,Tribune Publishing Co,2018-12-30,TPCO,"fundamentals export, same CIK"
+240,"TWITTER, INC.",2020-06-23,TWTR,"fundamentals export, same CIK"
+242,"NUTRANOMICS, INC.",2013-12-23,NNRX,"Nutranomics, OTC: NNRX (Yahoo Finance)"
+246,US XPRESS ENTERPRISES INC,2020-04-10,USX,"fundamentals export, same CIK"
+251,DCT Industrial Trust Inc.,2015-05-03,DCT,DCT Industrial Trust traded as DCT
+261,Tribune Publishing Co,2019-03-07,TPCO,"fundamentals export, same CIK"
+263,Protective Insurance Corp,2019-03-01,PTVCB,Protective Insurance's class B traded as PTVCB
+264,"VOLT INFORMATION SCIENCES, INC.",2019-02-15,VISI,Volt traded as VISI until September 2019 (company release)
+277,SOTHEBYS,2018-11-28,BID,"fundamentals export, same CIK"
+279,FREDS INC,2019-01-18,FRED,Fred's traded as FRED before its 2019 bankruptcy
+282,"DUNKIN' BRANDS GROUP, INC.",2018-11-29,DNKN,"fundamentals export, same CIK"
+291,STERLING BANCORP,2018-08-31,STL,"fundamentals export, same CIK"
+301,BT GROUP PLC,2018-09-04,BT,BT Group's ADRs traded on the NYSE as BT
+312,DELHAIZE GROUP,2008-03-17,DEG,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+315,SPRINT LLC,2018-08-25,S,Sprint Corp traded as S
+333,"Solera National Bancorp, Inc.",2018-06-26,SLRK,"Solera National Bancorp, OTC: SLRK (Yahoo Finance)"
+334,"Foundation Building Materials, Inc.",2018-06-21,FBM,"fundamentals export, same CIK"
+347,"TWENTY-FIRST CENTURY FOX, INC.",2018-04-12,FOXA,Twenty-First Century Fox traded as FOXA from July 2013
+348,DUN & BRADSTREET CORP/NW,2017-03-15,DNB,Dun & Bradstreet traded as DNB
+352,"Old COPPER Company, Inc.",2018-03-27,JCP,"Old Copper Company was J. C. Penney, JCP"
+356,"RealPage, Inc.",2018-05-10,RP,"fundamentals export, same CIK"
+374,SHUTTERFLY INC,2018-03-28,SFLY,"fundamentals export, same CIK"
+392,Klondex Mines Unlimited Liability Co,2017-02-06,KLDX,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+403,FERRELLGAS L P,2017-08-09,FGP,"operating partnership of Ferrellgas Partners, NYSE: FGP"
+405,Netshoes (Cayman) Ltd.,2017-12-08,NETS,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+406,"Nuance Communications, Inc.",2018-02-06,NUAN,"fundamentals export, same CIK"
+407,E TRADE FINANCIAL CORP,2015-10-09,ETFC,"fundamentals export, same CIK"
+419,BRIGGS & STRATTON CORP,2017-09-29,BGG,Briggs & Stratton traded as BGG before its 2020 bankruptcy
+423,"CORELOGIC, INC.",2017-08-29,CLGX,"fundamentals export, same CIK"
+426,"Nuance Communications, Inc.",2017-06-28,NUAN,"fundamentals export, same CIK"
+427,SONIC CORP,2017-09-26,SONC,Sonic traded as SONC
+431,"Mandiant, Inc.",2017-08-24,FEYE,"Mandiant, Inc. was FireEye, FEYE, until 2021"
+432,"WARNER MEDIA, LLC",2017-07-31,TWX,"Warner Media was Time Warner, TWX"
+435,"MAM SOFTWARE GROUP, INC.",2017-03-14,MAMS,"fundamentals export, same CIK"
+438,"WELLCARE HEALTH PLANS, INC.",2017-01-27,WCG,"fundamentals export, same CIK"
+442,"WORLD WRESTLING ENTERTAINMENT, LLC",2017-07-06,WWE,World Wrestling Entertainment traded as WWE
+445,"Hawkeye Acquisition, Inc.",2017-05-25,MDP,"Hawkeye Acquisition is Meredith, MDP"
+452,"UNITED AIRLINES, INC.",2017-05-15,UAL,"subsidiary of United Continental Holdings, NYSE: UAL"
+454,Neiman Marcus Group LTD LLC,2017-04-14,,Neiman Marcus Group LTD was privately held; it filed with the SEC for its bonds
+457,Gannett Media Corp.,2017-05-01,GCI,Gannett traded as GCI
+460,LANDAUER INC,2017-03-17,LDR,"fundamentals export, same CIK"
+463,Spiral Toys Inc.,2017-02-27,STOY,"fundamentals export, same CIK"
+468,"POPEYES LOUISIANA KITCHEN, INC.",2017-01-19,PLKI,"fundamentals export, same CIK"
+469,AOL Inc.,2004-06-23,TWX,"AOL was part of Time Warner, TWX, until 2009"
+474,"WARNER MEDIA, LLC",2016-12-16,TWX,"Warner Media was Time Warner, TWX"
+476,LINKEDIN CORP,2016-12-17,MSFT,"LinkedIn was bought by Microsoft, MSFT, on 8 December 2016"
+492,"Jive Software, Inc.",2016-09-23,JIVE,Jive Software traded as JIVE
+496,MULTI COLOR Corp,2016-06-15,LABL,"fundamentals export, same CIK"
+498,TWDC Enterprises 18 Corp.,2016-07-29,DIS,The Walt Disney Company (renamed TWDC Enterprises 18 in 2019) traded as DIS
+500,"TWITTER, INC.",2016-06-08,TWTR,"fundamentals export, same CIK"
+505,Time Inc.,2016-05-27,TIME,Time Inc. traded as TIME
+507,ALTABA INC.,2016-05-12,YHOO,"Altaba was Yahoo, YHOO, until June 2017"
+512,GOLDCORP INC,2016-04-27,GG,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+518,"21st Century Oncology Holdings, Inc.",2016-03-04,,21st Century Oncology was privately held; it filed with the SEC for its bonds
+519,MICHAELS STORES INC,2011-05-01,,Michaels Stores was privately held until Michaels Companies listed in June 2014
+525,POLYCOM INC,2016-02-12,PLCM,"fundamentals export, same CIK"
+528,Care.com Inc,2016-03-10,CRCM,"fundamentals export, same CIK"
+529,InterXion Holding N.V.,2016-01-11,INXN,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+531,Neiman Marcus Group LTD LLC,2016-01-29,,Neiman Marcus Group LTD was privately held; it filed with the SEC for its bonds
+532,AVIVA PLC,2016-02-17,AVVIY,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+534,CITRIX SYSTEMS INC,2016-01-12,CTXS,"fundamentals export, same CIK"
+543,"STARWOOD HOTELS & RESORTS WORLDWIDE, LLC",2015-11-20,HOT,"fundamentals export, same CIK"
+550,"WEB.COM GROUP, INC.",2015-08-18,WEB,"fundamentals export, same CIK"
+551,AKORN INC,2015-06-18,AKRX,Akorn traded as AKRX before its 2020 bankruptcy
+553,HEARTLAND PAYMENT SYSTEMS INC,2009-01-20,HPY,"fundamentals export, same CIK"
+554,"AeroGrow International, Inc.",2015-07-10,AERO,AeroGrow traded as AERO
+555,E TRADE FINANCIAL CORP,2015-08-05,ETFC,"fundamentals export, same CIK"
+556,ALION SCIENCE & TECHNOLOGY CORP,2014-02-13,,Alion Science & Technology was employee-owned; no traded stock
+563,STAPLES INC,2015-07-13,SPLS,Staples traded as SPLS
+564,FREDS INC,2015-06-15,FRED,Fred's traded as FRED before its 2019 bankruptcy
+565,Mimecast Ltd,2021-01-12,MIME,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+567,"STARWOOD HOTELS & RESORTS WORLDWIDE, LLC",2010-03-06,HOT,"fundamentals export, same CIK"
+570,DIGITAL RIVER INC /DE,2010-06-04,DRIV,Digital River traded as DRIV
+573,WALGREEN CO,2010-12-10,WAG,Walgreen Co traded as WAG until the 2014 Walgreens Boots Alliance reorganisation
+578,EMC CORP,2011-03-18,EMC,EMC traded as EMC
+585,"TWENTY-FIRST CENTURY FOX, INC.",2011-05-10,NWSA,"Fox was part of News Corp, NWSA, until the June 2013 split"
+589,Viacom Inc.,2011-06-28,VIAB,"fundamentals export, same CIK"
+593,MONSANTO CO /NEW/,2011-07-12,MON,Monsanto traded as MON
+598,"TWENTY-FIRST CENTURY FOX, INC.",2011-09-20,NWSA,"Fox was part of News Corp, NWSA, until the June 2013 split"
+604,NORTEL INVESTMENTS INC,2012-02-14,NTL,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+605,MONSANTO CO /NEW/,2012-03-01,MON,Monsanto traded as MON
+608,PANASONIC Corp,2012-05-04,PCRHY,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+611,LINKEDIN CORP,2012-06-06,LNKD,"fundamentals export, same CIK"
+618,ALTABA INC.,2012-07-12,YHOO,"Altaba was Yahoo, YHOO, until June 2017"
+623,"Activision Blizzard, Inc.",2012-08-09,ATVI,"fundamentals export, same CIK"
+624,AVX Corp,2012-08-26,AVX,AVX traded as AVX
+631,BARNES & NOBLE INC,2012-10-24,BKS,"fundamentals export, same CIK"
+637,"TWITTER, INC.",2013-02-01,,"Twitter listed in November 2013, after this breach"
+641,CENTRAL HUDSON GAS & ELECTRIC CORP,2013-02-19,CHG,"subsidiary of CH Energy Group, NYSE: CHG, until Fortis bought it in June 2013"
+642,"Zendesk, Inc.",2013-02-21,,"Zendesk listed in May 2014, after this breach"
+649,ALTABA INC.,2013-05-20,YHOO,"Altaba was Yahoo, YHOO, until June 2017"
+650,MONSANTO CO /NEW/,2013-05-28,MON,Monsanto traded as MON
+651,"TWENTY-FIRST CENTURY FOX, INC.",2013-06-07,NWSA,"Fox was part of News Corp, NWSA, until the June 2013 split"
+658,"Old COPPER Company, Inc.",2013-07-25,JCP,"Old Copper Company was J. C. Penney, JCP"
+659,US AIRWAYS GROUP INC,2013-08-08,LCC,"fundamentals export, same CIK"
+669,Affinity Gaming,2013-11-12,,Affinity Gaming had no traded stock
+671,"CAESARS HOLDINGS, INC.",2013-11-28,CZR,Caesars Entertainment traded as CZR
+678,SHUTTERFLY INC,2014-11-26,SFLY,"fundamentals export, same CIK"
+681,Neiman Marcus Group LTD LLC,2014-01-10,,Neiman Marcus Group LTD was privately held; it filed with the SEC for its bonds
+683,"EASTON-BELL SPORTS, INC.",2014-01-17,,Easton-Bell Sports was privately held; it filed with the SEC for its bonds
+684,MICHAELS STORES INC,2014-01-25,,Michaels Stores was privately held until Michaels Companies listed in June 2014
+688,MEDTRONIC INC,2014-02-10,MDT,Medtronic Inc traded as MDT before its 2015 reorganisation
+690,"ST JUDE MEDICAL, LLC",2014-02-10,STJ,St. Jude Medical traded as STJ
+692,ALASKA COMMUNICATIONS SYSTEMS GROUP INC,2014-02-24,ALSK,"fundamentals export, same CIK"
+697,"Michaels Companies, Inc.",2014-04-17,,"Michaels Companies listed in June 2014, after this breach"
+698,Affinity Gaming,2014-04-24,,Affinity Gaming had no traded stock
+699,AOL Inc.,2014-04-28,AOL,"fundamentals export, same CIK"
+701,MONSANTO CO /NEW/,2014-05-14,MON,Monsanto traded as MON
+704,ROWAN COMPANIES PLC,2014-05-27,RDC,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+713,"Meet Group, Inc.",2014-08-18,MEET,"fundamentals export, same CIK"
+723,CAFEPRESS INC.,2014-10-10,PRSS,"fundamentals export, same CIK"
+724,STAPLES INC,2014-10-20,SPLS,Staples traded as SPLS
+730,"bebe stores, inc.",2014-12-05,BEBE,bebe stores traded as BEBE
+743,"AeroGrow International, Inc.",2015-06-02,AERO,AeroGrow traded as AERO
+744,DUN & BRADSTREET CORP/NW,2013-09-25,DNB,Dun & Bradstreet traded as DNB
+751,"Mandiant, Inc.",2020-12-08,FEYE,"Mandiant, Inc. was FireEye, FEYE, until 2021"
+756,MPM Holdings Inc.,2019-03-22,MPMQ,"fundamentals export, same CIK"
+761,"Medidata Solutions, Inc.",2014-09-25,MDSO,"fundamentals export, same CIK"
+763,"Albertsons Companies, LLC",2014-09-29,,Albertsons was privately held until its 2020 listing
+764,SUPERVALU INC,2014-09-29,SVU,"fundamentals export, same CIK"
+765,"Albertsons Companies, LLC",2014-08-14,,Albertsons was privately held until its 2020 listing
+766,SUPERVALU INC,2014-08-14,SVU,"fundamentals export, same CIK"
+770,MAPLEBY HOLDINGS MERGER Corp,2006-02-14,OMX,"fundamentals export, same CIK"
+772,ALTABA INC.,2016-12-14,YHOO,"Altaba was Yahoo, YHOO, until June 2017"
+773,ALTABA INC.,2016-12-14,YHOO,"Altaba was Yahoo, YHOO, until June 2017"
+774,ALTABA INC.,2016-09-22,YHOO,"Altaba was Yahoo, YHOO, until June 2017"
+824,PharMerica CORP,2018-01-23,,PharMerica was taken private in December 2017
+827,Maxar Technologies Inc.,2017-03-23,MDA,"MacDonald, Dettwiler and Associates (renamed Maxar in October 2017), TSX: MDA, owned the breached Space Systems/Loral"
+831,"Scripps Networks Interactive, Inc.",2015-10-16,SNI,Scripps Networks Interactive traded as SNI
+832,RED HAT INC,2015-08-22,RHT,"fundamentals export, same CIK"
+833,RED HAT INC,2015-09-17,RHT,"fundamentals export, same CIK"
+834,AVON PRODUCTS INC,2020-06-09,NTCO,"subsidiary of Natura &Co, NYSE: NTCO, from January 2020"
+841,"Blueknight Energy Partners, L.P.",2021-02-12,BKEP,"fundamentals export, same CIK"
+844,SOUTH JERSEY INDUSTRIES INC,2021-02-11,SJI,"fundamentals export, same CIK"
+858,"Southeastern Grocers, Inc.",2020-10-05,,Southeastern Grocers was privately held; its 2021 listing was withdrawn
+864,MTS SYSTEMS CORP,2021-03-23,MTSC,"fundamentals export, same CIK"
+875,"Signify Health, Inc.",2021-03-11,SGFY,"fundamentals export, same CIK"
+877,FLAGSTAR BANCORP INC,2021-03-22,FBC,"fundamentals export, same CIK"
+879,SIERRA WIRELESS INC,2021-03-23,SWIR,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+887,"Jounce Therapeutics, Inc.",2021-04-01,JNCE,"fundamentals export, same CIK"
+897,LYDALL INC /DE/,2021-04-23,LDL,"fundamentals export, same CIK"
+902,ALLIANCEBERNSTEIN L.P.,2021-04-08,AB,"operating partnership of AllianceBernstein Holding L.P., NYSE: AB"
+924,GLU MOBILE INC,2015-03-13,GLUU,"fundamentals export, same CIK"
+932,Ardagh Group S.A.,2021-05-17,ARD,"fundamentals export, same CIK; not reviewed, as the app shows only US breaches"
+940,"Spirit of Texas Bancshares, Inc.",2021-05-26,STXB,"fundamentals export, same CIK"
+943,NAVISTAR INTERNATIONAL CORP,2021-06-07,NAV,"fundamentals export, same CIK"
+950,SPECTRUM PHARMACEUTICALS INC,2021-06-09,SPPI,"fundamentals export, same CIK"
+954,MAGELLAN HEALTH INC,2020-05-12,MGLN,"fundamentals export, same CIK"
+981,DUKE REALTY CORP,2021-08-13,DRE,"fundamentals export, same CIK"
+989,"Franchise Group, Inc.",2021-08-24,FRG,"fundamentals export, same CIK"
+1012,"Sinclair Broadcast Group, LLC",2021-10-18,SBGI,Sinclair Broadcast Group traded as SBGI
+1036,NATUS MEDICAL INC,2021-11-17,NTUS,"fundamentals export, same CIK"
+1049,Circle Internet Finance Public Ltd Co,2021-12-23,,Circle was privately held until 2025
+1054,RR Donnelley & Sons Co,2021-12-27,RRD,"fundamentals export, same CIK"
+1064,NATIONAL WESTERN LIFE INSURANCE CO,2021-01-14,NWLI,"subsidiary of National Western Life Group, Nasdaq: NWLI"
+1065,"Shift Technologies, Inc.",2021-01-14,SFT,"Shift Technologies, Nasdaq: SFT from October 2020"
+1067,"Romeo Power, Inc.",2022-02-01,RMO,"fundamentals export, same CIK"
+1125,FLAGSTAR BANCORP INC,2022-06-14,FBC,"fundamentals export, same CIK"
+1142,"TWITTER, INC.",2022-08-05,TWTR,"fundamentals export, same CIK"
+1163,HOLLEY PERFORMANCE PRODUCTS INC,2021-11-10,HLLY,"subsidiary of Holley Inc., NYSE: HLLY from July 2021 (SEC filings)"
+1193,"Romeo Power, Inc.",2021-04-15,RMO,"fundamentals export, same CIK"
+1268,"Activision Blizzard, Inc.",2023-02-21,ATVI,"fundamentals export, same CIK"
+1269,GOOGLE INC.,2023-02-01,GOOG,Google Inc. traded as GOOG; by 2023 its parent Alphabet trades as GOOG
+1271,1st FRANKLIN FINANCIAL CORP,2023-01-18,,1st Franklin Financial lists no exchange-registered securities in its SEC filings

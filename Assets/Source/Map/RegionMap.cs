@@ -2,22 +2,19 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-// One map, the nation's or a region's, built as solid meshes in the bars' own
-// material: the land is a slab cut to its real outline, and every metro a
-// breached company is headquartered in lies on its face as a flat disc, its
-// pin. The map stands in its local XY plane, east along +X and north along
-// +Y, centred on its outline; its back is at z = 0 and its face toward the
-// viewer, at -Z.
+// One map, the nation's or a region's, drawn flat as the tool panel is, in the
+// bars' own material: the land a white face cut to its real outline and edged
+// in thin black coast lines, over a black back. The map stands in its local XY
+// plane, east along +X and north along +Y, centred on its outline; its back is
+// at z = 0 and its face a hair toward the viewer, at FaceZ.
 //
-// Every map is drawn in the national map's kilometres, so a pin stands at one
-// place on all of them: its cities' centre, weighted by their breaches. On a
-// region's map a pin is a metro, in its metro's colour, the colour its bars on
-// the sheet share, and a pin reaching over the region's border is cut along
-// it. The pipeline merged the metros so that no pin's centre lies inside
-// another's on its own region's map. The national map draws the pins smaller
-// against the land, so there it merges them again by the same rule, within
-// each region, and colours each by its region; the borders between regions
-// are drawn across the land.
+// Every map is drawn in the national map's kilometres. The national map fills
+// each region with its colour, black borders between them, and has no pins:
+// a fingertip there names a region. On a region's map every metro is a flat
+// disc, its pin, at its cities' centre weighted by their breaches, in the
+// colour its bars on the sheet share; a pin reaching over the region's border
+// is cut along it. The pipeline merged the metros so that no pin's centre lies
+// inside another's on its region's map.
 //
 // Each map has its own scale, given in its Look, but every pin shares one: a
 // pin's area is its breach count, so two pins of one size mean the same count
@@ -25,16 +22,19 @@ using UnityEngine.Rendering;
 // so a small metro is never buried under a large neighbour.
 public class RegionMap : MonoBehaviour
 {
+    // How far the face stands in front of the back, in metres: enough that the
+    // two never fight for depth, and too little to see as thickness.
+    public const float FaceZ = -0.001f;
+
     public struct Look
     {
         public float metresPerKm;
-        // A one-breach city's radius; a city of n breaches is √n times wider.
+        // A one-breach metro's radius; a metro of n breaches is √n times wider.
         public float dotRadius;
-        public float thickness;
         public float coastWidth;
         public float borderWidth;
         public Color land;
-        public Color landSide;
+        public Color back;
         public Color coast;
         public Color border;
         public Material material;
@@ -44,43 +44,38 @@ public class RegionMap : MonoBehaviour
     {
         public Vector2 centre;
         public float radius;
-        // What the pin is called: its metro, or on the national map the
-        // largest metro of those merged into it.
+        // The metro it stands for.
         public string name;
         public string region;
         public int breaches;
         public Color color;
-        // The cities whose breaches it holds.
-        public List<string> cities;
         // Whether the region's border cuts it, so only part of it is drawn.
         public bool cut;
     }
 
     // Enough for a round edge on a pin a few millimetres across; more is only
-    // more vertices, a few hundred cities over.
+    // more vertices, a hundred metros over.
     private const int DotSegments = 16;
 
-    // How far the coast and border lines sit off the face, how far the pins
-    // sit above them, and how far each smaller pin lies above the one before
-    // it: enough to never fight for depth, and too little to see.
+    // How far the region fills, the lines and the pins sit in front of the
+    // face, and how far each smaller pin lies above the one before it.
+    private const float FillLift = 0.0001f;
     private const float CoastLift = 0.0002f;
     private const float DotLift = 0.0004f;
     private const float DotStep = 0.00002f;
 
     private readonly List<Dot> _dots = new List<Dot>();
     private Vector2[] _cell;
+    private readonly List<(string region, Vector2[] cell)> _regions = new List<(string, Vector2[])>();
 
     public MapAtlas.Area Area { get; private set; }
 
     // The outline's size in metres, at this map's scale.
     public Vector2 Size { get; private set; }
 
-    // How far the face stands toward the viewer from the back, in metres.
-    public float Thickness { get; private set; }
-
     public IReadOnlyList<Dot> Dots => _dots;
 
-    // 'regionColors' colours the national map's pins; a region's map colours
+    // 'regionColors' fills the national map's regions; a region's map colours
     // each pin by its metro.
     public static RegionMap Build(Transform parent, MapAtlas atlas, MapAtlas.Area area,
         IReadOnlyList<BreachMap.City> cities, IReadOnlyDictionary<string, Color> regionColors, Look look)
@@ -90,13 +85,16 @@ public class RegionMap : MonoBehaviour
         var map = go.AddComponent<RegionMap>();
         map.Area = area;
         map.Size = area.bounds.size * look.metresPerKm;
-        map.Thickness = look.thickness;
 
         var mesh = new Builder();
         Vector2 centre = area.bounds.center;
         map.AddLand(mesh, look, centre);
-        if (area.IsNational) map.AddBorders(mesh, look, centre);
-        map.AddDots(mesh, atlas, cities, regionColors, look, centre);
+        if (area.IsNational)
+        {
+            map.AddRegions(mesh, atlas, regionColors, look, centre);
+            map.AddBorders(mesh, look, centre);
+        }
+        else map.AddDots(mesh, atlas, cities, look, centre);
 
         go.AddComponent<MeshFilter>().sharedMesh = mesh.Finish(area.name);
         var renderer = go.AddComponent<MeshRenderer>();
@@ -123,29 +121,32 @@ public class RegionMap : MonoBehaviour
         return false;
     }
 
-    // The pin holding a city, or false when this map has none.
-    public bool TryDotOf(string city, out Dot found)
+    // The region under a point on the national map, its land and the water
+    // nearest it, or false off every region and on a region's map.
+    public bool TryRegionAt(Vector2 local, out string region)
     {
-        foreach (Dot dot in _dots)
-            if (dot.cities.Contains(city)) { found = dot; return true; }
-        found = default;
+        foreach ((string name, Vector2[] cell) in _regions)
+            if (Inside(cell, local) && InsideBounds(local)) { region = name; return true; }
+        region = null;
         return false;
     }
 
-    // The face and the back as the outline's own triangles, a wall along every
-    // ring of the outline (coasts and the shores of lakes alike), and a thin
-    // line around the face where the coast is.
+    private bool InsideBounds(Vector2 local) =>
+        Mathf.Abs(local.x) <= Size.x * 0.5f && Mathf.Abs(local.y) <= Size.y * 0.5f;
+
+    // The face as the outline's own triangles, the back as the same in black,
+    // and a thin black line around the face where the coast is.
     private void AddLand(Builder mesh, Look look, Vector2 centre)
     {
-        float s = look.metresPerKm, front = -look.thickness;
+        float s = look.metresPerKm;
         float[] v = Area.vertices;
         int count = v.Length / 2;
 
-        foreach (float z in new[] { front, 0f })
+        foreach ((float z, Color color) in new[] { (FaceZ, look.land), (0f, look.back) })
         {
             int at = mesh.Count;
             for (int i = 0; i < count; i++)
-                mesh.Vertex(new Vector3((v[2 * i] - centre.x) * s, (v[2 * i + 1] - centre.y) * s, z), look.land);
+                mesh.Vertex(new Vector3((v[2 * i] - centre.x) * s, (v[2 * i + 1] - centre.y) * s, z), color);
             int[] t = Area.triangles;
             for (int i = 0; i < t.Length; i += 3) mesh.Triangle(at + t[i], at + t[i + 1], at + t[i + 2]);
         }
@@ -154,22 +155,42 @@ public class RegionMap : MonoBehaviour
         {
             int n = ring.Length / 2;
             for (int i = 0; i < n; i++)
-            {
-                int j = (i + 1) % n;
-                Vector2 p = Local(ring, i, centre, s), q = Local(ring, j, centre, s);
-                if ((q - p).sqrMagnitude < 1e-12f) continue;
+                Line(mesh, Local(ring, i, centre, s), Local(ring, (i + 1) % n, centre, s),
+                    look.coastWidth, FaceZ - CoastLift, look.coast);
+        }
+    }
 
-                mesh.Quad(new Vector3(p.x, p.y, 0f), new Vector3(q.x, q.y, 0f),
-                          new Vector3(q.x, q.y, front), new Vector3(p.x, p.y, front), look.landSide);
-                Line(mesh, p, q, look.coastWidth, front - CoastLift, look.coast);
-            }
+    // Each region's own land laid over the national face in its colour, and
+    // its share of the plane kept, so a fingertip can be told which region it
+    // is on. A region's outline is a little finer than the national one; the
+    // borders drawn over them hide where the two differ.
+    private void AddRegions(Builder mesh, MapAtlas atlas, IReadOnlyDictionary<string, Color> regionColors,
+        Look look, Vector2 centre)
+    {
+        float s = look.metresPerKm, z = FaceZ - FillLift;
+        foreach (MapAtlas.Area region in atlas.Areas)
+        {
+            if (region.IsNational) continue;
+            Color color = regionColors != null && regionColors.TryGetValue(region.region, out Color c) ? c : look.land;
+
+            float[] v = region.vertices;
+            int at = mesh.Count;
+            for (int i = 0; i < v.Length / 2; i++)
+                mesh.Vertex(new Vector3((v[2 * i] - centre.x) * s, (v[2 * i + 1] - centre.y) * s, z), color);
+            int[] t = region.triangles;
+            for (int i = 0; i < t.Length; i += 3) mesh.Triangle(at + t[i], at + t[i + 1], at + t[i + 2]);
+
+            if (region.cell == null) continue;
+            var cell = new Vector2[region.cell.Length / 2];
+            for (int i = 0; i < cell.Length; i++) cell[i] = Local(region.cell, i, centre, s);
+            _regions.Add((region.region, cell));
         }
     }
 
     // The lines between regions, drawn across the face as the coast is.
     private void AddBorders(Builder mesh, Look look, Vector2 centre)
     {
-        float s = look.metresPerKm, z = -look.thickness - CoastLift;
+        float s = look.metresPerKm, z = FaceZ - CoastLift;
         foreach (float[] line in Area.borders)
             for (int i = 0; i + 1 < line.Length / 2; i++)
                 Line(mesh, Local(line, i, centre, s), Local(line, i + 1, centre, s), look.borderWidth, z, look.border);
@@ -186,10 +207,9 @@ public class RegionMap : MonoBehaviour
                   new Vector3(q.x + side.x, q.y + side.y, z), new Vector3(q.x - side.x, q.y - side.y, z), color);
     }
 
-    // A flat disc per metro, lying on the face; on a region's map, every
-    // metro whose pin reaches into the region, cut along its border.
-    private void AddDots(Builder mesh, MapAtlas atlas, IReadOnlyList<BreachMap.City> cities,
-        IReadOnlyDictionary<string, Color> regionColors, Look look, Vector2 centre)
+    // A flat disc per metro whose pin reaches into the region, lying on the
+    // face and cut along the region's border.
+    private void AddDots(Builder mesh, MapAtlas atlas, IReadOnlyList<BreachMap.City> cities, Look look, Vector2 centre)
     {
         float s = look.metresPerKm;
         if (Area.cell != null)
@@ -198,23 +218,16 @@ public class RegionMap : MonoBehaviour
             for (int i = 0; i < _cell.Length; i++) _cell[i] = Local(Area.cell, i, centre, s);
         }
 
-        List<Pin> pins = Metros(atlas, cities, centre, s);
-        if (Area.IsNational) MergeOverlaps(pins, look.dotRadius);
-
-        foreach (Pin pin in pins)
+        foreach (Pin pin in Metros(atlas, cities, centre, s))
         {
             var dot = new Dot
             {
                 centre = pin.at,
-                radius = RadiusOf(pin.breaches, look.dotRadius),
+                radius = look.dotRadius * Mathf.Sqrt(Mathf.Max(pin.breaches, 1)),
                 name = pin.name,
                 region = pin.region,
                 breaches = pin.breaches,
-                color = Area.IsNational && regionColors != null &&
-                        regionColors.TryGetValue(pin.region, out Color regional)
-                    ? regional
-                    : pin.color,
-                cities = pin.cities
+                color = pin.color
             };
 
             if (_cell != null)
@@ -228,7 +241,7 @@ public class RegionMap : MonoBehaviour
         }
         _dots.Sort((a, b) => b.radius.CompareTo(a.radius));
 
-        float face = -look.thickness - DotLift;
+        float face = FaceZ - DotLift;
         var rim = new List<Vector2>(DotSegments * 2);
         for (int d = 0; d < _dots.Count; d++)
         {
@@ -246,8 +259,6 @@ public class RegionMap : MonoBehaviour
         }
     }
 
-    private static float RadiusOf(int breaches, float oneBreach) => oneBreach * Mathf.Sqrt(Mathf.Max(breaches, 1));
-
     // One pin before it is drawn: where it stands on this map, in metres.
     private sealed class Pin
     {
@@ -256,7 +267,6 @@ public class RegionMap : MonoBehaviour
         public Color color;
         public Vector2 at;
         public int breaches;
-        public List<string> cities = new List<string>();
     }
 
     // Every metro as one pin, at its cities' centre weighted by their breaches.
@@ -281,43 +291,8 @@ public class RegionMap : MonoBehaviour
             int n = Mathf.Max(city.breaches, 1);
             pin.at = (pin.at * pin.breaches + (km - centre) * s * n) / (pin.breaches + n);
             pin.breaches += n;
-            pin.cities.Add(city.name);
         }
         return pins;
-    }
-
-    // The pipeline's rule again, at this map's scale: within a region, the
-    // largest pin takes in the first smaller one whose centre lies inside it,
-    // and the two become one at their weighted centre, as wide as their
-    // breaches together; until no centre lies inside another pin. Named after
-    // the largest pin merged.
-    private static void MergeOverlaps(List<Pin> pins, float oneBreach)
-    {
-        bool merged = true;
-        while (merged)
-        {
-            merged = false;
-            pins.Sort((a, b) => a.breaches != b.breaches
-                ? b.breaches.CompareTo(a.breaches)
-                : string.CompareOrdinal(a.name, b.name));
-            for (int i = 0; i < pins.Count && !merged; i++)
-            {
-                Pin big = pins[i];
-                float reach = RadiusOf(big.breaches, oneBreach);
-                for (int j = i + 1; j < pins.Count; j++)
-                {
-                    Pin small = pins[j];
-                    if (small.region != big.region || (small.at - big.at).sqrMagnitude >= reach * reach) continue;
-                    int n = big.breaches + small.breaches;
-                    big.at = (big.at * big.breaches + small.at * small.breaches) / n;
-                    big.breaches = n;
-                    big.cities.AddRange(small.cities);
-                    pins.RemoveAt(j);
-                    merged = true;
-                    break;
-                }
-            }
-        }
     }
 
     // A flat polygon lying on the face.

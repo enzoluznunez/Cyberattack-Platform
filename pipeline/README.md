@@ -50,7 +50,11 @@ One command, and nothing kept in between: every run starts from the exports.
 `clean.py` owns what the tables hold, `publish.py` writes them, and
 `rebuild.py` runs the two in order. Two tables come out:
 
-- `breaches` — one row per breach. Attack types, information accessed, breached
+- `breaches` — one row per breach whose company traded under a ticker when
+  it was disclosed. Where the export leaves the ticker blank, `tickers.csv`
+  gives the one looked up by hand, with its source, or none; a breach with
+  none is left out of every table, and a blank ticker `tickers.csv` does not
+  list stops the rebuild. Attack types, information accessed, breached
   subsidiaries and parent/subsidiary are real lists, dates are dates, and every
   breach carries the industry (`division`) of its company, the country, city
   and coordinates of its headquarters, the metro that city is in (US only:
@@ -101,17 +105,17 @@ checks every US place lands on its national and regional map.
 
 ## Serving the app
 
-The app ships no data. It lists the national sheet and one sheet per US region
-at startup, reads each from `/sheet`, and draws its pins from `/map`:
+The app ships no data. It lists one sheet per metro at startup, from the metros
+`/map` names, reads each from `/sheet`, and draws its pins from `/map`:
 
 | Endpoint | What it answers |
 |---|---|
 | `/health` | Whether the service is up, and how many rows each table holds. Open without a key at the gateway. |
-| `/sheet?region=…` | One region's sheet, as the CSV the app parses: a row per breach, its six figures, and each figure's place among every US breach. Without `region`, every US breach, region by region, coloured by region |
+| `/sheet?metro=…` | One metro's sheet, as the CSV the app parses: a row per breach, titled by ticker and disclosure date, its six figures, and each figure's place among every US breach |
 | `/breaches` | Individual US breaches, newest first, for the assistant to read out |
 | `/map` | The regions, west to east, and every US city with a breach: its metro, its breach count and the colour its pin and bars share |
 
-A sheet takes only its region, since every bar is measured against the whole
+A sheet takes only its metro, since every bar is measured against the whole
 country. `/breaches` takes filters: `since`, `until`, `industry`, `attack`,
 `information`, `accessed`, `relationship`, `region`, `market`, `state` and
 `sec`. Most take several names separated by commas; repeat `industry` instead,

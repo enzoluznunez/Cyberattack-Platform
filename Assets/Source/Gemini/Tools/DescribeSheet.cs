@@ -15,7 +15,7 @@ public sealed class DescribeSheet : AgenticTool {
                       "number is its position within that range), 'rowCategory' and 'columnCategory' (what the rows " +
                       "and columns represent, when the data says), its 'position', its 'metro' " +
                       "(when every row on it belongs to one) or 'metros' (the metros on it, largest first, when it " +
-                      "holds more than one; on the United States sheet these are the regions), and " +
+                      "holds more than one), and " +
                       "'projections' (the strips the Profile tool has raised above this " +
                       "sheet). This carries no cell values; call GetNumbers for the numbers."
     };

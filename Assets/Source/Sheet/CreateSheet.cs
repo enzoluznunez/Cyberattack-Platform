@@ -44,6 +44,7 @@ public class CreateSheet : MonoBehaviour
     private readonly List<BarTarget> _bars = new List<BarTarget>();
     private Coroutine _grow;
     private float _cellSize;
+    private float _rowPitch;
     private float _groupGap;
     private int _groupSize = 1;
     private float _baseY;
@@ -56,6 +57,11 @@ public class CreateSheet : MonoBehaviour
     public int RowCount => rowMax - rowMin + 1;
     public int ColCount => colMax - colMin + 1;
     public float CellSize => _cellSize;
+
+    // How far apart lines stand along an axis: columns a bar and its gap apart,
+    // rows far enough apart that their titles, which run along the rows, never
+    // reach into one another.
+    public float PitchOn(bool columns) => columns ? _cellSize : _rowPitch;
     public float BaseY => _baseY;
     public bool IsBuilt => _live.Count > 0;
 
@@ -73,30 +79,31 @@ public class CreateSheet : MonoBehaviour
     public float GroupGapOn(bool columns) => columns ? _groupGap : 0f;
 
     public float CenterX => Center(colMin, colMax, _cellSize, _groupSize, _groupGap);
-    public float CenterZ => Center(rowMin, rowMax, _cellSize, 1, 0f);
+    public float CenterZ => Center(rowMin, rowMax, _rowPitch, 1, 0f);
 
     public float LineCoord(bool columns, int line) =>
-        Raw(line, _cellSize, GroupSizeOn(columns), GroupGapOn(columns)) - (columns ? CenterX : CenterZ);
+        Raw(line, PitchOn(columns), GroupSizeOn(columns), GroupGapOn(columns)) - (columns ? CenterX : CenterZ);
 
     public float LineFraction(bool columns, float coord)
     {
-        if (_cellSize <= 1e-6f) return 0f;
+        float cell = PitchOn(columns);
+        if (cell <= 1e-6f) return 0f;
 
         float p = coord + (columns ? CenterX : CenterZ);
         int size = GroupSizeOn(columns);
         float gap = GroupGapOn(columns);
-        if (size <= 1 || gap <= 0f) return p / _cellSize;
+        if (size <= 1 || gap <= 0f) return p / cell;
 
-        float pitch = size * _cellSize + gap;
+        float pitch = size * cell + gap;
         float block = Mathf.Floor(p / pitch);
         float within = p - block * pitch;
 
         // Inside a block the lines sit one cell apart; across the gap the fraction
         // runs on smoothly to the next block's first line, so a drag never jumps.
-        float edge = (size - 1) * _cellSize;
+        float edge = (size - 1) * cell;
         float step = within <= edge
-            ? within / _cellSize
-            : (size - 1) + (within - edge) / (_cellSize + gap);
+            ? within / cell
+            : (size - 1) + (within - edge) / (cell + gap);
 
         return block * size + step;
     }
@@ -105,12 +112,12 @@ public class CreateSheet : MonoBehaviour
     // axis, a single line otherwise. Blocks are evenly pitched even when the lines
     // inside them are not, so anything that drags or reorders can work in block
     // space and stay the simple uniform problem it always was.
-    public float BlockPitch(bool columns) => GroupSizeOn(columns) * _cellSize + GroupGapOn(columns);
+    public float BlockPitch(bool columns) => GroupSizeOn(columns) * PitchOn(columns) + GroupGapOn(columns);
 
     public int BlockMin(bool columns) => (columns ? colMin : rowMin) / GroupSizeOn(columns);
     public int BlockMax(bool columns) => (columns ? colMax : rowMax) / GroupSizeOn(columns);
 
-    private float BlockInset(bool columns) => (GroupSizeOn(columns) - 1) * _cellSize * 0.5f;
+    private float BlockInset(bool columns) => (GroupSizeOn(columns) - 1) * PitchOn(columns) * 0.5f;
 
     public float BlockCoord(bool columns, int block) =>
         LineCoord(columns, block * GroupSizeOn(columns)) + BlockInset(columns);
@@ -127,7 +134,7 @@ public class CreateSheet : MonoBehaviour
         int size = GroupSizeOn(columns);
         float first = coord - BlockInset(columns);
         for (int s = 0; s < size; s++)
-            LayoutLine(columns, block * size + s, first + s * _cellSize);
+            LayoutLine(columns, block * size + s, first + s * PitchOn(columns));
     }
 
     public float BlockOffset(bool columns, int block)
@@ -144,7 +151,7 @@ public class CreateSheet : MonoBehaviour
 
     public void Build(DataSource data, Material material,
         int rMin, int rMax, int cMin, int cMax,
-        float cellSize, float groupGap, float height, float baseY, float cubeSide,
+        float cellSize, float rowPitch, float groupGap, float height, float baseY, float cubeSide,
         SheetLabelStyle labels)
     {
         if (data == null) return;
@@ -156,6 +163,7 @@ public class CreateSheet : MonoBehaviour
         rowMin = rMin; rowMax = rMax; colMin = cMin; colMax = cMax;
         _material = material;
         _cellSize = cellSize;
+        _rowPitch = Mathf.Max(rowPitch, cellSize);
         _groupSize = data.ColumnGroupSize;
         _groupGap = _groupSize > 1 ? groupGap : 0f;
         _baseY = baseY;
@@ -222,7 +230,7 @@ public class CreateSheet : MonoBehaviour
         FitBounds();
 
         if (_labels == null) _labels = new SheetLabels(transform);
-        _labels.Rebuild(data, rMin, rMax, cMin, cMax, cellSize, _groupGap, cubeSide, baseY, labels);
+        _labels.Rebuild(data, rMin, rMax, cMin, cMax, cellSize, _rowPitch, _groupGap, cubeSide, baseY, labels);
     }
 
     public IReadOnlyList<CreateCube> CubesInLine(bool columns, int line) =>
@@ -417,20 +425,6 @@ public class CreateSheet : MonoBehaviour
         _tint = Untinted;
 
         for (int i = 0; i < _live.Count; i++) _live[i].ClearHighlight();
-    }
-
-    // Lights the bars of the rows given, by their place in the data: a pin
-    // pointed at on the map lights its city's breaches wherever a sort or
-    // filter has put them.
-    public void SetRowGlow(ICollection<int> dataRows, float swell)
-    {
-        _tint = null;
-        for (int i = 0; i < _live.Count; i++)
-        {
-            CreateCube cube = _live[i];
-            if (dataRows.Contains(cube.dataRow)) cube.SetHighlight(swell);
-            else cube.ClearHighlight();
-        }
     }
 
     private bool _grabbedLook;

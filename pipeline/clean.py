@@ -175,6 +175,32 @@ def located(raw):
             pd.Series([f[2] if f else None for f in found], index=raw.index, dtype="float64"))
 
 
+# The ticker each breach the export gives no ticker traded under when it was
+# disclosed, looked up by hand from its company's name, with where each came
+# from; a blank ticker means the company traded under none then.
+TICKERS_FILE = Path(__file__).with_name("tickers.csv")
+
+
+def looked_up_tickers(path=TICKERS_FILE):
+    """{breach_key: ticker, or None when there was none} from tickers.csv."""
+    listed_ = pd.read_csv(path, dtype=str, keep_default_na=False)
+    return {int(key): ticker.strip() or None for key, ticker in zip(listed_["breach_key"], listed_["ticker"])}
+
+
+def with_tickers(frame, looked_up):
+    """The breaches with a ticker: the export's, or for a breach it gives none,
+    the one tickers.csv looked up. A breach whose company traded under no
+    ticker when it was disclosed is left out of every table. A blank ticker
+    tickers.csv does not list stops the rebuild, so a new export's gaps are
+    looked up rather than silently dropped."""
+    blank = frame["ticker"].isna()
+    unlisted = sorted(set(frame.loc[blank, "breach_key"]) - set(looked_up))
+    if unlisted:
+        raise ValueError(f"breaches {unlisted} have no ticker, and tickers.csv does not list them")
+    filled = frame["ticker"].where(~blank, frame["breach_key"].map(looked_up))
+    return frame.assign(ticker=filled)[filled.notna()].reset_index(drop=True)
+
+
 def breaches(raw, sic):
     """One row per breach, typed. The ID numbers, phone number, address lines,
     duplicate state names and the second auditor block are left behind in the
@@ -240,6 +266,7 @@ def breaches(raw, sic):
         "stock_price_on": date(raw["stock_price_date"]),
         "financials_on": date(raw["financials_date"]),
     })
+    frame = with_tickers(frame, looked_up_tickers())
     frame["metro"] = metro_of(frame)
 
     us = frame["country"] == US

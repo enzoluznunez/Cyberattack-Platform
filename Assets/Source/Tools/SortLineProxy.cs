@@ -35,7 +35,7 @@ public class SortLineProxy : MonoBehaviour
         int perpMin = columns ? owner.rowMin : owner.colMin;
         int perpMax = columns ? owner.rowMax : owner.colMax;
         float span = owner.LineCoord(!columns, perpMax) - owner.LineCoord(!columns, perpMin) + cell;
-        float thickness = owner.GroupSizeOn(columns) * cell;
+        float thickness = owner.GroupSizeOn(columns) * owner.PitchOn(columns);
 
         GameObject go = new GameObject($"SortLine_{(columns ? "Col" : "Row")}_{block}");
         go.transform.SetParent(owner.transform, false);

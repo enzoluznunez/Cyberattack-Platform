@@ -15,10 +15,10 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "SetDataset",
         Description = "Open one of the listed datasets (switch to it); each keeps its own edits and undo " +
-                      "history. There is one for the whole country ('United States') and one per US region, " +
-                      "named for it ('West', 'New England'), all listed from the start and read in the " +
-                      "background, so this works whether or not one has been read yet. The map slides to the " +
-                      "map of the sheet it opens. Sliding the map opens its sheet too.",
+                      "history. There is one per metro, named for it ('New York, NY', 'Boston, MA'), all listed " +
+                      "from the start and read the first time they are opened, so this works whether or not " +
+                      "one has been read yet. The map slides to the metro's region. Poking a pin on the map " +
+                      "opens its metro's sheet too.",
         Parameters = ParametersFor(typeof(Args))
     };
 

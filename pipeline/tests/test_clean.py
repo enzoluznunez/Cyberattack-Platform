@@ -17,9 +17,33 @@ def sic(raw):
     return clean.company_sic(*raw)
 
 
-def test_every_breach_survives_cleaning(raw, breaches):
-    assert len(breaches) == len(raw[0])
+def test_every_breach_with_a_ticker_survives_cleaning(raw, breaches):
+    """Only the breaches whose company traded under no ticker when they were
+    disclosed are left out, and tickers.csv names every one of them."""
+    none = {key for key, ticker in clean.looked_up_tickers().items() if ticker is None}
+    assert len(breaches) == len(raw[0]) - len(none)
+    assert not none & set(breaches["breach_key"])
     assert breaches["breach_key"].is_unique
+
+
+def test_every_breach_has_a_ticker(breaches):
+    assert breaches["ticker"].notna().all()
+    # A share class follows a dot: BRK.A, BF.B.
+    assert breaches["ticker"].str.fullmatch(r"[A-Z]{1,5}(\.[A-Z])?").all()
+
+
+def test_a_blank_ticker_is_filled_from_tickers_csv(breaches):
+    ticker = breaches.set_index("breach_key")["ticker"]
+    assert ticker[1] == "GOOG"            # Google Inc., 2010
+    assert ticker[469] == "TWX"           # AOL, while part of Time Warner
+
+
+def test_a_blank_ticker_tickers_csv_does_not_list_stops_the_rebuild():
+    frame = pd.DataFrame({"breach_key": [1, 2], "ticker": ["AAPL", None]})
+    with pytest.raises(ValueError, match=r"breaches \[2\]"):
+        clean.with_tickers(frame, {})
+    assert list(clean.with_tickers(frame, {2: None})["breach_key"]) == [1]
+    assert list(clean.with_tickers(frame, {2: "MSFT"})["ticker"]) == ["AAPL", "MSFT"]
 
 
 def test_one_row_per_company_year(raw, fundamentals):
