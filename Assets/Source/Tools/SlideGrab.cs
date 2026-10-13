@@ -7,7 +7,7 @@ using UnityEngine;
 
 // A one-hand grab that slides a body along its pinned axes and nowhere else:
 // no throw, kinematic throughout, one point of hold. The sort lines and the
-// country maps are both taken hold of this way.
+// maps are both taken hold of this way.
 public static class SlideGrab
 {
     public static (Grabbable grabbable, HandGrabInteractable handGrab) Attach(GameObject go, Rigidbody body,

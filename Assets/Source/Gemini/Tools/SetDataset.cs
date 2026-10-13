@@ -15,10 +15,10 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "SetDataset",
         Description = "Open one of the listed datasets (switch to it); each keeps its own edits and undo " +
-                      "history. The breach database's sheets are listed from the start and fetched the first time " +
-                      "they are opened, so this is how one gets on screen and it works whether or not it has been " +
-                      "read before; sheets OpenSheet drew are listed too. Nothing else in the app changes " +
-                      "datasets: there is no button for it, so a user who wants a different sheet is asking you.",
+                      "history. There is one for the whole country ('United States') and one per US region, " +
+                      "named for it ('West', 'New England'), all listed from the start and read in the " +
+                      "background, so this works whether or not one has been read yet. The map slides to the " +
+                      "map of the sheet it opens. Sliding the map opens its sheet too.",
         Parameters = ParametersFor(typeof(Args))
     };
 

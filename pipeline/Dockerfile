@@ -10,7 +10,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY api.py database.py metrics.py sheetcsv.py ./
+COPY api.py database.py metrics.py metros.py sheetcsv.py ./
 
 # The API reads and never writes, so it runs as a user that cannot.
 RUN useradd --no-create-home --shell /usr/sbin/nologin api

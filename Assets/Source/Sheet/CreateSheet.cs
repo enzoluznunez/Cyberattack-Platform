@@ -198,10 +198,15 @@ public class CreateSheet : MonoBehaviour
                 Vector3 center = new Vector3(LineCoord(true, vc), (lo + hi) * 0.5f, z);
                 Vector3 size = new Vector3(half * 2f, hi - lo, half * 2f);
                 cube.SetBox(center, size);
+                // A figure the company never reported is a gap in the row,
+                // where a plate would read as the smallest figure there is.
+                bool shown = has || !data.HasHeights;
                 _bars.Add(new BarTarget { cube = cube, center = center, size = size });
 
                 cube.SetColor(ColorFor(data, has, dRow, dCol));
-                cube.SetVisible(true);
+                // A pooled cube may have been lit as another row's bar.
+                cube.ClearHighlight();
+                cube.SetVisible(shown);
 
                 _byCell[Key(vr, vc)] = cube;
                 LineBucket(_byCol, vc).Add(cube);
@@ -308,8 +313,8 @@ public class CreateSheet : MonoBehaviour
         }
     }
 
-    // A bar is drawn in the colour of the industry its row belongs to, which
-    // the sheet states per row, so reordering or filtering never repaints one.
+    // A bar is drawn in the colour of the metro its row belongs to, which the
+    // sheet states per row, so reordering or filtering never repaints one.
     private static Color ColorFor(DataSource data, bool has, int dRow, int dCol) =>
         has ? Shade(data.RowColorAt(dRow), data.GetColorFraction(dRow, dCol)) : NoData;
 
@@ -412,6 +417,20 @@ public class CreateSheet : MonoBehaviour
         _tint = Untinted;
 
         for (int i = 0; i < _live.Count; i++) _live[i].ClearHighlight();
+    }
+
+    // Lights the bars of the rows given, by their place in the data: a pin
+    // pointed at on the map lights its city's breaches wherever a sort or
+    // filter has put them.
+    public void SetRowGlow(ICollection<int> dataRows, float swell)
+    {
+        _tint = null;
+        for (int i = 0; i < _live.Count; i++)
+        {
+            CreateCube cube = _live[i];
+            if (dataRows.Contains(cube.dataRow)) cube.SetHighlight(swell);
+            else cube.ClearHighlight();
+        }
     }
 
     private bool _grabbedLook;

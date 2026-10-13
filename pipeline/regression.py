@@ -18,63 +18,48 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from metrics import ATTACK_TYPES, COUNTRIES, DIVISION_NAMES, FIRST_YEAR, LAST_YEAR, REGIONS, VIEWS
+from metrics import ATTACK_TYPES, DIVISION_NAMES, FIRST_YEAR, LAST_YEAR, US_REGIONS
 
 SNAPSHOT = Path(__file__).with_name("regression") / "answers.json"
 
 
 def requests():
-    paths = ["/health", "/views", "/sheet"]
+    paths = ["/health", "/map"]
 
-    for view in VIEWS:
-        paths.append(f"/sheet?view={view}")
-        paths.append(f"/sheet?view={view}&since=2018&until=2023")
-        paths.append(f"/sheet?view={view}&sec=true")
-        paths.append(f"/sheet?view={view}&sec=false")
-        for industry in DIVISION_NAMES:
-            paths.append(f"/sheet?view={view}&industry={industry}")
-        for attack in ATTACK_TYPES:
-            paths.append(f"/sheet?view={view}&attack={attack}")
-        for region in REGIONS:
-            paths.append(f"/sheet?view={view}&region={region}")
-        for country in COUNTRIES:
-            paths.append(f"/sheet?view={view}&country={country}")
-    for year in range(FIRST_YEAR, LAST_YEAR + 1):
-        paths.append(f"/sheet?since={year}&until={year}")
-    for limit, per in ((1, 1), (5, 2), (50, 5), (200, 50)):
-        paths.append(f"/sheet?view=before_after&limit={limit}&per={per}")
-    paths.append("/sheet?view=industry_by_attack&attack=Ransomware,Phishing&accessed=SSN")
-    paths.append("/sheet?view=attack_by_year&information=Financial&relationship=Subsidiary / Affiliate")
-    paths.append("/sheet?view=attack_by_year&state=CA,NY,TX&market=NYSE")
+    for region in US_REGIONS:
+        paths.append(f"/sheet?region={region}")
 
     for company in ("walmart", "sam's club", "target", "equifax", "%%", "zz-no-such-company"):
         paths.append(f"/breaches?company={company}")
     for ticker in ("WMT", "TGT", "EFX"):
         paths.append(f"/breaches?ticker={ticker}&limit=50")
     paths.append("/breaches?attack=Ransomware&since=2023&limit=50")
-
-    paths.append("/map")
-    paths.append("/map?attack=Ransomware&since=2020")
-    paths.append("/map?country=Japan,Canada")
+    for industry in DIVISION_NAMES:
+        paths.append(f"/breaches?industry={industry}&limit=50")
+    for attack in ATTACK_TYPES:
+        paths.append(f"/breaches?attack={attack}&limit=50")
+    for region in US_REGIONS:
+        paths.append(f"/breaches?region={region}&limit=50")
+    for year in range(FIRST_YEAR, LAST_YEAR + 1):
+        paths.append(f"/breaches?since={year}&until={year}&limit=50")
+    paths.append("/breaches?state=CA,NY,TX&market=NYSE&limit=50")
+    paths.append("/breaches?information=Financial&relationship=Subsidiary / Affiliate&limit=50")
 
     # Rejections: the assistant reads these out loud, so their wording is part
     # of the contract too.
     paths += [
-        "/sheet?view=pie_chart",
-        "/sheet?attack=Hacking",
-        "/sheet?industry=Atlantis",
-        f"/sheet?since={FIRST_YEAR - 1}",
-        f"/sheet?until={LAST_YEAR + 1}",
-        "/sheet?since=2020&until=2010",
-        "/sheet?state=Virginia",
-        "/sheet?limit=0",
-        "/sheet?limit=500",
-        "/sheet?bogus=1",
-        "/sheet?industry=Mining&attack=Credential Stuffing",
+        "/sheet",
+        "/sheet?region=Canada",
+        "/sheet?region=US West&since=2020",
+        "/breaches?attack=Hacking",
+        "/breaches?industry=Atlantis",
+        f"/breaches?since={FIRST_YEAR - 1}",
+        f"/breaches?until={LAST_YEAR + 1}",
+        "/breaches?since=2020&until=2010",
+        "/breaches?state=Virginia",
         "/breaches?company=x",
         "/breaches?limit=51",
-        "/map?country=Atlantis",
-        "/map?industry=Mining&attack=Credential Stuffing",
+        "/breaches?country=Japan",
     ]
     return paths
 

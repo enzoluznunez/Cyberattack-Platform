@@ -15,7 +15,7 @@ def test_gateway_description_is_current():
 def test_every_endpoint_passes_the_gateway():
     described = json.loads(gateway.TARGET.read_text())["paths"]
     assert set(described) == set(gateway.routes())
-    assert {"/health", "/views", "/sheet", "/breaches"} <= set(described)
+    assert {"/health", "/map", "/sheet", "/breaches"} <= set(described)
 
 
 def test_only_health_is_open():

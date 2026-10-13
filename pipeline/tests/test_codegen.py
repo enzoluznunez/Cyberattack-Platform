@@ -3,17 +3,7 @@ two languages. These tests fail if the generated file drifts from the OpenAPI
 schema, or the schema from metrics.py."""
 
 import codegen
-from metrics import (
-    ATTACK_TYPES,
-    COUNTRIES,
-    DEFAULT_VIEW,
-    DIVISION_NAMES,
-    FIRST_YEAR,
-    INFORMATION_ACCESSED,
-    LAST_YEAR,
-    SHEET_LIMIT,
-    VIEWS,
-)
+from metrics import ATTACK_TYPES, DIVISION_NAMES, FIRST_YEAR, INFORMATION_ACCESSED, LAST_YEAR, US_REGIONS
 
 
 def test_generated_file_is_current():
@@ -21,15 +11,13 @@ def test_generated_file_is_current():
     assert codegen.TARGET.read_text() == codegen.render(codegen.schema())
 
 
-def test_generated_years_and_limits_match_the_pydantic_models():
+def test_generated_years_match_the_pydantic_models():
     text = codegen.TARGET.read_text()
     assert f"FirstYear = {FIRST_YEAR};" in text
     assert f"LastYear = {LAST_YEAR};" in text
-    assert f"LimitDefault = {SHEET_LIMIT};" in text
-    assert f'DefaultView = "{DEFAULT_VIEW}";' in text
 
 
 def test_generated_names_are_the_ones_metrics_lists():
     text = codegen.TARGET.read_text()
-    for names in (list(VIEWS), DIVISION_NAMES, ATTACK_TYPES, INFORMATION_ACCESSED, list(COUNTRIES)):
+    for names in (DIVISION_NAMES, ATTACK_TYPES, INFORMATION_ACCESSED, US_REGIONS):
         assert all(f'"{name}"' in text for name in names)

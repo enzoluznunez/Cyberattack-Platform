@@ -9,28 +9,25 @@ from google.cloud.bigquery import ArrayQueryParameter, ScalarQueryParameter
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 import database
+import metros
 import sheetcsv
 from metrics import (
     ATTACK_TYPES,
     BREACH_LIMIT,
     BREACH_LIMIT_MAXIMUM,
-    COUNTRIES,
-    DEFAULT_VIEW,
     DIVISION_NAMES,
     FIRST_YEAR,
-    FUNDAMENTALS,
     INFORMATION_ACCESSED,
     INFORMATION_TYPES,
     LAST_YEAR,
-    LIMIT_MAXIMUM,
-    LIMIT_MINIMUM,
     MARKETS,
-    OFFSETS,
-    REGIONS,
+    METRICS,
+    OTHER_METRO_COLOR,
+    REGION_COLORS,
     RELATIONSHIPS,
-    SHEET_LIMIT,
-    SHEET_PER,
-    VIEWS,
+    US,
+    US_REGIONS,
+    region_title,
 )
 
 
@@ -40,28 +37,24 @@ def named(name, values):
 
 # Every filter that names a category takes only the names metrics.py lists, so
 # nothing a caller typed reaches a query except as a checked parameter value.
-ViewName = named("ViewName", VIEWS)
 DivisionName = named("DivisionName", DIVISION_NAMES)
 AttackType = named("AttackType", ATTACK_TYPES)
 InformationType = named("InformationType", INFORMATION_TYPES)
 Accessed = named("Accessed", INFORMATION_ACCESSED)
 Relationship = named("Relationship", RELATIONSHIPS)
-RegionName = named("RegionName", REGIONS)
+RegionName = named("RegionName", US_REGIONS)
 MarketName = named("MarketName", MARKETS)
-CountryName = named("CountryName", COUNTRIES)
 
 # The names each filter takes, which a rejection lists so the assistant can say
 # what would have worked.
 VOCABULARY = {
-    "view": list(VIEWS),
     "industry": DIVISION_NAMES,
     "attack": ATTACK_TYPES,
     "information": INFORMATION_TYPES,
     "accessed": INFORMATION_ACCESSED,
     "relationship": RELATIONSHIPS,
-    "region": REGIONS,
+    "region": US_REGIONS,
     "market": MARKETS,
-    "country": list(COUNTRIES),
 }
 
 # Every filter on a column, in the order a description lists them: the column it
@@ -76,7 +69,6 @@ FILTER_COLUMNS = {
     "region": ("b.region", False),
     "market": ("b.market", False),
     "state": ("b.state", False),
-    "country": ("b.country", False),
 }
 
 # Nothing here checks who is asking. Deployed, the service is private: Cloud
@@ -111,9 +103,9 @@ async def readable_validation_error(request: Request, exc: RequestValidationErro
 
 
 class Filters(BaseModel):
-    """Which breaches count. Every filter narrows; none changes what a sheet's
-    rows and columns mean. A filter that takes names takes several, and a
-    breach passes when it matches any of them."""
+    """Which breaches count, of those headquartered in the United States: the
+    app shows no other country. Every filter narrows. A filter that takes
+    names takes several, and a breach passes when it matches any of them."""
 
     model_config = {"extra": "forbid"}
 
@@ -131,7 +123,6 @@ class Filters(BaseModel):
     region: list[RegionName] = []
     market: list[MarketName] = []
     state: list[str] = []
-    country: list[CountryName] = []
     sec: bool | None = None
 
     # Callers send these as one comma-separated value; FastAPI hands a list only
@@ -172,8 +163,9 @@ class Filters(BaseModel):
         """(SQL condition on breaches aliased b, its parameters). Every value
         travels as a parameter; the field names come from this class, never
         from the request."""
-        clauses = ["b.year BETWEEN @since AND @until"]
-        parameters = [ScalarQueryParameter("since", "INT64", self.since),
+        clauses = ["b.country = @us", "b.year BETWEEN @since AND @until"]
+        parameters = [ScalarQueryParameter("us", "STRING", US),
+                      ScalarQueryParameter("since", "INT64", self.since),
                       ScalarQueryParameter("until", "INT64", self.until)]
         for name, (column, holds_list) in FILTER_COLUMNS.items():
             values = getattr(self, name)
@@ -187,7 +179,7 @@ class Filters(BaseModel):
         return " AND ".join(clauses), parameters
 
     def describe(self):
-        """The filters in words, for a sheet that came back empty."""
+        """The filters in words."""
         named_filters = [f"{name} {', '.join(str(v) for v in values)}"
                          for name in FILTER_COLUMNS if (values := getattr(self, name))]
         if self.sec is not None:
@@ -196,13 +188,14 @@ class Filters(BaseModel):
         return f"in {span}" + (f" with {'; '.join(named_filters)}" if named_filters else "")
 
 
-class SheetQuery(Filters):
-    view: ViewName = ViewName(DEFAULT_VIEW)
+class SheetQuery(BaseModel):
+    """One region's sheet, or with no region the whole United States'. It takes
+    no filters: a bar's height is its place among every US breach, so a sheet
+    of fewer breaches would measure them against the same whole."""
 
-    # Only the before/after sheet has a row per company, so only it is capped.
-    limit: Annotated[int, Field(ge=LIMIT_MINIMUM, le=LIMIT_MAXIMUM)] = SHEET_LIMIT
-    # How many companies each industry contributes when no industry is named.
-    per: Annotated[int, Field(ge=1, le=LIMIT_MAXIMUM)] = SHEET_PER
+    model_config = {"extra": "forbid"}
+
+    region: RegionName | None = None
 
 
 class BreachQuery(Filters):
@@ -217,23 +210,6 @@ class Health(BaseModel):
     status: str
     breaches: int
     company_years: int
-
-
-class View(BaseModel):
-    view: ViewName
-    title: str
-    rows: str
-    columns: str
-    measure: str
-    description: str
-
-
-class ViewCatalog(BaseModel):
-    default: ViewName
-    views: list[View]
-    first_year: int
-    last_year: int
-    filters: dict[str, list[str]]
 
 
 class Breach(BaseModel):
@@ -267,22 +243,26 @@ class BreachList(BaseModel):
     breaches: list[Breach]
 
 
+class Region(BaseModel):
+    region: RegionName
+    title: str
+    color: str
+    breaches: int
+
+
 class City(BaseModel):
     city: str
+    region: RegionName
+    metro: str
+    color: str
     lat: float
     lon: float
     breaches: int
 
 
-class Country(BaseModel):
-    country: CountryName
-    code: str
-    breaches: int
-    cities: list[City]
-
-
 class BreachMap(BaseModel):
-    countries: list[Country]
+    regions: list[Region]
+    cities: list[City]
 
 
 @app.get("/health", response_model=Health)
@@ -296,164 +276,99 @@ def health():
             "company_years": rows[database.FUNDAMENTALS]}
 
 
-@app.get("/views", response_model=ViewCatalog)
-def views():
-    """The sheets this API draws and the names every filter takes. This is the
-    request the app makes at startup to know what it can open."""
-    return {
-        "default": DEFAULT_VIEW,
-        "views": [{"view": view, **about} for view, about in VIEWS.items()],
-        "first_year": FIRST_YEAR,
-        "last_year": LAST_YEAR,
-        "filters": {name: list(values) for name, values in VOCABULARY.items() if name != "view"},
-    }
-
-
-class EmptySheet(Exception):
-    """No breach matched. The endpoint turns this into a 404, which the app
-    reports as a sheet it could not open."""
-
-
-def attack_axis(query):
-    """The attack types a sheet with an attack axis shows: the ones named, or
-    all of them. A breach with several attack types counts under each one
-    shown, so naming one type shows that type alone rather than every type its
-    breaches also had."""
-    return [str(a) for a in query.attack] if query.attack else ATTACK_TYPES
-
-
-def counted(query, row_column):
-    """Breaches counted by (row, attack type), for the sheets whose cells are
-    counts and one of whose axes is attack type."""
-    where, parameters = query.where()
-    parameters.append(ArrayQueryParameter("shown", "STRING", attack_axis(query)))
+def us_breaches():
+    """Every US breach, with what the maps and sheets draw of it. One query
+    serves both: the whole country is twelve hundred rows, and a bar's height
+    and a metro's colour are both measured against all of it."""
+    figures = ", ".join(f"b.{column}" for column in METRICS)
     return database.query(f"""
-        SELECT {row_column} AS row_key, attack, COUNT(*) AS n
-        FROM {database.table(database.BREACHES)} AS b, UNNEST(b.attack_types) AS attack
-        WHERE {where} AND {row_column} IS NOT NULL AND attack IN UNNEST(@shown)
-        GROUP BY row_key, attack
-    """, parameters)
+        SELECT b.breach_key, b.company, b.ticker, b.disclosed_on, b.region,
+               b.city, b.lat, b.lon, b.metro, {figures}
+        FROM {database.table(database.BREACHES)} AS b
+        WHERE b.country = @us
+    """, [ScalarQueryParameter("us", "STRING", US)])
 
 
-def attack_by_year(query):
-    found = counted(query, "b.year")
-    counts = {(row["attack"], row["row_key"]): row["n"] for row in found}
-    years = query.years
-    rows = [(attack, None, [counts.get((attack, year), 0) for year in years])
-            for attack in attack_axis(query)
-            if any((attack, year) in counts for year in years)]
-    if not rows:
-        return None
-    return sheetcsv.render("Attack Type / Year", [str(year) for year in years], rows)
+def metro_colors(rows):
+    """{metro: colour} for every metro the rows hold; black for the metros no
+    region has a colour left for."""
+    counts = {}
+    for row in rows:
+        if row["metro"] is not None:
+            key = (row["metro"], row["region"])
+            counts[key] = counts.get(key, 0) + 1
+    return {metro: color or OTHER_METRO_COLOR for metro, color in metros.colors(counts).items()}
 
 
-def industry_by_attack(query):
-    found = counted(query, "b.division")
-    counts = {(row["row_key"], row["attack"]): row["n"] for row in found}
-    attacks = attack_axis(query)
-    rows = [(industry, industry, [counts.get((industry, attack), 0) for attack in attacks])
-            for industry in DIVISION_NAMES
-            if any((industry, attack) in counts for attack in attacks)]
-    if not rows:
-        return None
-    return sheetcsv.render("Industry / Attack Type", attacks, rows, colored=True)
+def ranks(rows, column):
+    """{breach_key: its figure's place among every breach that reports one}, in
+    (0, 1]: the share of them at or below it, so the largest is 1 and equal
+    figures stand equally tall. A breach without the figure has no place."""
+    values = sorted(row[column] for row in rows if row[column] is not None)
+    if not values:
+        return {}
+    at_or_below = {}
+    for i, value in enumerate(values, 1):
+        at_or_below[value] = i
+    return {row["breach_key"]: at_or_below[row[column]] / len(values)
+            for row in rows if row[column] is not None}
 
 
-def offset_title(label, offset):
-    """'Assets -2' ... 'Assets 0' ... 'Assets +2'. One group's titles share
-    'Assets ' and nothing more, which is what the app takes the group's name
-    from."""
-    return f"{label} {offset:+d}" if offset else f"{label} 0"
+def breach_label(row):
+    """What a breach's row is called: its company's ticker, or its name where
+    it has none, and the day it was disclosed, which tells one company's
+    breaches apart."""
+    return f"{row['ticker'] or row['company']} ({row['disclosed_on'].isoformat()})"
 
 
-def before_after(query):
-    """One row per breached company, measured around its first breach that
-    passes the filters. The companies are the largest by assets in that year;
-    with no industry named, the largest few from each industry, so the sheet is
-    a comparison rather than a leaderboard of banks."""
-    where, parameters = query.where()
-    parameters += [ScalarQueryParameter("limit", "INT64", query.limit),
-                   ScalarQueryParameter("per", "INT64", query.per),
-                   ScalarQueryParameter("before", "INT64", -min(OFFSETS)),
-                   ScalarQueryParameter("after", "INT64", max(OFFSETS))]
-    per_industry = ("QUALIFY ROW_NUMBER() OVER (PARTITION BY division "
-                    "ORDER BY size DESC NULLS LAST, ticker) <= @per") if not query.industry else ""
-    fundamentals = database.table(database.FUNDAMENTALS)
-    figures = ", ".join(f"f.{column}" for column in FUNDAMENTALS)
+def region_sheet(rows, region):
+    """One row per breach in the region, its six figures and their heights;
+    with region None, every US breach. Within a region rows run metro by
+    metro, largest metro first, so a metro's bars stand together; the black
+    metros follow. Within a metro they run city by city, so lighting one pin's
+    breaches lights one block, and within a city oldest first.
 
-    found = database.query(f"""
-        WITH events AS (
-            SELECT b.cik, MIN(b.year) AS year
-            FROM {database.table(database.BREACHES)} AS b
-            WHERE {where}
-            GROUP BY b.cik
-        ),
-        names AS (
-            SELECT cik, ANY_VALUE(ticker) AS ticker, ANY_VALUE(division) AS division
-            FROM {fundamentals}
-            GROUP BY cik
-        ),
-        sized AS (
-            SELECT e.cik, e.year, n.ticker, n.division, f.assets_musd AS size
-            FROM events AS e
-            JOIN names AS n USING (cik)
-            LEFT JOIN {fundamentals} AS f ON f.cik = e.cik AND f.year = e.year
-            WHERE TRUE
-            {per_industry}
-        ),
-        chosen AS (
-            SELECT * FROM sized
-            ORDER BY size DESC NULLS LAST, ticker
-            LIMIT @limit
-        )
-        SELECT c.ticker, c.division, f.year - c.year AS offset, {figures}
-        FROM chosen AS c
-        LEFT JOIN {fundamentals} AS f
-          ON f.cik = c.cik AND f.year BETWEEN c.year - @before AND c.year + @after
-        ORDER BY c.ticker
-    """, parameters)
-    if not found:
+    The national sheet runs region by region, west to east, each as its own
+    sheet runs, and is coloured as the national map is: a row's category and
+    colour are its region's, so the regions' bars match their pins. None when
+    there is no breach to draw."""
+    placed = {column: ranks(rows, column) for column in METRICS}
+    color = metro_colors(rows)
+    here = [row for row in rows if region is None or row["region"] == region]
+    if not here:
         return None
 
-    companies = {}
-    for row in found:
-        company = companies.setdefault(row["ticker"], {"industry": row["division"], "figures": {}})
-        if row["offset"] is not None:
-            company["figures"][row["offset"]] = row
+    size = {}
+    for row in here:
+        size[row["metro"]] = size.get(row["metro"], 0) + 1
 
-    columns = [(column, offset) for column in FUNDAMENTALS for offset in OFFSETS]
-    rows = [(ticker, company["industry"],
-             [company["figures"][offset][column] if offset in company["figures"] else None
-              for column, offset in columns])
-            for ticker, company in companies.items()]
-    return sheetcsv.render("Company / Years from Breach",
-                           [offset_title(FUNDAMENTALS[column], offset) for column, offset in columns],
-                           rows, group=len(OFFSETS), colored=True)
+    def order(row):
+        metro = row["metro"]
+        grey = metro is None or color[metro] == OTHER_METRO_COLOR
+        return (US_REGIONS.index(row["region"]), grey, -size[metro], metro or "", row["city"] or "",
+                row["disclosed_on"], row["breach_key"])
 
+    def category(row):
+        if region is None:
+            return region_title(row["region"]), REGION_COLORS[row["region"]]
+        return row["metro"], color.get(row["metro"], OTHER_METRO_COLOR)
 
-SHEETS = {
-    "attack_by_year": attack_by_year,
-    "industry_by_attack": industry_by_attack,
-    "before_after": before_after,
-}
-
-
-def sheet_csv(query):
-    """One sheet, as the CSV the app parses. Every sheet the app draws comes
-    through here, so the rows it shows are the tables as they stand. A sheet
-    with no rows comes back None."""
-    text = SHEETS[query.view.value](query)
-    if text is None:
-        raise EmptySheet(f"no breaches {query.describe()}")
-    return text
+    lines = []
+    for row in sorted(here, key=order):
+        name, shade = category(row)
+        lines.append((breach_label(row), name, row["city"], shade,
+                      [row[column] for column in METRICS],
+                      [placed[column].get(row["breach_key"]) for column in METRICS]))
+    return sheetcsv.render("Breach / Figure", list(METRICS.values()), lines)
 
 
 @app.get("/sheet", response_class=PlainTextResponse)
 def sheet(query: Annotated[SheetQuery, Query()]):
-    try:
-        return sheet_csv(query)
-    except EmptySheet as empty:
-        raise HTTPException(404, str(empty)) from None
+    region = query.region.value if query.region else None
+    text = region_sheet(us_breaches(), region)
+    if text is None:
+        raise HTTPException(404, f"no breaches in {region_title(region) if region else 'the United States'}")
+    return text
 
 
 def like(text):
@@ -489,29 +404,29 @@ def breaches(query: Annotated[BreachQuery, Query()]):
     return {"total": found[0]["total"] if found else 0, "breaches": listed}
 
 
-@app.get("/map", response_model=BreachMap)
-def breach_map(query: Annotated[Filters, Query()]):
-    """Where the breached companies are headquartered: every country holding a
-    breach that passes the filters, most breaches first, each with one dot per
-    city, most breaches first. A breach counts once, in its country and in its
-    city; the one breach whose city the export left blank counts in its country
-    alone. A map of nothing is an answer, not an error."""
-    where, parameters = query.where()
-    found = database.query(f"""
-        SELECT b.country, b.city, b.lat, b.lon, COUNT(*) AS n
-        FROM {database.table(database.BREACHES)} AS b
-        WHERE {where}
-        GROUP BY b.country, b.city, b.lat, b.lon
-    """, parameters)
+def breach_map(rows):
+    """The regions, west to east, and every city with a breach: its region, its
+    metro, and the colour its pin and its bars share. The national map colours
+    a pin by its region instead, which the regions carry. A breach the export
+    gave no city counts in its region but has no pin."""
+    color = metro_colors(rows)
+    regions = {region: 0 for region in US_REGIONS}
+    cities = {}
+    for row in rows:
+        regions[row["region"]] += 1
+        if row["city"] is None:
+            continue
+        city = cities.setdefault(row["city"], {
+            "city": row["city"], "region": row["region"], "metro": row["metro"],
+            "color": color[row["metro"]], "lat": row["lat"], "lon": row["lon"], "breaches": 0})
+        city["breaches"] += 1
+    return {
+        "regions": [{"region": region, "title": region_title(region), "color": REGION_COLORS[region],
+                     "breaches": n} for region, n in regions.items()],
+        "cities": sorted(cities.values(), key=lambda c: (-c["breaches"], c["city"])),
+    }
 
-    countries = {}
-    for row in found:
-        country = countries.setdefault(row["country"], {
-            "country": row["country"], "code": COUNTRIES[row["country"]], "breaches": 0, "cities": []})
-        country["breaches"] += row["n"]
-        if row["city"] is not None:
-            country["cities"].append({"city": row["city"], "lat": row["lat"], "lon": row["lon"],
-                                      "breaches": row["n"]})
-    for country in countries.values():
-        country["cities"].sort(key=lambda city: (-city["breaches"], city["city"]))
-    return {"countries": sorted(countries.values(), key=lambda c: (-c["breaches"], c["country"]))}
+
+@app.get("/map", response_model=BreachMap)
+def us_map():
+    return breach_map(us_breaches())

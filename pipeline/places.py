@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 PLACES_FILE = Path(__file__).with_name("places.csv")
-FIELDS = ["country", "state", "city", "place", "lat", "lon", "source"]
+FIELDS = ["country", "state", "city", "place", "lat", "lon", "source", "population"]
 
 GEONAMES = Path("geonames/cities500.txt")
 ZCTA = Path("census/2024_Gaz_zcta_national.txt")
@@ -49,6 +49,13 @@ def load(path=PLACES_FILE):
     with open(path, newline="", encoding="utf-8") as f:
         return {(row["country"], row["state"], row["city"]): (row["place"], float(row["lat"]), float(row["lon"]))
                 for row in csv.DictReader(f)}
+
+
+def populations(path=PLACES_FILE):
+    """{place: people living there}, from GeoNames; 0 where it gives none (a
+    place found by its ZIP code). A metro is named after its largest city."""
+    with open(path, newline="", encoding="utf-8") as f:
+        return {row["place"]: int(row["population"] or 0) for row in csv.DictReader(f)}
 
 
 # GeoNames files Canada's provinces under numbered codes; the export uses
@@ -125,11 +132,11 @@ def draft(breaches_raw, geo_dir):
         hit = next((lookup[(iso, admin, name)] for lookup in geonames for name in match_names(key)
                     if (iso, admin, name) in lookup), None)
         if hit:
-            _, name, lat, lon = hit
+            population, name, lat, lon = hit
             source = "geonames"
         elif iso == "US" and zip5(row["zip"]) in zcta:
             lat, lon = zcta[zip5(row["zip"])]
-            name, source = key.title(), "zcta"
+            name, source, population = key.title(), "zcta", ""
         else:
             unresolved.append((country, state, key, row["zip"].strip()))
             places[(country, state, key)] = None
@@ -138,7 +145,8 @@ def draft(breaches_raw, geo_dir):
         place = f"{name}, {state}" if iso == "US" else name
         places[(country, state, key)] = (place, lat, lon)
         added.append({"country": country, "state": state, "city": key, "place": place,
-                      "lat": f"{lat:.4f}", "lon": f"{lon:.4f}", "source": source})
+                      "lat": f"{lat:.4f}", "lon": f"{lon:.4f}", "source": source,
+                      "population": population})
 
     new_file = not PLACES_FILE.exists()
     with open(PLACES_FILE, "a", newline="", encoding="utf-8") as f:

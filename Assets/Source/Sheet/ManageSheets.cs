@@ -136,6 +136,9 @@ public class ManageSheets : MonoBehaviour
         dataSource = source;
         ClearProjection();
         ClearSheets();
+        // Another sheet opens in front of wherever the user is now rather than
+        // where the last one was put.
+        RecenterToUser();
         Bind(source);
     }
 
@@ -291,16 +294,16 @@ public class ManageSheets : MonoBehaviour
         gap = labelGap
     };
 
-    // The industries a piece holds, in row order. What the assistant needs to
-    // answer "what is on this piece", and what a legend would read.
-    public List<string> CategoriesIn(CreateSheet piece)
+    // The metros the rows between two positions belong to, in row order: what
+    // the assistant needs to answer "what is on this sheet".
+    public List<string> CategoriesIn(int rowMin, int rowMax)
     {
         var found = new List<string>();
-        if (piece == null || _bound == null || !_bound.HasRowCategories) return found;
+        if (_bound == null || !_bound.HasRowCategories) return found;
 
         IReadOnlyList<int> rowOrder = _bound.RowOrder;
         var rows = new List<int>();
-        for (int vr = piece.rowMin; vr <= piece.rowMax; vr++)
+        for (int vr = rowMin; vr <= rowMax; vr++)
             if (vr >= 0 && vr < rowOrder.Count) rows.Add(rowOrder[vr]);
 
         return _bound.CategoriesInOrder(rows);
@@ -1153,6 +1156,14 @@ public class ManageSheets : MonoBehaviour
     public void ClearHoverTint()
     {
         for (int i = 0; i < _sheets.Count; i++) _sheets[i].ClearTint();
+    }
+
+    // Lights the given rows' bars on every sheet, or clears every light when
+    // there are none.
+    public void SetRowGlow(ICollection<int> dataRows)
+    {
+        if (dataRows == null || dataRows.Count == 0) { ClearHoverTint(); return; }
+        for (int i = 0; i < _sheets.Count; i++) _sheets[i].SetRowGlow(dataRows, Style.PreviewSwell);
     }
 
     public void PlaySwitchGrow()

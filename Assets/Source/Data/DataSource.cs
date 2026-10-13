@@ -22,8 +22,13 @@ public abstract class DataSource : MonoBehaviour
     public Color RowColorAt(int dataRow) =>
         dataRow >= 0 && dataRow < _rowColors.Count ? _rowColors[dataRow] : Color.white;
 
+    // The city a row's breach is headquartered in, which is the pin it stands
+    // for on the map, or null when the sheet does not say.
+    public string RowCityAt(int dataRow) =>
+        dataRow >= 0 && dataRow < _rowCities.Count && _rowCities[dataRow].Length > 0 ? _rowCities[dataRow] : null;
+
     // The categories present, in the order the rows are in. One entry per block,
-    // so a sheet that arrived blocked by industry reads back as ten names.
+    // so a sheet that arrived blocked by metro reads back one name per metro.
     public List<string> CategoriesInOrder(IReadOnlyList<int> rows)
     {
         var found = new List<string>();
@@ -393,13 +398,20 @@ public abstract class DataSource : MonoBehaviour
     protected List<string> _columnTitles = new List<string>();
     protected List<string> _rowTitles = new List<string>();
 
-    // The fourth channel. Rows are companies, columns are metrics, height is the
-    // value, and colour says which industry a row belongs to. Both lists are
-    // per data row and arrive with the sheet rather than being assigned here, so
-    // an industry keeps its colour on every sheet it appears on and filtering
-    // rows away never repaints the ones that remain.
+    // The fourth channel. Rows are breaches, columns are figures, height is the
+    // figure's place among every US breach, and colour says which metro a row's
+    // company is in: the colour its pin on the map is drawn in. The lists are
+    // per data row and arrive with the sheet rather than being assigned here,
+    // so a metro keeps its colour on every sheet and map it appears on and
+    // filtering rows away never repaints the ones that remain.
     protected List<string> _rowCategories = new List<string>();
     protected List<Color> _rowColors = new List<Color>();
+    protected List<string> _rowCities = new List<string>();
+
+    // Each cell's bar height in [0, 1], when the sheet sends them: a bar's
+    // height is then not its value but its value's place among a larger whole
+    // than the sheet. Null when heights are worked out from the values.
+    protected float[,] _heights;
     protected string _columnAxisTitle;
     protected string _rowAxisTitle;
     protected float[,] _values = new float[0, 0];
@@ -456,6 +468,16 @@ public abstract class DataSource : MonoBehaviour
         BuildScales(rowCount, colCount, filled);
         return filled;
     }
+
+    protected void FillHeights(int rowCount, int colCount, Func<int, int, float?> sample)
+    {
+        _heights = new float[rowCount, colCount];
+        for (int r = 0; r < rowCount; r++)
+            for (int c = 0; c < colCount; c++)
+                _heights[r, c] = Mathf.Clamp01(sample(r, c) ?? 0f);
+    }
+
+    public bool HasHeights => _heights != null;
 
     private int BucketOf(int colIndex) => _columnGroupSize > 1 ? colIndex / _columnGroupSize : 0;
 
@@ -687,15 +709,20 @@ public abstract class DataSource : MonoBehaviour
     public float GetHeightFraction(int rowIndex, int colIndex)
     {
         if (!HasValue(rowIndex, colIndex)) return 0f;
+        if (_heights != null) return _heights[rowIndex, colIndex];
         if (!TryBaselineRange(_globalMin, _globalMax, out float lo, out float range)) return 0f;
         return (Normalized(rowIndex, colIndex) - lo) / range;
     }
 
+    // Sent heights stand on the base plane, as a place is never below the
+    // lowest: a loss is low, not negative.
     public float ZeroFraction =>
-        TryBaselineRange(_globalMin, _globalMax, out float lo, out float range) ? -lo / range : 0f;
+        _heights == null && TryBaselineRange(_globalMin, _globalMax, out float lo, out float range) ? -lo / range : 0f;
 
     public float GetColorFraction(int rowIndex, int colIndex)
     {
+        if (_heights != null) return HasValue(rowIndex, colIndex) ? _heights[rowIndex, colIndex] : 0f;
+
         float range = _globalMax - _globalMin;
         if (range <= 0f) return 0f;
 

@@ -1,9 +1,13 @@
 """Cleaning: what the tables hold, checked against the exports themselves."""
 
+import math
+
 import pandas as pd
 import pytest
 
 import clean
+import maps
+import metros
 import places
 from metrics import COUNTRIES, FIRST_YEAR, LAST_YEAR
 
@@ -162,4 +166,52 @@ def test_a_country_metrics_lacks_stops_the_rebuild(raw, sic):
     foreign = changed.index[changed["region"].str.strip() == "Foreign"][0]
     changed.loc[foreign, "state_code"] = "Q9"
     with pytest.raises(ValueError, match="Q9"):
+        clean.breaches(changed, sic)
+
+
+def test_book_value_and_stock_price_are_carried(raw, breaches):
+    by_key = breaches.set_index("breach_key")
+    reported = raw[0][(raw[0]["book_value"].str.strip() != "") & (raw[0]["stock_price"].str.strip() != "")]
+    row = reported.iloc[0]
+    assert by_key.loc[int(row["breach_key"]), "book_value_usd"] == float(row["book_value"])
+    assert by_key.loc[int(row["breach_key"]), "stock_price_usd"] == float(row["stock_price"])
+
+
+def test_every_us_breach_with_a_city_has_a_metro(breaches):
+    us = breaches["country"] == "United States"
+    assert breaches.loc[us & breaches["city"].notna(), "metro"].notna().all()
+    assert breaches.loc[~us, "metro"].isna().all()
+
+
+def test_cities_whose_pins_overlap_on_their_regions_map_are_one_metro(breaches):
+    metro = breaches.dropna(subset=["metro"]).drop_duplicates("city").set_index("city")["metro"]
+    assert metro["Newark, NJ"] == metro["Philadelphia, PA"] == "New York, NY"
+    assert metro["Woonsocket, RI"] == metro["Burlington, MA"] == "Boston, MA"
+    assert metro["San Francisco, CA"] == metro["San Jose, CA"]
+    # Stamford is in New England, and a metro never reaches over a border.
+    assert metro["Stamford, CT"] != metro["Newark, NJ"]
+
+
+def test_no_metros_pin_has_its_centre_inside_another_on_their_regions_map(breaches):
+    """What the grouping promises the map: every pin left can be seen."""
+    us = breaches.dropna(subset=["metro"])
+    unit = maps.one_breach_km()
+    for region, rows in us.groupby("region"):
+        pins = []
+        for _, members in rows.groupby("metro"):
+            places_ = [maps.place(lon, lat, maps.frame_of(lon, lat)) for lon, lat in zip(members["lon"], members["lat"])]
+            x = sum(p[0] for p in places_) / len(places_)
+            y = sum(p[1] for p in places_) / len(places_)
+            pins.append((x, y, metros.radius(len(members), unit[region])))
+        for i, (x, y, r) in enumerate(pins):
+            for j, (u, v, q) in enumerate(pins):
+                if i != j and q <= r:
+                    assert math.hypot(u - x, v - y) >= r, region
+
+
+def test_a_region_that_disagrees_with_its_state_stops_the_rebuild(raw, sic):
+    changed = raw[0].copy()
+    texan = changed.index[changed["state_code"].str.strip() == "TX"][0]
+    changed.loc[texan, "region"] = "US West"
+    with pytest.raises(ValueError, match="STATE_REGIONS"):
         clean.breaches(changed, sic)

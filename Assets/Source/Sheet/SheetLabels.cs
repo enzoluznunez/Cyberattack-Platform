@@ -124,10 +124,16 @@ public class SheetLabels
 
     private const float UpwardTiltDegrees = 45f;
 
+    // A row title is turned this far off the sheet's edge, seen from above,
+    // and runs out from it: rows stand a bar's width apart, too close for a
+    // breach's name and date laid along the edge, but slanted titles stand
+    // side by side like a spreadsheet's angled headers.
+    private const float RowSlantDegrees = 30f;
+
     private static Quaternion Facing(bool columns, bool high) =>
         (columns
             ? Quaternion.Euler(0f, high ? 180f : 0f, 0f)
-            : Quaternion.Euler(0f, high ? -90f : 90f, 0f))
+            : Quaternion.Euler(0f, (high ? -90f : 90f) + RowSlantDegrees, 0f))
         * Quaternion.Euler(UpwardTiltDegrees, 0f, 0f);
 
     private void ApplyEdges(Dictionary<int, TextMeshPro> map, float edge, bool columns, bool high)
@@ -256,7 +262,7 @@ public class SheetLabels
                 string text = grouped ? Tick(data.SeriesTitleAt(true, vc)) : colTitles[dCol];
                 TextMeshPro label = Place(text,
                     new Vector3(ColX(vc), y, edgeZ), style.color,
-                    Facing(true, _cols.high), grouped ? TickScale : 1f);
+                    Facing(true, _cols.high), grouped ? TickScale : 1f, true);
                 if (label != null) _colLabel[vc] = label;
             }
 
@@ -269,7 +275,7 @@ public class SheetLabels
                     if (lo < colMin || lo > colMax) continue;
                     TextMeshPro label = Place(data.GroupTitleAt(true, g),
                         new Vector3(ColX(lo), y, groupZ), style.color,
-                        Facing(true, _cols.high));
+                        Facing(true, _cols.high), 1f, true);
                     if (label == null) continue;
                     _colGroup[g] = label;
                     CentreGroup(g);
@@ -286,7 +292,7 @@ public class SheetLabels
                 if (dRow < 0 || dRow >= rowTitles.Count) continue;
                 TextMeshPro label = Place(rowTitles[dRow],
                     new Vector3(edgeX, y, RowZ(vr)), style.color,
-                    Facing(false, _rows.high));
+                    Facing(false, _rows.high), 1f, false);
                 if (label != null) _rowLabel[vr] = label;
             }
         }
@@ -295,8 +301,11 @@ public class SheetLabels
             if (_pool[i] != null) _pool[i].gameObject.SetActive(false);
     }
 
+    // A column title is centred under its column. A row title starts at the
+    // sheet's edge and runs out from it, whichever side it is on, since the
+    // slant turns its reading direction outward on both.
     private TextMeshPro Place(string text, Vector3 localPosition, Color color, Quaternion facing,
-        float scale = 1f)
+        float scale, bool centred)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
 
@@ -305,6 +314,8 @@ public class SheetLabels
 
         label.text = text;
         label.color = color;
+        label.alignment = centred ? TextAlignmentOptions.Center : TextAlignmentOptions.Left;
+        label.rectTransform.pivot = new Vector2(centred ? 0.5f : 0f, 0.5f);
 
         Transform t = label.transform;
         t.localPosition = localPosition;

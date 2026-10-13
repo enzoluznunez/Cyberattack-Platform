@@ -52,7 +52,7 @@
     },
     "/map": {
       "get": {
-        "operationId": "breach_map",
+        "operationId": "us_map",
         "responses": {
           "200": {
             "description": "OK"
@@ -68,21 +68,6 @@
     "/sheet": {
       "get": {
         "operationId": "sheet",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "api_key": []
-          }
-        ]
-      }
-    },
-    "/views": {
-      "get": {
-        "operationId": "views",
         "responses": {
           "200": {
             "description": "OK"

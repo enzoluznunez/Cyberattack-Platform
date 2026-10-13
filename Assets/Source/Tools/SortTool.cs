@@ -165,7 +165,7 @@ public class SortTool : Tool
         _held = null;
         ClearDrag();
 
-        if (!MoveLine(_dragColumns, from, target, sheet)) RestLayout(sheet);
+        if (!MoveLine(_dragColumns, from, target)) RestLayout(sheet);
         RebuildProxies();
     }
 
@@ -308,7 +308,7 @@ public class SortTool : Tool
 
     // 'from' and 'to' are block positions: whole metrics on a grouped axis, single
     // lines otherwise.
-    public bool MoveLine(bool columns, int from, int to, CreateSheet piece)
+    public bool MoveLine(bool columns, int from, int to)
     {
         if (!Active) return false;
 
@@ -321,8 +321,6 @@ public class SortTool : Tool
         if (from < 0 || from >= blocks || to < 0 || to >= blocks) return false;
 
         var preOrder = new List<int>(order);
-
-        int blockMin = piece == null ? 0 : (columns ? piece.colMin : piece.rowMin) / size;
 
         string what = DataSource.GroupLabelAt(src, columns, from);
         string noun = DataSource.GroupNoun(src, columns) + "s";
@@ -339,7 +337,7 @@ public class SortTool : Tool
             arrangement = $"; the {noun} now run: {string.Join(", ", names)}";
         }
 
-        Report($"moved {what} from position {from - blockMin + 1} to {to - blockMin + 1}{arrangement}");
+        Report($"moved {what} from position {from + 1} to {to + 1}{arrangement}");
 
         if (StateChannel.UserDriven) StalePositions.MarkDirty(columns);
 

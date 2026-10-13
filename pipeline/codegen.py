@@ -25,7 +25,6 @@ public static class CyberContract {
 
 # The filters that take names, by the C# name of the list holding them.
 ENUMS = {
-    "Views": "ViewName",
     "Industries": "DivisionName",
     "AttackTypes": "AttackType",
     "InformationTypes": "InformationType",
@@ -33,7 +32,6 @@ ENUMS = {
     "Relationships": "Relationship",
     "Regions": "RegionName",
     "Markets": "MarketName",
-    "Countries": "CountryName",
 }
 
 
@@ -57,19 +55,13 @@ def csharp_int(name, value):
 
 
 def render(document):
-    sheet = parameters(document, "/sheet")
     breaches = parameters(document, "/breaches")
     schemas = document["components"]["schemas"]
 
     out = [HEADER]
-    out.append(f'    public const string DefaultView = "{sheet["view"]["default"]}";\n')
-    out.append(csharp_int("FirstYear", sheet["since"]["minimum"]))
-    out.append(csharp_int("LastYear", sheet["until"]["maximum"]))
+    out.append(csharp_int("FirstYear", breaches["since"]["minimum"]))
+    out.append(csharp_int("LastYear", breaches["until"]["maximum"]))
     out.append("\n")
-    out.append(csharp_int("LimitMinimum", sheet["limit"]["minimum"]))
-    out.append(csharp_int("LimitMaximum", sheet["limit"]["maximum"]))
-    out.append(csharp_int("LimitDefault", sheet["limit"]["default"]))
-    out.append(csharp_int("PerDefault", sheet["per"]["default"]))
     out.append(csharp_int("BreachLimitDefault", breaches["limit"]["default"]))
     out.append(csharp_int("BreachLimitMaximum", breaches["limit"]["maximum"]))
     out.append("\n")

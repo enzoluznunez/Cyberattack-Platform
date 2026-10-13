@@ -79,20 +79,19 @@ public class Parser : DataSource
 
         string[] lines = csvText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
 
-        int groupSize = 1;
-        var categories = new List<string>();
-        var colors = new List<string>();
+        var directives = new Directives();
         List<List<string>> grid = new List<List<string>>(lines.Length);
         foreach (string line in lines)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
             if (grid.Count == 0 && line.TrimStart().StartsWith("#", StringComparison.Ordinal))
             {
-                ReadDirective(line, ref groupSize, categories, colors);
+                ReadDirective(line, directives);
                 continue;
             }
             grid.Add(ParseCSVLine(line));
         }
+        int groupSize = directives.groupSize;
 
         if (grid.Count < 2)
         {
@@ -102,7 +101,18 @@ public class Parser : DataSource
 
         List<string> header = grid[0];
         if (header.Count > 0) SetAxisTitles(header[0]);
-        for (int c = 1; c < header.Count; c++)
+
+        // '#heights N': the header's last N columns are the heights of the N
+        // before them, so only those first N are columns of the sheet.
+        int heights = directives.heights;
+        if (heights > 0 && header.Count - 1 != heights * 2)
+        {
+            Debug.LogWarning($"[Parser:{name}] '#heights {heights}' does not halve the " +
+                             $"{header.Count - 1} columns; drawing the cells as their own heights.");
+            heights = 0;
+        }
+        int titled = heights > 0 ? heights : header.Count - 1;
+        for (int c = 1; c <= titled; c++)
             _columnTitles.Add(header[c].Trim());
 
         if (groupSize > 1 && _columnTitles.Count % groupSize != 0)
@@ -113,7 +123,7 @@ public class Parser : DataSource
         }
         SetColumnGroupSize(groupSize);
 
-        // The '#industry' and '#color' directives carry one value per data row as
+        // The '#metro', '#color' and '#city' directives carry one value per data row as
         // the server wrote them, so dropping a short row here has to drop its
         // place in them too. Keeping each survivor's original position is what
         // lets the rest of the sheet keep its colour.
@@ -146,7 +156,7 @@ public class Parser : DataSource
             _rowTitles.Add(fields.Count > 0 ? fields[0].Trim() : "");
         }
 
-        SetRowCategories(categories, colors, sourceRows, sourceRow);
+        SetRowCategories(directives, sourceRows, sourceRow);
 
         int numericCells = FillGrid(rowCount, colCount, (r, c) =>
         {
@@ -154,6 +164,15 @@ public class Parser : DataSource
             string field = (c + 1 < fields.Count) ? fields[c + 1] : null;
             return TryParseFloat(field, out float v) ? v : (float?)null;
         });
+
+        if (heights > 0)
+            FillHeights(rowCount, colCount, (r, c) =>
+            {
+                List<string> fields = rows[r];
+                int at = c + 1 + heights;
+                string field = at < fields.Count ? fields[at] : null;
+                return TryParseFloat(field, out float v) ? v : (float?)null;
+            });
 
         if (numericCells == 0)
         {
@@ -186,27 +205,38 @@ public class Parser : DataSource
         return i < text.Length && text[i] == '<';
     }
 
+    private sealed class Directives
+    {
+        public int groupSize = 1;
+        public int heights;
+        public readonly List<string> categories = new List<string>();
+        public readonly List<string> colors = new List<string>();
+        public readonly List<string> cities = new List<string>();
+    }
+
     // Directive lines sit above the header and configure the grid. '#group N'
-    // says how many columns belong to one metric; '#industry' and '#color' carry
-    // one value per data row, in row order. Anything else is ignored, so a file
-    // may carry comments without becoming a row and a sheet from an older server
-    // still loads — just without colour.
-    private void ReadDirective(string line, ref int groupSize,
-                               List<string> categories, List<string> colors)
+    // says how many columns belong to one metric; '#heights N' that the last N
+    // columns are the heights of the N before them; '#metro', '#color' and
+    // '#city' carry one value per data row, in row order. Anything else is
+    // ignored, so a file may carry comments without becoming a row.
+    private void ReadDirective(string line, Directives into)
     {
         string body = line.TrimStart().TrimStart('#').Trim();
 
-        if (TryBody(body, "industry", out string listed))
+        foreach ((string name, List<string> list) in new[]
+                 { ("metro", into.categories), ("color", into.colors), ("city", into.cities) })
         {
-            categories.Clear();
-            categories.AddRange(ParseCSVLine(listed));
+            if (!TryBody(body, name, out string listed)) continue;
+            list.Clear();
+            list.AddRange(ParseCSVLine(listed));
             return;
         }
 
-        if (TryBody(body, "color", out listed))
+        if (TryBody(body, "heights", out string count))
         {
-            colors.Clear();
-            colors.AddRange(ParseCSVLine(listed));
+            if (int.TryParse(count, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n > 0)
+                into.heights = n;
+            else Debug.LogWarning($"[Parser:{name}] Ignored unreadable directive '{line.Trim()}'.");
             return;
         }
 
@@ -214,7 +244,7 @@ public class Parser : DataSource
 
         if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int size) && size > 1)
         {
-            groupSize = size;
+            into.groupSize = size;
             return;
         }
         Debug.LogWarning($"[Parser:{name}] Ignored unreadable directive '{line.Trim()}'.");
@@ -229,23 +259,24 @@ public class Parser : DataSource
         return true;
     }
 
-    // A row's category and its colour only mean anything together and only if
-    // there is exactly one of each per row: a sheet whose directives disagree
-    // with its rows is drawn uncoloured rather than coloured by a guess.
-    // 'sourceRows' is how many data rows the directives were written for, and
-    // 'sourceRow' says where each row that survived stood among them.
-    private void SetRowCategories(List<string> categories, List<string> colors,
-        int sourceRows, List<int> sourceRow)
+    // A row's metro, its colour and its city only mean anything together and
+    // only if there is exactly one of each per row: a sheet whose directives
+    // disagree with its rows is drawn uncoloured rather than coloured by a
+    // guess. 'sourceRows' is how many data rows the directives were written
+    // for, and 'sourceRow' says where each row that survived stood among them.
+    private void SetRowCategories(Directives directives, int sourceRows, List<int> sourceRow)
     {
         _rowCategories.Clear();
         _rowColors.Clear();
+        _rowCities.Clear();
+        List<string> categories = directives.categories, colors = directives.colors, cities = directives.cities;
         if (categories.Count == 0 && colors.Count == 0) return;
 
-        if (categories.Count != sourceRows || colors.Count != sourceRows)
+        if (categories.Count != sourceRows || colors.Count != sourceRows ||
+            (cities.Count > 0 && cities.Count != sourceRows))
         {
-            Debug.LogWarning($"[Parser:{name}] Ignored the industry directives: " +
-                             $"{categories.Count} industries and {colors.Count} colors " +
-                             $"for {sourceRows} rows.");
+            Debug.LogWarning($"[Parser:{name}] Ignored the row directives: {categories.Count} metros, " +
+                             $"{colors.Count} colors and {cities.Count} cities for {sourceRows} rows.");
             return;
         }
 
@@ -254,6 +285,7 @@ public class Parser : DataSource
             int at = sourceRow[r];
             _rowCategories.Add(categories[at].Trim());
             _rowColors.Add(ColorUtility.TryParseHtmlString(colors[at].Trim(), out Color c) ? c : Color.white);
+            if (cities.Count > 0) _rowCities.Add(cities[at].Trim());
         }
     }
 
@@ -287,6 +319,8 @@ public class Parser : DataSource
         _rowTitles.Clear();
         _rowCategories.Clear();
         _rowColors.Clear();
+        _rowCities.Clear();
+        _heights = null;
         _columnAxisTitle = null;
         _rowAxisTitle = null;
         _values = new float[0, 0];

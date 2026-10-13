@@ -158,76 +158,92 @@ MARKETS = [
 ]
 
 # The years breaches were disclosed in. clean.py refuses an export with a
-# breach outside them, so a year sheet built on this range never drops one.
+# breach outside them, so a year filter on this range never drops one.
 FIRST_YEAR = 2004
 LAST_YEAR = 2024
-
-# The reported figures a company has each year, by the column they are stored
-# under and the title they are drawn with. Monetary figures are in millions of
-# dollars, as the fundamentals export reports them; the share price is dollars
-# per share. The breach export's own snapshot figures are plain dollars, and
-# their columns say so (_usd), so the two units are never one name apart.
-FUNDAMENTALS = {
-    "assets_musd": "Assets",
-    "net_income_musd": "Net Income",
-    "price_close": "Share Price",
-}
-
-# The years around a breach the before/after sheet shows, relative to the year
-# it was disclosed in.
-OFFSETS = [-2, -1, 0, 1, 2]
-
-# The sheets the API draws. Each is a fixed pairing of what the rows are and
-# what the columns are; filters narrow which breaches are counted, never what
-# the axes mean.
-VIEWS = {
-    "attack_by_year": {
-        "title": "Attacks by Year",
-        "rows": "attack type",
-        "columns": "year",
-        "measure": "breaches",
-        "description": "How many breaches of each attack type were disclosed each year. "
-                       "A breach with two attack types counts once under each.",
-    },
-    "industry_by_attack": {
-        "title": "Industries by Attack",
-        "rows": "industry",
-        "columns": "attack type",
-        "measure": "breaches",
-        "description": "How many breaches each industry disclosed, by attack type. "
-                       "A breach with two attack types counts once under each.",
-    },
-    "before_after": {
-        "title": "Before and After a Breach",
-        "rows": "company",
-        "columns": "figure by years from breach",
-        "measure": "reported figures",
-        "description": "Each breached company's assets and net income (millions of dollars) "
-                       "and share price (dollars), from two years before its first breach "
-                       "to two years after.",
-    },
-}
-
-DEFAULT_VIEW = "attack_by_year"
-
-# A hundred companies is 1,500 bars on the before/after sheet. It is the most
-# the renderer is asked to draw at once: every bar is its own object with its
-# own collider, so the ceiling is a rendering budget rather than a limit on
-# what the database will answer.
-SHEET_LIMIT = 100
-
-# How many companies each industry contributes to a before/after sheet that
-# names no industry. Ranking every breached company by size returns mostly
-# manufacturers and banks, which is a leaderboard rather than a comparison; ten
-# from each keeps every industry on the sheet.
-SHEET_PER = 10
-LIMIT_MINIMUM = 1
-LIMIT_MAXIMUM = 200
 
 # How many breaches one /breaches answer lists at most. The assistant reads
 # them out, so this is a listening budget.
 BREACH_LIMIT = 10
 BREACH_LIMIT_MAXIMUM = 50
+
+# The app shows the United States alone. Its regions are the export's own, in
+# the order the maps are swiped through: west to east, each region placed by
+# the mean longitude of its breaches.
+US = "United States"
+US_REGIONS = [
+    "US West",
+    "US Southwest",
+    "US Midwest",
+    "US Southeast",
+    "US Mid Atlantic",
+    "US New England",
+]
+
+# Which region every state is drawn in. The export files each breach under a
+# region, and clean.py refuses one that disagrees with this. Six states hold no
+# breach, so the export never names their region; they are drawn with the
+# region around them: Maine and Vermont in New England, West Virginia in the
+# Mid Atlantic with Virginia and Kentucky, Mississippi in the Southeast,
+# South Dakota in the Midwest, Wyoming in the West.
+STATE_REGIONS = {
+    **dict.fromkeys(["AK", "CA", "CO", "HI", "ID", "MT", "NV", "OR", "UT", "WA", "WY"], "US West"),
+    **dict.fromkeys(["AZ", "NM", "OK", "TX"], "US Southwest"),
+    **dict.fromkeys(["IA", "IL", "IN", "KS", "MI", "MN", "ND", "NE", "OH", "SD", "WI"], "US Midwest"),
+    **dict.fromkeys(["AL", "AR", "FL", "GA", "LA", "MO", "MS", "NC", "PR", "SC", "TN"], "US Southeast"),
+    **dict.fromkeys(["DC", "DE", "KY", "MD", "NJ", "NY", "PA", "VA", "WV"], "US Mid Atlantic"),
+    **dict.fromkeys(["CT", "MA", "ME", "NH", "RI", "VT"], "US New England"),
+}
+
+# What a region is called where the app shows it.
+def region_title(region):
+    return region.removeprefix("US ")
+
+
+# The six figures a region's sheet shows for each breach, by the column they
+# are stored under and the title they are drawn with. All are the breach
+# export's snapshot taken at the breach: plain dollars, the share price in
+# dollars per share.
+METRICS = {
+    "revenue_usd": "Revenue",
+    "net_income_usd": "Net Income",
+    "assets_usd": "Assets",
+    "book_value_usd": "Book Value",
+    "market_cap_usd": "Market Cap",
+    "stock_price_usd": "Stock Price",
+}
+
+# How the app draws a map, which metros.group measures pins against: each map
+# is fitted into a box this many metres on a side, and a one-breach pin is this
+# many metres across its radius on every map. They are MapCarousel's mapBox and
+# oneBreachRadius, as the scene sets them; test_metros checks the two agree.
+# Raising the pin's size merges more cities into each metro.
+MAP_BOX_METRES = 0.4
+ONE_BREACH_METRES = 0.004
+
+# The colours the maps and sheets are drawn in, pins and bars alike.
+PALETTE = [
+    "#2a78d6",  # blue
+    "#eb6834",  # orange
+    "#1baf7a",  # green
+    "#9b4dca",  # purple
+    "#eda100",  # yellow
+    "#e34948",  # red
+    "#12a3b4",  # teal
+    "#e87ba4",  # pink
+    "#8c6d31",  # brown
+    "#9acd32",  # lime
+]
+
+# Each region colours its ten largest metros, on the map and the sheet alike,
+# and draws the rest black. One metro is one colour on every map, and two
+# metros sharing a region never share one.
+METRO_COLORS = PALETTE
+OTHER_METRO_COLOR = "#000000"
+
+# The national map and its sheet colour each region instead, as metro colours
+# repeat from one region to the next.
+REGION_COLORS = dict(zip(US_REGIONS, PALETTE))
 
 # Each division is a contiguous run of SIC codes: a code belongs to the first
 # division whose ceiling it falls under. clean.py labels every company with it,
@@ -271,38 +287,3 @@ def division_bounds():
 
 
 DIVISION_NAMES = [name for name, _, _ in division_bounds()]
-
-# One color per division, and the app colors a company's bars by the industry it
-# belongs to. Assignment follows DIVISION_NAMES rather than a row's rank, so an
-# industry is the same color on every sheet it appears on and a filter that drops
-# rows never repaints the survivors.
-#
-# Any two of these can end up side by side: the user sorts rows at will, so no
-# ordering is durable and every pair has to stand on its own. Ten categorical
-# colors cannot all be told apart under that — measured worst pairs are dE 2.9
-# between Transportation and Agriculture for a deuteranope and 7.1 between
-# Manufacturing and Mining for normal vision (OKLab x100, against gates of 8 and
-# 15). So colour is a fast way to see that two rows differ in kind, not a
-# reliable way to name which kind: every row is labelled, and the assistant
-# names the industries on a sheet when asked. A legend is what would fix it.
-# Keyed by name rather than zipped against DIVISION_NAMES by position: inserting
-# a division into DIVISIONS would otherwise shift every colour below it, which is
-# exactly the "same colour on every sheet" promise above failing silently.
-DIVISION_COLORS = {
-    "Agriculture": "#2a78d6",                       # blue
-    "Mining": "#eb6834",                            # orange
-    "Construction": "#12a3b4",                      # teal
-    "Manufacturing": "#e34948",                     # red
-    "Transportation & Public Utilities": "#9b4dca",  # purple
-    "Wholesale Trade": "#1baf7a",                   # aqua
-    "Retail Trade": "#eda100",                      # yellow
-    "Finance, Insurance, Real Estate": "#4a3aa7",   # violet
-    "Services": "#008300",                          # green
-    "Public Administration": "#e87ba4",             # magenta
-}
-
-# What a division outside DIVISION_NAMES is drawn in. The ten above are every
-# division division_bounds() can return, so reaching this means the database
-# holds a name this file does not know — a sheet drawn in neutral grey says so
-# and stays readable, where a lookup that raised would cost the whole request.
-UNKNOWN_DIVISION_COLOR = "#8a8a8a"

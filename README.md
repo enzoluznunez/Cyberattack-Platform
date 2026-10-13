@@ -1,14 +1,20 @@
 # Instructions for Getting Started
 
 This is a data visualization project for Meta Quest, built in Unity, for exploring
-cyberattacks on publicly listed companies. Sheets of breach data stand in front of you in
-passthrough, you reshape them with your hands, and a voice assistant can drive the same
-tools when asked — and look up individual breaches.
+cyberattacks on publicly listed US companies: 1,191 breaches at 770 companies. A sheet of
+breach data stands in front of you in passthrough, you reshape it with your hands, and a
+voice assistant can drive the same tools when asked — and look up individual breaches.
 
-Beside the sheets stands a map of one country at a time, with a dot for every city a
-breached company is headquartered in, sized by its number of breaches. Pinch the map and
-swipe it aside to bring in the next country, most breached first; the sheets follow it and
-count only that country's breaches. Point a fingertip at a dot to see its city and count.
+Beside the sheet stands a map: the United States first, then its six regions west to
+east, each a cut of the national map. Every city a breached company is headquartered in
+has a pin sized by its number of breaches; cities whose pins would overlap are merged into
+one metro, drawn as one flat pin. Pinch the slider under the map and slide it to move to
+another map. Each map brings its sheet: one row for every breach in the region, or in the
+whole country for the United States, and a column for each of six figures (revenue, net
+income, assets, book value, market cap, stock price), every bar as tall as its figure's
+place among all US breaches. Each region colours its ten largest metros, pins and bars
+alike, and draws the rest black; the United States map and sheet are coloured by region.
+Point a fingertip at a pin to light its bars, or at a bar to ring its pin.
 
 ## Prerequisites
 
@@ -84,9 +90,10 @@ Without it the app still runs and every sheet still works; only the assistant fa
 4. In the headset, accept the microphone prompt at launch. Denying it leaves everything
    working except voice.
 
-Done when you are standing in passthrough with Attacks by Year open and the three sheets
-listed beside you. An empty list means the database could not be reached — check the
-headset's internet connection and `cloud.key` — not that the build failed.
+Done when you are standing in passthrough with the United States sheet open and the map
+of the United States beside the tool panel. A "No Map" notice or an empty table means the
+database could not be reached — check the headset's internet connection and `cloud.key`
+— not that the build failed.
 
 ## Changing the Breach Database API
 

@@ -13,9 +13,9 @@ public sealed class DescribeSheet : AgenticTool {
                       "per year — its " +
                       "'rowRange' and 'colRange' (the 1-based numbers those titles start and end at, so a title's " +
                       "number is its position within that range), 'rowCategory' and 'columnCategory' (what the rows " +
-                      "and columns represent, when the data says), its 'position', its 'industry' " +
-                      "(when every row on it belongs to one) or 'industries' (the industries on it, when it holds " +
-                      "more than one), and " +
+                      "and columns represent, when the data says), its 'position', its 'metro' " +
+                      "(when every row on it belongs to one) or 'metros' (the metros on it, largest first, when it " +
+                      "holds more than one; on the United States sheet these are the regions), and " +
                       "'projections' (the strips the Profile tool has raised above this " +
                       "sheet). This carries no cell values; call GetNumbers for the numbers."
     };
@@ -66,9 +66,9 @@ public sealed class DescribeSheet : AgenticTool {
             { "rows", Math.Round(p.z, 3) }
         };
 
-        List<string> industries = mgr.CategoriesIn(piece);
-        if (industries.Count == 1) result["industry"] = industries[0];
-        else if (industries.Count > 1) result["industries"] = industries.ConvertAll(i => (object)i);
+        List<string> metros = mgr.CategoriesIn(rowMin, rowMax);
+        if (metros.Count == 1) result["metro"] = metros[0];
+        else if (metros.Count > 1) result["metros"] = metros.ConvertAll(m => (object)m);
 
         result["projections"] = Projections(mgr, data, rowMin, rowMax, colMin, colMax);
     }

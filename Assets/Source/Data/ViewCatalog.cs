@@ -2,15 +2,16 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-// Lists the sheets the breach database draws, at startup, without reading any
-// of them. The app ships no sheets: /views states which exist, and each becomes
-// a listed dataset whose payload is the /sheet URL that draws it, fetched the
-// first time it is opened. So a listed sheet is always the database as it
-// stands now rather than an export of how it once stood.
+// Lists the national sheet and one sheet per US region at startup: each
+// becomes a listed dataset whose payload is the /sheet URL that draws it. The
+// national sheet is opened and the rest are read behind it, so sliding to a
+// region finds its sheet already read. So a listed sheet is the database as it
+// stood when the app started rather than an export of how it once stood. The
+// regions are the generated contract's, west to east, the order the map slides
+// through them.
 public class ViewCatalog : MonoBehaviour
 {
     public ManageDatasets manageDatasets;
@@ -55,7 +56,7 @@ public class ViewCatalog : MonoBehaviour
                              "API key, which only a server on this machine will accept.");
 
         Configured = true;
-        yield return ListViews();
+        ListRegions();
     }
 
     // Where the database is and how to be let in are configuration, not data:
@@ -79,111 +80,44 @@ public class ViewCatalog : MonoBehaviour
         }
     }
 
-    private IEnumerator ListViews()
+    private void ListRegions()
     {
-        string url = CyberApi.BaseUrl.TrimEnd('/') + "/views";
-
-        using (UnityWebRequest www = UnityWebRequest.Get(url))
+        var entries = new List<(string, string, string)>(CyberContract.Regions.Length + 1);
+        entries.Add((SheetUrl(null), NationalTitle,
+            "Every breach at a company headquartered in the United States, a row each, region by region " +
+            "west to east: its revenue, net income, assets, book value, market cap and stock price, each " +
+            "bar as tall as its place among every US breach, and coloured by its region."));
+        foreach (string region in CyberContract.Regions)
         {
-            CyberApi.Authorize(www);
-            yield return www.SendWebRequest();
-
-            if (www.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError($"[ViewCatalog] The breach database at {url} could not be reached " +
-                               $"({www.error}); the app starts with nothing listed.");
-                Notices.Show(this, "No Data", CyberApi.Unreachable);
-                yield break;
-            }
-
-            Register(www.downloadHandler.text);
-        }
-    }
-
-    private void Register(string json)
-    {
-        Catalog catalog;
-        try
-        {
-            catalog = Read(json);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[ViewCatalog] /views answered with something unreadable: {e.Message}");
-            Notices.Show(this, "No Data", CyberApi.Unreachable);
-            return;
-        }
-
-        if (catalog.views.Count == 0)
-        {
-            Debug.LogWarning("[ViewCatalog] The database draws no sheets; nothing is listed.");
-            Notices.Show(this, "No Data", "The breach database draws no sheets.");
-            return;
-        }
-
-        // The reply is walked backwards, so the newest entry, listed last,
-        // is the server's first.
-        var entries = new List<(string, string, string)>(catalog.views.Count);
-        for (int i = catalog.views.Count - 1; i >= 0; i--)
-        {
-            View view = catalog.views[i];
-            entries.Add((SheetUrl(view.id), view.title, view.description));
+            string title = Title(region);
+            entries.Add((SheetUrl(region), title,
+                $"Every breach at a company headquartered in the {title}, a row each: its revenue, net " +
+                "income, assets, book value, market cap and stock price, each bar as tall as its place " +
+                "among every US breach."));
         }
         manageDatasets.AddCatalogEntries(entries);
+        Debug.Log($"[ViewCatalog] Listed {entries.Count} sheets; opening the national one and reading " +
+                  "the rest behind it.");
 
-        Debug.Log($"[ViewCatalog] Listed {catalog.views.Count} sheets; opening '{catalog.defaultView}', " +
-                  "the rest are fetched when asked for.");
+        // The app opens on the national map with the national sheet.
+        if (manageDatasets.ActiveIndex < 0 && entries.Count > 0)
+            manageDatasets.SwitchDataset(manageDatasets.IndexOf(entries[0].Item1));
 
-        OpenAtStartup(SheetUrl(catalog.defaultView));
+        // The others are read now rather than on the slide that opens them, so
+        // a slide never waits on the network.
+        for (int i = 1; i < entries.Count; i++)
+            manageDatasets.Preload(manageDatasets.IndexOf(entries[i].Item1));
     }
 
-    // The app opens on the server's default sheet, so there is something to
-    // look at before anyone asks for anything. Switching to an unread entry
-    // fetches it and switches once it is read.
-    private void OpenAtStartup(string url)
-    {
-        if (manageDatasets.ActiveIndex >= 0) return;
+    // 'US West' -> 'West', as the map and the rail name it.
+    public static string Title(string region) =>
+        region != null && region.StartsWith("US ", StringComparison.Ordinal) ? region.Substring(3) : region;
 
-        int index = manageDatasets.IndexOf(url);
-        if (index >= 0) manageDatasets.SwitchDataset(index);
-    }
+    public const string NationalTitle = "United States";
 
-    // The request that draws one sheet, unfiltered: every breach, every year.
-    public static string SheetPath(string view) => "/sheet?view=" + Uri.EscapeDataString(view);
-
-    public static string SheetUrl(string view) => CyberApi.BaseUrl.TrimEnd('/') + SheetPath(view);
-
-    private struct View
-    {
-        public string id;
-        public string title;
-        public string description;
-    }
-
-    private struct Catalog
-    {
-        public string defaultView;
-        public List<View> views;
-    }
-
-    private static Catalog Read(string json)
-    {
-        using JsonDocument doc = JsonDocument.Parse(json);
-        JsonElement root = doc.RootElement;
-
-        var views = new List<View>();
-        foreach (JsonElement view in root.GetProperty("views").EnumerateArray())
-        {
-            string id = view.GetProperty("view").GetString();
-            if (string.IsNullOrEmpty(id)) continue;
-
-            views.Add(new View
-            {
-                id = id,
-                title = view.GetProperty("title").GetString(),
-                description = view.GetProperty("description").GetString()
-            });
-        }
-        return new Catalog { defaultView = root.GetProperty("default").GetString(), views = views };
-    }
+    // The request that draws one region's sheet, or with no region the
+    // national one.
+    public static string SheetUrl(string region) =>
+        CyberApi.BaseUrl.TrimEnd('/') + "/sheet" +
+        (string.IsNullOrEmpty(region) ? "" : "?region=" + Uri.EscapeDataString(region));
 }

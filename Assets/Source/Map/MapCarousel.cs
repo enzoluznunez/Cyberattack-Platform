@@ -4,23 +4,26 @@ using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 
-// The maps, one country at a time. The user reaches out, takes hold of the
-// map itself and swipes it aside, and the next country slides into its place;
-// the countries run most breaches first and wrap around, so the list is a
-// ring. The next one waits small at the right, to say there is more to swipe
-// to; the one before slides in from behind the panel.
+// The maps, one at a time: the United States first, then its six regions
+// west to east. A slider under the map has a stop for each; the user pinches
+// its thumb and slides it, the maps slide with it, and on letting go they
+// settle on the nearest map. Only the map in the middle is seen at rest: the
+// others show only while the maps are sliding, the next coming in small from
+// the right and the one before from behind the panel.
 //
 // The maps stand beside the tool panel, to its right in its own plane, as one
 // piece with it: they are hung on the panel itself, so they are carried with
 // it, frozen in step, and only the user's own slide moves them on it. They
 // close when it closes and open again when it opens.
 //
-// Each country is drawn as large as fits a box the panel's size, not to one
-// shared scale: a small country is as easy to read as a large one.
+// Every map is drawn in the national map's kilometres, and each region's map
+// is the national map cut along its borders, drawn as large as fits a box the
+// panel's size.
 //
-// The country on the map is the country the sheets count: when one settles,
-// every listed sheet is narrowed to it. Pointing a fingertip at a dot names
-// its city and how many breaches it holds.
+// The map is the sheet on the table: when a map settles, its sheet is opened,
+// every breach in the region or, for the national map, in the country; and
+// when the sheet is switched another way the map slides to it. A pin and its
+// bars are one colour, and pointing at either lights the other.
 public class MapCarousel : MonoBehaviour
 {
     public static MapCarousel Instance { get; private set; }
@@ -30,71 +33,65 @@ public class MapCarousel : MonoBehaviour
     public float gap = 0.05f;
 
     [Header("Scale")]
-    [Tooltip("Width and height of the box each country's map is fitted into, in metres: the panel's own size, " +
+    [Tooltip("Width and height of the box each map is fitted into, in metres: the panel's own size, " +
              "so a map is never larger than the panel beside it.")]
     public Vector2 mapBox = new Vector2(0.4f, 0.4f);
-    [Tooltip("Radius of a city with one breach, in metres. A dot's area grows with its count.")]
+    [Tooltip("Radius of a city with one breach, in metres. A pin's area grows with its count.")]
     public float oneBreachRadius = 0.004f;
     [Tooltip("How thick the land is, in metres.")]
     public float thickness = 0.012f;
-    [Tooltip("How far a dot stands out of the land, in metres.")]
-    public float dotHeight = 0.004f;
-    [Tooltip("Smallest width and height a map can be taken hold of by, in metres, for countries " +
-             "smaller than a hand.")]
-    public float smallestHold = 0.06f;
 
-    [Header("Swipe")]
-    [Tooltip("Share of the distance between maps a swipe has to cover to move on.")]
-    [Range(0.05f, 0.9f)] public float commitShare = 0.25f;
-    [Tooltip("Speed of a flick that moves on however short it was, in metres per second.")]
-    public float flickSpeed = 0.8f;
-    [Tooltip("Shortest pull that a flick still moves on from, in metres: a tremor is not a flick.")]
-    public float flickReach = 0.02f;
-    [Tooltip("Seconds before a pinch lets go that are left out of the swipe: the fingers opening drag the " +
-             "pinch point, which would otherwise read as a flick.")]
-    public float releaseIgnore = 0.06f;
-    [Tooltip("How quickly a held map settles on the hand when it is still, in hertz: lower is steadier.")]
-    public float steadyCutoff = 3f;
-    [Tooltip("How much faster it follows a moving hand, per metre per second of its speed.")]
-    public float speedCutoff = 10f;
+    [Header("Slide")]
     [Tooltip("Seconds a map takes to slide one place.")]
     public float slideSeconds = 0.35f;
-    [Tooltip("Size of the maps waiting at either side, against the one in the middle.")]
+    [Tooltip("Size of a map coming in from either side, against the one in the middle.")]
     [Range(0.1f, 1f)] public float peekScale = 0.4f;
 
     [Header("Pointing at a city")]
     [Tooltip("How close a fingertip has to come to the map's face, in metres.")]
     public float pointDepth = 0.06f;
-    [Tooltip("How far outside a dot a fingertip still names it, in metres.")]
+    [Tooltip("How far outside a pin a fingertip still names it, in metres.")]
     public float pointSlack = 0.01f;
 
-    public static readonly Color Land = Style.Hex(0xA7, 0xB3, 0xC2);
-    public static readonly Color LandSide = Style.Hex(0x6E, 0x7B, 0x8C);
-    public static readonly Color Coast = Style.Hex(0x40, 0x4B, 0x59);
-    public static readonly Color DotTop = Style.Hex(0xD9, 0x3A, 0x40);
-    public static readonly Color DotSide = Style.Hex(0x8A, 0x1A, 0x20);
+    // The tool panel's own colours: black land edged in white, as the panel
+    // is a black face in a white border. Only the pins are coloured.
+    public static readonly Color Land = Style.Black;
+    public static readonly Color LandSide = Style.White;
+    public static readonly Color Coast = Style.White;
+    public static readonly Color Border = Style.White;
+    public static readonly Color Halo = Style.White;
 
-    public bool Ready => _countries.Count > 0;
+    public bool Ready => _areas.Count > 0;
 
     // How much room the maps take at the panel's side, gap included, in
     // metres; the panel opens that much to the left so the two are centred.
     public float SideWidth => gap + mapBox.x;
 
     private MapAtlas _atlas;
-    private readonly List<BreachMap.Country> _countries = new List<BreachMap.Country>();
-    private readonly Dictionary<string, (CountryMap map, MapSwipe hold)> _built =
-        new Dictionary<string, (CountryMap, MapSwipe)>();
+    private BreachMap.Answer _answer;
+    private readonly List<MapAtlas.Area> _areas = new List<MapAtlas.Area>();
+    private readonly Dictionary<string, Color> _regionColors = new Dictionary<string, Color>();
+    private readonly Dictionary<string, RegionMap> _built = new Dictionary<string, RegionMap>();
     private readonly HashSet<string> _shown = new HashSet<string>();
 
-    private CountryMap.Look _look;
+    private RegionMap.Look _look;
     private float _step;
 
     private Transform _slot;
     private TextMeshPro _title;
     private TextMeshPro _cityLabel;
-    private BreachMap.City _labelled;
+    private Transform _halo;
+    private string _labelled;
     private TextMeshPro _scaleLabel;
     private CreateCube _scaleBar;
+    private SlideBar _slider;
+
+    // The city whose bars a fingertip is on at the sheet, whose pin the map
+    // rings; and the pin a fingertip is on at the map, whose bars the sheet
+    // lights.
+    private string _barCity;
+    private string _glowing;
+    private ReadSheets _readSheets;
 
     private readonly Vector3[] _corners = new Vector3[4];
 
@@ -104,17 +101,13 @@ public class MapCarousel : MonoBehaviour
     private bool _sliding;
     private float _slideFrom, _slideTo, _slideStart, _slideSeconds;
     private bool _settlePending;
-    private bool _wasGrabbed;
+    // Whether a hand has the slider, so the maps stand where it puts them.
+    private bool _held;
 
-    // The held map's smoothed pull and when it was there, for the last half
-    // second: the release reads its speed from these.
-    private readonly List<(float time, float offset)> _pull = new List<(float, float)>();
-    private readonly OneEuroPoseFilter _smooth = new OneEuroPoseFilter();
-    private const float PullHistorySeconds = 0.5f;
-    private const float FlickWindowSeconds = 0.1f;
+    // How far below the map's box the slider and the scale bar stand, in metres.
+    private const float SliderDrop = 0.03f;
+    private const float ScaleDrop = 0.065f;
 
-    // How far either side of the middle the maps are made ahead of being seen.
-    private const int BuildAhead = 2;
 
     private void Awake()
     {
@@ -124,58 +117,59 @@ public class MapCarousel : MonoBehaviour
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        if (ManageDatasets.Instance != null) ManageDatasets.Instance.OnActiveDatasetChanged -= OnSheetChanged;
+        if (_readSheets != null)
+        {
+            _readSheets.OnHover -= OnBarHover;
+            _readSheets.OnCleared -= OnBarCleared;
+        }
     }
 
     private async void Start()
     {
         // The outlines need nothing from the API, so they are parsed while
-        // the address and key are read and the dots fetched.
+        // the address and key are read and the pins fetched.
         byte[] outlines = MapAtlas.ReadBytes();
         Task<MapAtlas> parse = outlines != null ? Task.Run(() => MapAtlas.Parse(outlines)) : null;
 
         while (!ViewCatalog.Configured) await Task.Yield();
         if (this == null) return;
 
-        List<BreachMap.Country> found;
         try
         {
-            Task<List<BreachMap.Country>> fetch = BreachMap.Fetch();
+            Task<BreachMap.Answer> fetch = BreachMap.Fetch();
             _atlas = parse != null ? await parse : null;
-            found = await fetch;
+            _answer = await fetch;
         }
         catch (Exception e)
         {
             Debug.LogWarning($"[MapCarousel] The map could not be drawn: {e.Message}");
-            found = null;
+            _answer = null;
         }
         if (this == null) return;
 
-        if (_atlas == null || found == null)
+        if (_atlas == null || _answer == null)
         {
-            // Without a map there is no country to narrow to, so the sheets
-            // count every breach.
-            if (Scene.Datasets != null) Scene.Datasets.SetCountry(null);
             Notices.Show(this, "No Map", _atlas == null
-                ? "The country outlines are missing from this build."
+                ? "The map outlines are missing from this build."
                 : CyberApi.Unreachable);
             return;
         }
 
-        foreach (BreachMap.Country country in found)
-        {
-            if (_atlas.Find(country.name) != null) _countries.Add(country);
-            else Debug.LogWarning($"[MapCarousel] No outline for {country.name}; it is left out of the maps.");
-        }
-        if (_countries.Count == 0)
-        {
-            if (Scene.Datasets != null) Scene.Datasets.SetCountry(null);
-            return;
-        }
+        _areas.AddRange(_atlas.Areas);
+        foreach (BreachMap.Region region in _answer.regions) _regionColors[region.region] = region.color;
 
         Build();
 
-        string startAt = Scene.Datasets != null ? Scene.Datasets.Country : null;
-        _index = Mathf.Max(_countries.FindIndex(c => c.name == startAt), 0);
+        if (ManageDatasets.Instance != null) ManageDatasets.Instance.OnActiveDatasetChanged += OnSheetChanged;
+        _readSheets = FindAnyObjectByType<ReadSheets>();
+        if (_readSheets != null)
+        {
+            _readSheets.OnHover += OnBarHover;
+            _readSheets.OnCleared += OnBarCleared;
+        }
+
+        _index = 0;
         _position = _index;
         Settle();
     }
@@ -189,17 +183,16 @@ public class MapCarousel : MonoBehaviour
         Material material = new Material(Resources.Load<Material>("Materials/SheetMaterial")) { name = "Map" };
         material.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
 
-        _look = new CountryMap.Look
+        _look = new RegionMap.Look
         {
             dotRadius = oneBreachRadius,
             thickness = thickness,
-            dotHeight = dotHeight,
             coastWidth = 0.0012f,
+            borderWidth = 0.0018f,
             land = Land,
             landSide = LandSide,
             coast = Coast,
-            dot = DotTop,
-            dotSide = DotSide,
+            border = Border,
             material = material
         };
 
@@ -210,6 +203,16 @@ public class MapCarousel : MonoBehaviour
         _title = Label(_slot, "Title", Style.TitleFont, 1.6f);
         _title.transform.localPosition = new Vector3(0f, mapBox.y * 0.5f + 0.05f, -thickness);
 
+        // A stop for each map along the map's width, the thumb a stop wide.
+        // The slider runs along its own X, which is east here; turned so its
+        // thumb stands out of the map's plane toward the viewer.
+        _slider = SlideBar.Create(_slot, "Slider", material);
+        _slider.transform.SetLocalPositionAndRotation(new Vector3(0f, -mapBox.y * 0.5f - SliderDrop, 0f),
+            Quaternion.Euler(-90f, 0f, 0f));
+        _slider.SetSize(mapBox.x, mapBox.x / Mathf.Max(_areas.Count, 1));
+        _slider.OnSlide += OnSlide;
+        _slider.OnRelease += OnRelease;
+
         _scaleBar = Bar(_slot, material);
         _scaleLabel = Label(_slot, "Scale", Style.BodyFont, 1f);
         _scaleLabel.alignment = TextAlignmentOptions.Left;
@@ -217,15 +220,18 @@ public class MapCarousel : MonoBehaviour
 
         _cityLabel = Label(_slot, "City", Style.BodyFont, 1.2f);
         _cityLabel.gameObject.SetActive(false);
+
+        _halo = HaloRing(_slot, material);
+        _halo.gameObject.SetActive(false);
     }
 
     private void LateUpdate()
     {
         if (_slot == null) return;
 
-        // A slide that landed last frame is drawn landed before the sheets
-        // switch, so the work of switching them falls on a frame where
-        // nothing on the map moves.
+        // A slide that landed last frame is drawn landed before the sheet
+        // switches, so the work of switching it falls on a frame where nothing
+        // on the map moves.
         if (_settlePending)
         {
             _settlePending = false;
@@ -237,31 +243,39 @@ public class MapCarousel : MonoBehaviour
         if (!shown)
         {
             // Closed with the panel: a slide under way lands at once, so the
-            // sheets still follow it, and a map let go of by closing is not
-            // held any more.
-            if (_sliding) FinishSlide();
-            else if (_wasGrabbed) _position = _index;
-            _wasGrabbed = false;
+            // sheet still follows it, and a slider let go of by closing lands
+            // on the map nearest where it was.
+            if (_held)
+            {
+                _held = false;
+                _slideTo = Mathf.Clamp(Mathf.RoundToInt(_position), 0, _areas.Count - 1);
+                FinishSlide();
+            }
+            else if (_sliding) FinishSlide();
+            Glow(null);
             return;
         }
 
-        Swipe();
-        if (!_sliding && !_wasGrabbed) BuildNext();
+        Slide();
+        if (!_sliding && !_held) BuildNext();
         Layout();
         Point();
     }
 
-    // Makes one map near the middle that has not been made yet, a frame at a
-    // time while the maps rest, so a swipe never waits on one being built.
+    // Makes one map that has not been made yet, nearest the middle first, a
+    // frame at a time while the maps rest: the slider can pass every map, so
+    // a slide never waits on one being built.
     private void BuildNext()
     {
-        for (int k = 1; k <= BuildAhead; k++)
+        for (int k = 1; k < _areas.Count; k++)
         {
             foreach (int side in new[] { k, -k })
             {
-                BreachMap.Country country = _countries[Wrap(_index + side)];
-                if (_built.TryGetValue(country.name, out var built) && built.map != null) continue;
-                Built(country);
+                int at = _index + side;
+                if (at < 0 || at >= _areas.Count) continue;
+                MapAtlas.Area area = _areas[at];
+                if (_built.TryGetValue(area.name, out RegionMap built) && built != null) continue;
+                MapFor(area);
                 return;
             }
         }
@@ -298,40 +312,28 @@ public class MapCarousel : MonoBehaviour
         return true;
     }
 
-    // While the map in the middle is held, it follows the hand and its
-    // neighbours follow it; on release they slide on to the next country or
-    // back to this one.
-    private void Swipe()
+    // The slider's thumb, in a hand, puts the maps where it is along the
+    // track: one stop per map. Let go, they slide on to the nearest stop.
+    private void OnSlide(float share)
     {
-        MapSwipe hold = HoldFor(_countries[_index]);
-        bool grabbed = hold.IsGrabbed;
+        if (!Ready) return;
+        _held = true;
+        _sliding = false;
+        _position = share * (_areas.Count - 1);
+    }
 
-        if (grabbed)
-        {
-            if (!_wasGrabbed)
-            {
-                _sliding = false;
-                _pull.Clear();
-                _smooth.Reset();
-                _smooth.posMinCutoff = steadyCutoff;
-                _smooth.posBeta = speedCutoff;
-            }
+    private void OnRelease(float share)
+    {
+        if (!Ready || !_held) return;
+        _held = false;
+        _position = share * (_areas.Count - 1);
+        SlideTo(Mathf.Clamp(Mathf.RoundToInt(_position), 0, _areas.Count - 1));
+    }
 
-            // The hand's tremor is taken out of the pull: the map is put
-            // where the filtered pull says, and the hand's next frame starts
-            // from the hand again, not from here.
-            float now = Time.time;
-            float offset = _smooth.Filter(new Pose(new Vector3(hold.Offset, 0f, 0f), Quaternion.identity),
-                Time.deltaTime).position.x;
-            hold.transform.localPosition = new Vector3(offset, 0f, 0f);
-
-            _pull.Add((now, offset));
-            while (_pull.Count > 2 && now - _pull[0].time > PullHistorySeconds) _pull.RemoveAt(0);
-            _position = _index - offset / _step;
-        }
-        else if (_wasGrabbed) SlideTo(ReleaseTarget());
-        _wasGrabbed = grabbed;
-
+    // A slide under way runs on; the thumb, when no hand has it, stands
+    // where the maps are.
+    private void Slide()
+    {
         if (_sliding)
         {
             float t = Mathf.Clamp01((Time.time - _slideStart) / Mathf.Max(_slideSeconds, 1e-3f));
@@ -339,11 +341,7 @@ public class MapCarousel : MonoBehaviour
             _position = Mathf.LerpUnclamped(_slideFrom, _slideTo, eased);
             if (t >= 1f) FinishSlide();
         }
-
-        // Only the map in the middle can be held, and only while it rests.
-        string middle = _countries[_index].name;
-        foreach (KeyValuePair<string, (CountryMap map, MapSwipe hold)> pair in _built)
-            pair.Value.hold.SetHoldable(pair.Key == middle && !_sliding);
+        _slider.Rest(_areas.Count > 1 ? _position / (_areas.Count - 1) : 0f);
     }
 
     private void SlideTo(float target)
@@ -355,60 +353,33 @@ public class MapCarousel : MonoBehaviour
         _sliding = true;
     }
 
-    // Where a let-go map goes: on, back or nowhere. Read from the pull as it
-    // was just before the fingers opened, so the opening is not a flick; a
-    // flick has to be fast and also go somewhere.
-    private int ReleaseTarget()
-    {
-        if (_pull.Count == 0) return _index;
-
-        float end = Time.time - releaseIgnore;
-        int last = _pull.Count - 1;
-        while (last > 0 && _pull[last].time > end) last--;
-        int first = last;
-        while (first > 0 && _pull[last].time - _pull[first - 1].time <= FlickWindowSeconds) first--;
-
-        float offset = _pull[last].offset;
-        float seconds = _pull[last].time - _pull[first].time;
-        float speed = seconds > 1e-3f ? (offset - _pull[first].offset) / seconds : 0f;
-
-        if (offset < -commitShare * _step || (speed < -flickSpeed && offset < -flickReach)) return _index + 1;
-        if (offset > commitShare * _step || (speed > flickSpeed && offset > flickReach)) return _index - 1;
-        return _index;
-    }
-
     private void FinishSlide()
     {
         _sliding = false;
-        _index = Wrap(Mathf.RoundToInt(_slideTo));
+        _index = Mathf.Clamp(Mathf.RoundToInt(_slideTo), 0, _areas.Count - 1);
         _position = _index;
         _settlePending = true;
     }
 
     // Each map near the middle stands where the continuous position puts it:
     // the one in the middle at full size, the next smaller and set back at
-    // its right, and the rest out of sight. The one before waits out of sight
-    // too, since its place is behind the panel, and is only seen sliding in
-    // or out. A map in the hand is where the hand has it.
+    // its right, the one before at its left, behind the panel. At rest only
+    // the one in the middle is there; the others show only while sliding.
     private void Layout()
     {
-        int first = Mathf.FloorToInt(_position) - 1, last = Mathf.CeilToInt(_position) + 1;
+        int first = Mathf.Max(Mathf.FloorToInt(_position), 0);
+        int last = Mathf.Min(Mathf.CeilToInt(_position), _areas.Count - 1);
         _shown.Clear();
-        string held = _wasGrabbed ? _countries[_index].name : null;
 
         for (int k = first; k <= last; k++)
         {
             float d = k - _position;
-            BreachMap.Country country = _countries[Wrap(k)];
-            // The held map stays out wherever the hand takes it; the cut-off
-            // only puts away the ones waiting at the sides.
-            bool inHand = country.name == held;
-            if (!inHand && (d > 1.4f || d <= -0.999f)) continue;
-            if (!_shown.Add(country.name)) continue;
+            if (Mathf.Abs(d) >= 0.999f) continue;
+            MapAtlas.Area area = _areas[k];
+            if (!_shown.Add(area.name)) continue;
 
-            CountryMap map = MapFor(country);
+            RegionMap map = MapFor(area);
             if (!map.gameObject.activeSelf) map.gameObject.SetActive(true);
-            if (inHand) continue;
 
             float away = Mathf.Clamp01(Mathf.Abs(d));
             map.transform.localPosition = new Vector3(d * _step, 0f, away * 0.08f);
@@ -416,150 +387,206 @@ public class MapCarousel : MonoBehaviour
             map.transform.localScale = Vector3.one * Mathf.Lerp(1f, peekScale, away);
         }
 
-        foreach (KeyValuePair<string, (CountryMap map, MapSwipe hold)> pair in _built)
-            if (!_shown.Contains(pair.Key) && pair.Value.map.gameObject.activeSelf)
-                pair.Value.map.gameObject.SetActive(false);
+        foreach (KeyValuePair<string, RegionMap> pair in _built)
+            if (!_shown.Contains(pair.Key) && pair.Value.gameObject.activeSelf)
+                pair.Value.gameObject.SetActive(false);
     }
 
-    // A fingertip at the map names the dot it is on.
+    // A fingertip at the map names the pin it is on and lights that pin's
+    // bars on the sheet; a fingertip at the sheet rings the pin of the bar it
+    // is on.
     private void Point()
     {
-        bool idle = !_sliding && !_wasGrabbed;
-        CountryMap map = idle ? MapFor(_countries[_index]) : null;
-        CountryMap.Dot dot = default;
-        bool found = false;
-        float face = 0f;
+        bool idle = !_sliding && !_held;
+        RegionMap map = idle ? MapFor(_areas[_index]) : null;
+        RegionMap.Dot dot = default;
+        bool pointed = false;
+        float face = -thickness;
 
         if (map != null)
         {
             float best = float.MaxValue;
-            face = -map.Thickness - dotHeight;
             foreach (Fingertips.Source source in Fingertips.All)
             {
                 if (!source.Live) continue;
                 Vector3 local = map.transform.InverseTransformPoint(source.poke.Origin);
                 if (Mathf.Abs(local.z - face) > pointDepth) continue;
-                if (!map.TryDotAt(local, pointSlack, out CountryMap.Dot hit)) continue;
+                if (!map.TryDotAt(local, pointSlack, out RegionMap.Dot hit)) continue;
                 float distanceSq = ((Vector2)local - hit.centre).sqrMagnitude;
                 if (distanceSq >= best) continue;
                 best = distanceSq;
                 dot = hit;
-                found = true;
+                pointed = true;
             }
         }
 
-        if (found != _cityLabel.gameObject.activeSelf) _cityLabel.gameObject.SetActive(found);
-        if (!found) { _labelled = null; return; }
+        Glow(pointed ? dot : (RegionMap.Dot?)null);
 
-        if (dot.city != _labelled)
+        bool ringed = pointed || (map != null && _barCity != null && map.TryDotOf(_barCity, out dot));
+        if (ringed != _cityLabel.gameObject.activeSelf) _cityLabel.gameObject.SetActive(ringed);
+        if (ringed != _halo.gameObject.activeSelf) _halo.gameObject.SetActive(ringed);
+        if (!ringed) { _labelled = null; return; }
+
+        if (dot.name != _labelled)
         {
-            _labelled = dot.city;
-            int count = dot.city.breaches;
-            _cityLabel.text = $"{dot.city.name}\n<size=80%>{Formatter.Count(count)} {(count == 1 ? "breach" : "breaches")}</size>";
+            _labelled = dot.name;
+            int count = dot.breaches, cities = dot.cities.Count;
+            string around = cities > 1 ? $"\n<size=70%>{cities} cities</size>" : "";
+            _cityLabel.text = $"{dot.name}\n<size=80%>{Formatter.Count(count)} " +
+                              $"{(count == 1 ? "breach" : "breaches")}</size>{around}";
         }
         _cityLabel.transform.localPosition = new Vector3(dot.centre.x, dot.centre.y + dot.radius + 0.025f, face - 0.01f);
+        _halo.localPosition = new Vector3(dot.centre.x, dot.centre.y, face - 0.002f);
+        _halo.localScale = new Vector3(dot.radius, dot.radius, 1f);
     }
 
-    // The country now in the middle is the one the sheets count.
+    // Lights the open sheet's bars for a pin's breaches, once each time the
+    // pin pointed at changes.
+    private void Glow(RegionMap.Dot? dot)
+    {
+        string name = dot?.name;
+        if (name == _glowing) return;
+        _glowing = name;
+        List<string> cities = dot?.cities;
+
+        ManageSheets sheets = Scene.Sheets;
+        DataSource data = Scene.Data;
+        if (sheets == null) return;
+
+        var rows = new HashSet<int>();
+        if (cities != null && data != null)
+            for (int r = 0; r < data.RowCount; r++)
+                if (cities.Contains(data.RowCityAt(r))) rows.Add(r);
+        sheets.SetRowGlow(rows);
+    }
+
+    private void OnBarHover(ReadSheets.Reading reading)
+    {
+        DataSource data = Scene.Data;
+        _barCity = reading.valid && data != null ? data.RowCityAt(reading.dataRow) : null;
+    }
+
+    private void OnBarCleared() => _barCity = null;
+
+    // The map now in the middle, which opens its sheet.
     private void Settle()
     {
-        BreachMap.Country country = _countries[_index];
-        int cities = country.cities.Count;
-        float metresPerKm = MetresPerKm(country);
+        MapAtlas.Area area = _areas[_index];
+        float metresPerKm = MetresPerKm(area);
         float barKm = NiceLength(0.15f * mapBox.x / metresPerKm);
         float barMetres = barKm * metresPerKm;
-        float barY = -mapBox.y * 0.5f - 0.04f;
+        float barY = -mapBox.y * 0.5f - ScaleDrop;
         float barLeft = -mapBox.x * 0.5f;
         _scaleBar.SetBox(new Vector3(barLeft + barMetres * 0.5f, barY, -thickness * 0.5f),
             new Vector3(barMetres, 0.003f, thickness));
         _scaleLabel.transform.localPosition = new Vector3(barLeft + barMetres + 0.01f, barY, -thickness);
         _scaleLabel.text = $"{barKm:#,0.##} km";
 
-        _title.text = $"{country.name}\n<size=60%>{Formatter.Count(country.breaches)} {(country.breaches == 1 ? "breach" : "breaches")}" +
+        int breaches = 0, cities = 0;
+        foreach (BreachMap.Region region in _answer.regions)
+            if (area.IsNational || region.region == area.region) breaches += region.breaches;
+        foreach (BreachMap.City city in _answer.cities)
+            if (area.IsNational || city.region == area.region) cities++;
+        _title.text = $"{area.name}\n<size=60%>{Formatter.Count(breaches)} {(breaches == 1 ? "breach" : "breaches")}" +
                       $" · {cities} {(cities == 1 ? "city" : "cities")}</size>";
 
-        var datasets = Scene.Datasets;
         bool first = _settled == null;
-        bool changed = _settled != country.name;
-        _settled = country.name;
-        if (datasets != null) datasets.SetCountry(country.name);
+        bool changed = _settled != area.name;
+        _settled = area.name;
 
-        string state = $"the map shows {country.name}, and the listed sheets count only breaches at companies " +
-                       $"headquartered there ({country.breaches} breaches)";
-        // The country it opens on is known, not announced; a swipe is news.
-        if (first) StateChannel.SetState("country", state);
-        else if (changed) StateChannel.RecordState("country", state);
+        OpenSheet(area.region);
+
+        string state = area.IsNational
+            ? $"the map shows the whole United States ({breaches} breaches), its pins coloured by region, " +
+              "and the sheet on the table is the national one, every US breach coloured by its region"
+            : $"the map shows the {area.name} region ({breaches} breaches), its pins coloured by metro, " +
+              $"and the sheet on the table is the {area.name}'s";
+        // The map it opens on is known, not announced; a slide is news.
+        if (first) StateChannel.SetState("map", state);
+        else if (changed) StateChannel.RecordState("map", state);
     }
 
-    // Slides the maps to a country by name, the short way round the ring, or,
-    // while they are closed with the panel, goes straight there: the sheets
-    // are narrowed to it now, and the map opens on it. False, with the
-    // reason, when there is no map of it.
+    private static void OpenSheet(string region)
+    {
+        ManageDatasets datasets = Scene.Datasets;
+        if (datasets == null) return;
+        int index = datasets.IndexOf(ViewCatalog.SheetUrl(region));
+        if (index >= 0 && index != datasets.ActiveIndex) datasets.SwitchDataset(index);
+    }
+
+    // A sheet switched another way, by the assistant, brings its map with it.
+    private void OnSheetChanged(int index)
+    {
+        if (!Ready) return;
+        ManageDatasets datasets = Scene.Datasets;
+        if (datasets == null || index < 0 || index >= datasets.DatasetCount) return;
+
+        string payload = datasets.Datasets[index].payload;
+        foreach (MapAtlas.Area area in _areas)
+            if (ViewCatalog.SheetUrl(area.region) == payload)
+            {
+                Show(area.name, out _);
+                return;
+            }
+    }
+
+    // Slides the maps to one by name ('United States', 'West', or 'US West'),
+    // through the maps between, or, while they are closed with the panel,
+    // goes straight there. False, with the reason, when there is no such map.
     public bool Show(string name, out string reason)
     {
         reason = null;
         if (!Ready) { reason = "The map has not loaded."; return false; }
 
-        int target = _countries.FindIndex(c => string.Equals(c.name, name?.Trim(), StringComparison.OrdinalIgnoreCase));
+        int target = _areas.FindIndex(a =>
+            string.Equals(a.name, name?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a.region, name?.Trim(), StringComparison.OrdinalIgnoreCase));
         if (target < 0)
         {
-            reason = $"There is no map of '{name}'; no breached company is headquartered there.";
+            reason = $"There is no map of '{name}'; the maps are the United States and its regions: " +
+                     string.Join(", ", _areas.ConvertAll(a => a.name)) + ".";
             return false;
         }
-        if (_wasGrabbed)
+        if (_held)
         {
-            reason = "The user is holding the map.";
+            reason = "The user is holding the map's slider.";
             return false;
         }
 
         // Counted from where the maps are headed: mid-slide, that is the
-        // slide's end, not the country being left.
+        // slide's end, not the map being left.
         int from = _sliding ? Mathf.RoundToInt(_slideTo) : _index;
-        int n = _countries.Count;
-        int delta = ((target - Wrap(from)) % n + n) % n;
-        if (delta > n / 2) delta -= n;
-        if (delta == 0) return true;
+        if (target == from) return true;
 
         if (!_slot.gameObject.activeSelf)
         {
             _sliding = false;
-            _index = Wrap(from + delta);
+            _index = target;
             _position = _index;
             Settle();
             return true;
         }
 
-        SlideTo(from + delta);
+        SlideTo(target);
         return true;
     }
 
-    private CountryMap MapFor(BreachMap.Country country) => Built(country).map;
-
-    private MapSwipe HoldFor(BreachMap.Country country) => Built(country).hold;
-
-    private (CountryMap map, MapSwipe hold) Built(BreachMap.Country country)
+    private RegionMap MapFor(MapAtlas.Area area)
     {
-        if (_built.TryGetValue(country.name, out var built) && built.map != null) return built;
-        CountryMap.Look look = _look;
-        look.metresPerKm = MetresPerKm(country);
-        CountryMap map = CountryMap.Build(_slot, _atlas.Find(country.name), country, look);
-        built = (map, MapSwipe.Attach(map, smallestHold, thickness + dotHeight, _step * 1.5f));
-        _built[country.name] = built;
-        return built;
+        if (_built.TryGetValue(area.name, out RegionMap built) && built != null) return built;
+        RegionMap.Look look = _look;
+        look.metresPerKm = MetresPerKm(area);
+        RegionMap map = RegionMap.Build(_slot, _atlas, area, _answer.cities, _regionColors, look);
+        _built[area.name] = map;
+        return map;
     }
 
-    // As large as the country fits the map box, whichever of its width and
-    // height meets the box first.
-    private float MetresPerKm(BreachMap.Country country)
+    // As large as the map fits the map box, whichever of its width and height
+    // meets the box first.
+    private float MetresPerKm(MapAtlas.Area area)
     {
-        Rect bounds = _atlas.Find(country.name).bounds;
+        Rect bounds = area.bounds;
         return Mathf.Min(mapBox.x / Mathf.Max(bounds.width, 1e-3f), mapBox.y / Mathf.Max(bounds.height, 1e-3f));
-    }
-
-    private int Wrap(int k)
-    {
-        int n = _countries.Count;
-        return ((k % n) + n) % n;
     }
 
     // 1, 2 or 5 times a power of ten, at most the length given.
@@ -588,7 +615,7 @@ public class MapCarousel : MonoBehaviour
     }
 
     // The scale bar, a bar like the table's: one of the app's cubes, in the
-    // land's colour. Its length is set for each country as it settles.
+    // land's colour. Its length is set for each map as it settles.
     private static CreateCube Bar(Transform parent, Material material)
     {
         var go = new GameObject("Scale Bar", typeof(MeshFilter), typeof(MeshRenderer), typeof(BoxCollider));
@@ -598,5 +625,39 @@ public class MapCarousel : MonoBehaviour
         cube.SetColor(Land);
         go.GetComponent<BoxCollider>().enabled = false;
         return cube;
+    }
+
+    // A white ring for a pin of radius one, set around whichever pin is
+    // pointed at, on the map or through its bars; scaled to the pin.
+    private static Transform HaloRing(Transform parent, Material material)
+    {
+        const int segments = 32;
+        const float inner = 1.15f, outer = 1.6f;
+        var vertices = new List<Vector3>(segments * 2);
+        var colors = new List<Color>(segments * 2);
+        var triangles = new List<int>(segments * 6);
+        for (int k = 0; k < segments; k++)
+        {
+            float a = k * Mathf.PI * 2f / segments;
+            var dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+            vertices.Add(dir * inner);
+            vertices.Add(dir * outer);
+            colors.Add(Halo);
+            colors.Add(Halo);
+            int i = k * 2, j = (k + 1) % segments * 2;
+            triangles.AddRange(new[] { i, j, i + 1, i + 1, j, j + 1 });
+        }
+        var mesh = new Mesh { name = "Halo" };
+        mesh.SetVertices(vertices);
+        mesh.SetColors(colors);
+        mesh.SetTriangles(triangles, 0);
+
+        var go = new GameObject("Halo", typeof(MeshFilter), typeof(MeshRenderer));
+        go.transform.SetParent(parent, false);
+        go.GetComponent<MeshFilter>().sharedMesh = mesh;
+        var renderer = go.GetComponent<MeshRenderer>();
+        renderer.sharedMaterial = material;
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        return go.transform;
     }
 }

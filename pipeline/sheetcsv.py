@@ -7,13 +7,11 @@ definition here rather than one per caller.
 import csv
 import io
 
-from metrics import DIVISION_COLORS, UNKNOWN_DIVISION_COLOR
-
 
 def directive(name, values):
     """A directive line whose body is itself CSV, so a value holding a comma —
-    'Finance, Insurance, Real Estate' — arrives quoted rather than splitting into
-    three. The parser reads it back with the same CSV rules it reads rows with."""
+    'New York, NY' — arrives quoted rather than splitting in two. The parser
+    reads it back with the same CSV rules it reads rows with."""
     body = io.StringIO()
     csv.writer(body, lineterminator="").writerow(values)
     return f"#{name} {body.getvalue()}\n"
@@ -46,37 +44,35 @@ def read(text):
     return directives, rows[0] if rows else [], rows[1:]
 
 
-def render(corner, columns, rows, group=1, colored=False):
+def render(corner, columns, rows):
     """corner: the header's first cell, 'Rows / Columns', which the app reads
-    its two axis titles from. columns: the column titles. rows: (label,
-    industry, values) per row, values one per column, None where nothing was
-    reported.
+    its two axis titles from. columns: the column titles. rows: (label, metro,
+    city, colour, values, heights) per row, values one per column and None
+    where nothing was reported, heights one per column in (0, 1] or None alike.
 
-    '#group' tells the parser how many neighbouring columns belong to one
-    figure; it takes their shared title prefix as the group's name, so the
-    titles of one group have to differ only at the end. '#industry' and
-    '#color' carry one value per row, in row order, so a row arrives already
-    knowing its industry and the colour it is drawn in. They travel with the
-    sheet rather than being looked up afterwards because the only key a row
-    carries is its label. A sheet whose rows are not companies or industries
-    leaves them out, and the app draws its rows uncoloured.
+    The cells are the figures themselves, so everything that reads the sheet —
+    the tooltip, the statistics, the assistant — reads dollars. A bar's height
+    is not its figure but its place among every US breach: '#heights N' says
+    the last N columns of the header are those heights, one per figure column,
+    in the same order. '#metro', '#city' and '#color' carry one value per row,
+    in row order, so a row arrives already knowing its metro, the city whose
+    pin it stands for on the map, and the colour both are drawn in. They travel
+    with the sheet because the only key a row carries is its label.
 
-    A count is a whole number and is written as one; a figure is written to
-    four places. Unreported is an empty cell, never zero.
+    A figure is written to four places. Unreported is an empty cell, never
+    zero, and the app leaves a gap there.
     """
     rows = list(rows)
 
     buffer = io.StringIO()
-    if group > 1:
-        buffer.write(directive("group", [group]))
-    if colored:
-        buffer.write(directive("industry", [industry or "" for _, industry, _ in rows]))
-        buffer.write(directive("color", [DIVISION_COLORS.get(industry, UNKNOWN_DIVISION_COLOR)
-                                         for _, industry, _ in rows]))
+    buffer.write(directive("heights", [len(columns)]))
+    buffer.write(directive("metro", [metro or "" for _, metro, _, _, _, _ in rows]))
+    buffer.write(directive("city", [city or "" for _, _, city, _, _, _ in rows]))
+    buffer.write(directive("color", [color for _, _, _, color, _, _ in rows]))
     writer = csv.writer(buffer, lineterminator="\n")
-    writer.writerow([corner, *columns])
-    for label, _, values in rows:
-        writer.writerow([label, *(cell(value) for value in values)])
+    writer.writerow([corner, *columns, *columns])
+    for label, _, _, _, values, heights in rows:
+        writer.writerow([label, *(cell(v) for v in values), *(cell(h) for h in heights)])
     return buffer.getvalue()
 
 

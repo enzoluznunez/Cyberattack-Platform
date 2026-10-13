@@ -250,7 +250,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
             return;
         }
 
-        if (!sort.MoveLine(isColumn, fromPos, toPos, null)) {
+        if (!sort.MoveLine(isColumn, fromPos, toPos)) {
             result["error"] = $"That {what} could not be moved.";
             return;
         }

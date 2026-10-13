@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pandas as pd
 
+import maps
+import metros
 import places
 from metrics import (
     ATTACK_TYPES,
@@ -29,6 +31,8 @@ from metrics import (
     MARKETS,
     REGIONS,
     RELATIONSHIPS,
+    STATE_REGIONS,
+    US,
     country_of,
     division,
 )
@@ -231,13 +235,43 @@ def breaches(raw, sic):
         "revenue_usd": number(raw["revenue"]),
         "net_income_usd": number(raw["earnings_net_income"]),
         "assets_usd": number(raw["assets"]),
+        "book_value_usd": number(raw["book_value"]),
+        "stock_price_usd": number(raw["stock_price"]),
+        "stock_price_on": date(raw["stock_price_date"]),
+        "financials_on": date(raw["financials_date"]),
     })
+    frame["metro"] = metro_of(frame)
+
+    us = frame["country"] == US
+    drawn = frame.loc[us, "state"].map(STATE_REGIONS)
+    if drawn.isna().any():
+        raise ValueError(f"state holds {sorted(set(frame.loc[us, 'state'][drawn.isna()]))}, "
+                         "which metrics.STATE_REGIONS does not place in a region")
+    if (drawn != frame.loc[us, "region"]).any():
+        raise ValueError("a US breach's region differs from the one metrics.STATE_REGIONS gives its state")
 
     if frame["breach_key"].isna().any() or frame["breach_key"].duplicated().any():
         raise ValueError("every breach needs its own breach_key")
     if (frame["attack_types"].map(len) == 0).any():
         raise ValueError("a breach lists no attack type, not even 'Not Disclosed'")
     return frame.sort_values("breach_key").reset_index(drop=True)
+
+
+def metro_of(frame):
+    """Each US breach's metro, its city's pin merged with the pins it overlaps
+    on its region's map by metros.group; None outside the United States and for
+    a breach with no city."""
+    us = frame[(frame["country"] == US) & frame["city"].notna()]
+    population = places.populations()
+    cities = {}
+    for city, rows in us.groupby("city"):
+        lon, lat = rows["lon"].iloc[0], rows["lat"].iloc[0]
+        x, y = maps.place(lon, lat, maps.frame_of(lon, lat))
+        cities[city] = (x, y, len(rows), population.get(city, 0), rows["region"].iloc[0])
+    grouped = metros.group(cities, maps.one_breach_km())
+    return pd.Series([grouped.get(city) if country == US else None
+                      for country, city in zip(frame["country"], frame["city"])],
+                     index=frame.index, dtype="object")
 
 
 # The figures kept from the fundamentals export, by the column they are stored

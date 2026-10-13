@@ -1,54 +1,75 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
+using UnityEngine;
 
-// Where the breached companies are headquartered, as /map answers: every
-// country with a breach, most breaches first, each with one dot per city.
+// Where the breached companies are headquartered, as /map answers: the six
+// regions west to east, each with the colour the national map draws it in,
+// and every city with a breach, with its metro and the colour its pin and its
+// bars share.
 public static class BreachMap
 {
+    public sealed class Region
+    {
+        public string region;
+        public string title;
+        public Color color;
+        public int breaches;
+    }
+
     public sealed class City
     {
         public string name;
+        public string region;
+        public string metro;
+        public Color color;
         public double lat, lon;
         public int breaches;
     }
 
-    public sealed class Country
+    public sealed class Answer
     {
-        public string name;
-        public string code;
-        public int breaches;
-        public List<City> cities = new List<City>();
+        public readonly List<Region> regions = new List<Region>();
+        public readonly List<City> cities = new List<City>();
     }
 
-    public static async Task<List<Country>> Fetch()
+    public static async Task<Answer> Fetch()
     {
         string json = await CyberApi.Get("/map").ConfigureAwait(false);
         return Parse(json);
     }
 
-    public static List<Country> Parse(string json)
+    public static Answer Parse(string json)
     {
-        var countries = new List<Country>();
+        var answer = new Answer();
         using JsonDocument doc = JsonDocument.Parse(json);
-        foreach (JsonElement c in doc.RootElement.GetProperty("countries").EnumerateArray())
-        {
-            var country = new Country
+        foreach (JsonElement r in doc.RootElement.GetProperty("regions").EnumerateArray())
+            answer.regions.Add(new Region
             {
-                name = c.GetProperty("country").GetString(),
-                code = c.GetProperty("code").GetString(),
+                region = r.GetProperty("region").GetString(),
+                title = r.GetProperty("title").GetString(),
+                color = Hex(r.GetProperty("color").GetString()),
+                breaches = r.GetProperty("breaches").GetInt32()
+            });
+        foreach (JsonElement c in doc.RootElement.GetProperty("cities").EnumerateArray())
+            answer.cities.Add(new City
+            {
+                name = c.GetProperty("city").GetString(),
+                region = c.GetProperty("region").GetString(),
+                metro = c.GetProperty("metro").GetString(),
+                color = Hex(c.GetProperty("color").GetString()),
+                lat = c.GetProperty("lat").GetDouble(),
+                lon = c.GetProperty("lon").GetDouble(),
                 breaches = c.GetProperty("breaches").GetInt32()
-            };
-            foreach (JsonElement city in c.GetProperty("cities").EnumerateArray())
-                country.cities.Add(new City
-                {
-                    name = city.GetProperty("city").GetString(),
-                    lat = city.GetProperty("lat").GetDouble(),
-                    lon = city.GetProperty("lon").GetDouble(),
-                    breaches = city.GetProperty("breaches").GetInt32()
-                });
-            countries.Add(country);
-        }
-        return countries;
+            });
+        return answer;
+    }
+
+    // Parsed off the main thread: ColorUtility is Unity's and may not be.
+    private static Color Hex(string hex)
+    {
+        if (hex == null || hex.Length != 7 || hex[0] != '#') return Color.grey;
+        int value = System.Convert.ToInt32(hex.Substring(1), 16);
+        return new Color(((value >> 16) & 0xFF) / 255f, ((value >> 8) & 0xFF) / 255f, (value & 0xFF) / 255f);
     }
 }

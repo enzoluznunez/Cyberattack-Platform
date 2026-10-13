@@ -52,8 +52,12 @@ One command, and nothing kept in between: every run starts from the exports.
 
 - `breaches` — one row per breach. Attack types, information accessed, breached
   subsidiaries and parent/subsidiary are real lists, dates are dates, and every
-  breach carries the industry (`division`) of its company, and the country,
-  city and coordinates of its headquarters.
+  breach carries the industry (`division`) of its company, the country, city
+  and coordinates of its headquarters, the metro that city is in (US only:
+  the cities whose pins overlap on their region's map in the app, merged by
+  `metros.group`), and the company's
+  figures as the export snapshot them at the breach, book value and stock
+  price among them.
 - `fundamentals` — one row per company per year: assets and net income (in
   millions of dollars, as the export reports them), share price and auditor
   opinion. The export repeats 2,165 company-years; the fuller row is kept.
@@ -63,7 +67,8 @@ code, falling back to the fundamentals export's.
 
 Cleaning refuses an export it does not understand — an attack type
 `metrics.py` does not name, a breach outside the year range, two equally full
-rows for one company-year that disagree, a country or city it cannot place —
+rows for one company-year that disagree, a country or city it cannot place, a
+US region that disagrees with its state —
 rather than loading it.
 
 ## Places and maps
@@ -80,35 +85,50 @@ python places.py --source data     # appends rows; never rewrites one
 
 It matches names in GeoNames' `cities500` (CC BY 4.0) and falls back to Census
 ZIP centres for US cities; what neither finds it prints, to be added by hand.
-`maps.py` draws every country's outline from Natural Earth (public domain) into
-`Assets/Resources/Maps/countries.json`, which the app ships:
+Each place also carries its GeoNames population, so a metro is named after its
+largest city. `maps.py` draws the United States and its six regions from Natural
+Earth's states (public domain) into `Assets/Resources/Maps/us.json`, which the
+app ships. Each region's map is the national map cut along its borders, in the
+same projection, so a city is at one place on every map:
 
 ```sh
 python maps.py --preview data/maps  # rewrite the outlines, and draw each to a PNG
 ```
 
 Both scripts say in their header where to download their sources into `data/`.
-Rerun `maps.py` only when a country is added to `metrics.COUNTRIES`;
-`tests/test_maps.py` checks every country has a map and every place lands on it.
+Rerun `maps.py` only when `metrics.STATE_REGIONS` changes; `tests/test_maps.py`
+checks every US place lands on its national and regional map.
 
 ## Serving the app
 
-The app ships no data. It asks `/views` at startup for the sheets that exist,
-and draws each one from `/sheet`:
+The app ships no data. It lists the national sheet and one sheet per US region
+at startup, reads each from `/sheet`, and draws its pins from `/map`:
 
 | Endpoint | What it answers |
 |---|---|
 | `/health` | Whether the service is up, and how many rows each table holds. Open without a key at the gateway. |
-| `/views` | The sheets, and the names every filter takes |
-| `/sheet?view=…` | One sheet, as the CSV the app parses |
-| `/breaches` | Individual breaches, newest first, for the assistant to read out |
-| `/map` | Every country with a breach, most first, and its cities' breach counts and coordinates |
+| `/sheet?region=…` | One region's sheet, as the CSV the app parses: a row per breach, its six figures, and each figure's place among every US breach. Without `region`, every US breach, region by region, coloured by region |
+| `/breaches` | Individual US breaches, newest first, for the assistant to read out |
+| `/map` | The regions, west to east, and every US city with a breach: its metro, its breach count and the colour its pin and bars share |
 
-The three sheets are `attack_by_year` (the default), `industry_by_attack` and
-`before_after`. Every sheet, `/breaches` and `/map` take the same filters: `since`,
-`until`, `industry`, `attack`, `information`, `accessed`, `relationship`,
-`region`, `market`, `state`, `country` and `sec`. Most take several names separated by
-commas; repeat `industry` instead, since one industry's name holds commas.
+A sheet takes only its region, since every bar is measured against the whole
+country. `/breaches` takes filters: `since`, `until`, `industry`, `attack`,
+`information`, `accessed`, `relationship`, `region`, `market`, `state` and
+`sec`. Most take several names separated by commas; repeat `industry` instead,
+since one industry's name holds commas.
+
+Metro colours are worked out by the API from the `metro` column: each region's
+ten largest metros get one of `metrics.METRO_COLORS` and the rest are black;
+a metro is one colour everywhere, and two metros sharing a region never share
+one.
+
+A metro is what the app's region map can show as one pin. Every city starts as
+a circle whose area is its breaches, sized as the app draws it on its region's
+map (`metrics.MAP_BOX_METRES` and `metrics.ONE_BREACH_METRES`, which must match
+MapCarousel's `mapBox` and `oneBreachRadius` in the scene; a test checks), and
+a circle whose centre lies inside a larger one is merged into it until none
+does. Metros never cross a region's border. Raising `ONE_BREACH_METRES` merges
+more cities and needs a rebuild of the tables and the same change in the scene.
 
 To run it on a laptop:
 

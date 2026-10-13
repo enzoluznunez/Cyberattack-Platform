@@ -1,34 +1,29 @@
 """The sheet CSV, written and read back the way the app reads it."""
 
 import sheetcsv
-from metrics import DIVISION_COLORS, UNKNOWN_DIVISION_COLOR
 
 
-def test_a_plain_sheet_has_no_directives():
-    text = sheetcsv.render("Rows / Columns", ["a", "b"], [("one", None, [1, 2])])
-    assert text == "Rows / Columns,a,b\none,1,2\n"
+def rendered():
+    return sheetcsv.render("Breach / Figure", ["Revenue", "Assets"], [
+        ("TJX (2007-01-22)", "Boston, MA", "Framingham, MA", "#eb6834", [17.5, None], [0.75, None]),
+        ("Acme (2020-03-01)", None, None, "#8a8a8a", [3, 2.0], [0.1, 0.2]),
+    ])
 
 
-def test_counts_are_whole_figures_have_four_places_and_unreported_is_blank():
-    text = sheetcsv.render("R / C", ["n", "x", "y"], [("row", None, [3, 1.5, None])])
-    assert sheetcsv.read(text)[2] == [["row", "3", "1.5000", ""]]
+def test_figures_then_their_heights_with_a_directive_saying_how_many():
+    directives, header, rows = sheetcsv.read(rendered())
+    assert directives["heights"] == ["2"]
+    assert header == ["Breach / Figure", "Revenue", "Assets", "Revenue", "Assets"]
+    assert rows[0] == ["TJX (2007-01-22)", "17.5000", "", "0.7500", ""]
 
 
-def test_a_name_with_commas_survives_the_round_trip():
-    name = "Finance, Insurance, Real Estate"
-    text = sheetcsv.render("Industry / Attack Type", ["Malware"], [(name, name, [4])], colored=True)
-    directives, _, rows = sheetcsv.read(text)
-    assert directives["industry"] == [name]
-    assert directives["color"] == [DIVISION_COLORS[name]]
-    assert rows == [[name, "4"]]
+def test_whole_numbers_are_whole_and_unreported_is_blank():
+    _, _, rows = sheetcsv.read(rendered())
+    assert rows[1][1:3] == ["3", "2.0000"]
 
 
-def test_an_unknown_industry_is_grey():
-    text = sheetcsv.render("R / C", ["n"], [("row", "Atlantis", [1])], colored=True)
-    assert sheetcsv.read(text)[0]["color"] == [UNKNOWN_DIVISION_COLOR]
-
-
-def test_group_is_written_only_when_columns_are_grouped():
-    assert "#group" not in sheetcsv.render("R / C", ["a"], [("r", None, [1])])
-    assert sheetcsv.read(sheetcsv.render("R / C", ["a 1", "a 2"], [("r", None, [1, 2])], group=2))[0] == {
-        "group": ["2"]}
+def test_a_metro_with_a_comma_survives_the_round_trip():
+    directives, _, _ = sheetcsv.read(rendered())
+    assert directives["metro"] == ["Boston, MA", ""]
+    assert directives["city"] == ["Framingham, MA", ""]
+    assert directives["color"] == ["#eb6834", "#8a8a8a"]

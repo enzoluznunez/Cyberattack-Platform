@@ -56,6 +56,11 @@ SCHEMAS = {
         F("revenue_usd", "FLOAT64"),
         F("net_income_usd", "FLOAT64"),
         F("assets_usd", "FLOAT64"),
+        F("book_value_usd", "FLOAT64"),
+        F("stock_price_usd", "FLOAT64"),
+        F("stock_price_on", "DATE"),
+        F("financials_on", "DATE"),
+        F("metro", "STRING"),
     ],
     database.FUNDAMENTALS: [
         F("cik", "INT64", mode="REQUIRED"),
