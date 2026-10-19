@@ -13,7 +13,6 @@ public static class BreachMap
     public sealed class Region
     {
         public string region;
-        public string title;
         public Color color;
         public int breaches;
     }
@@ -26,6 +25,8 @@ public static class BreachMap
         public Color color;
         public double lat, lon;
         public int breaches;
+        // How many of them report a figure, and so stand on a sheet.
+        public int charted;
     }
 
     public sealed class Metro
@@ -33,6 +34,7 @@ public static class BreachMap
         public string name;
         public string region;
         public int breaches;
+        public int charted;
     }
 
     public sealed class Answer
@@ -51,6 +53,7 @@ public static class BreachMap
                 if (!byName.TryGetValue(city.metro, out Metro metro))
                     byName[city.metro] = metro = new Metro { name = city.metro, region = city.region };
                 metro.breaches += city.breaches;
+                metro.charted += city.charted;
             }
             var order = regions.ConvertAll(r => r.region);
             var metros = new List<Metro>(byName.Values);
@@ -79,11 +82,35 @@ public static class BreachMap
         return _shared;
     }
 
+    // A server left idle starts cold, and its first answer can outlast the
+    // client's timeout; that request still wakes it, so asking again shortly
+    // after gets through. Everything waits on this read: without it there is
+    // neither a map nor a sheet to open.
+    private const int Attempts = 4;
+    private const int RetryDelayMs = 1500;
+
     private static async Task<Answer> Read()
     {
-        string json = await CyberApi.Get("/map").ConfigureAwait(false);
-        return Parse(json);
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                string json = await CyberApi.Get("/map").ConfigureAwait(false);
+                return Parse(json);
+            }
+            catch (System.Exception e) when (attempt < Attempts && Transient(e))
+            {
+                Debug.LogWarning($"[BreachMap] /map attempt {attempt} failed ({e.Message}); trying again.");
+                await Task.Delay(RetryDelayMs).ConfigureAwait(false);
+            }
+        }
     }
+
+    // A timeout, a dropped connection or a server error; not a refusal such
+    // as a bad key, which asking again would only repeat.
+    private static bool Transient(System.Exception e) =>
+        e is TaskCanceledException || e is System.Net.Http.HttpRequestException ||
+        (e is CyberApi.ApiError api && api.Status >= 500);
 
     public static Answer Parse(string json)
     {
@@ -93,7 +120,6 @@ public static class BreachMap
             answer.regions.Add(new Region
             {
                 region = r.GetProperty("region").GetString(),
-                title = r.GetProperty("title").GetString(),
                 color = Hex(r.GetProperty("color").GetString()),
                 breaches = r.GetProperty("breaches").GetInt32()
             });
@@ -106,7 +132,10 @@ public static class BreachMap
                 color = Hex(c.GetProperty("color").GetString()),
                 lat = c.GetProperty("lat").GetDouble(),
                 lon = c.GetProperty("lon").GetDouble(),
-                breaches = c.GetProperty("breaches").GetInt32()
+                breaches = c.GetProperty("breaches").GetInt32(),
+                charted = c.TryGetProperty("charted", out JsonElement charted)
+                    ? charted.GetInt32()
+                    : c.GetProperty("breaches").GetInt32()
             });
         return answer;
     }

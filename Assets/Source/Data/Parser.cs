@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
+using System.Threading.Tasks;
+using Unity.Profiling;
 using UnityEngine;
 
 public class Parser : DataSource
@@ -42,9 +43,7 @@ public class Parser : DataSource
 
     private System.Collections.IEnumerator LoadFromStreamingAssets(string fileName)
     {
-        string path = Path.Combine(Application.streamingAssetsPath, fileName);
-        string url = path.Contains("://") ? path : "file://" + path;
-        return LoadFromWebRequest(url);
+        return LoadFromWebRequest(CyberApi.StreamingAssetUrl(fileName));
     }
 
     private System.Collections.IEnumerator LoadFromWebRequest(string url)
@@ -66,10 +65,20 @@ public class Parser : DataSource
         }
     }
 
+    // Which read is current: a read still under way when another starts, or
+    // when the sheet is let go, is dropped when it lands.
+    private int _readTicket;
+
+    private static readonly ProfilerMarker ApplyMarker = new ProfilerMarker("Parser.Apply");
+
+    // The text is split and its figures read on a worker, so a large sheet
+    // never holds up a frame; what is read is taken in here on the main
+    // thread, on a later frame.
     public void LoadFromCsvText(string csvText)
     {
         ClearGrid();
         _rawText = csvText;
+        int ticket = ++_readTicket;
 
         if (LooksLikeHtml(csvText))
         {
@@ -77,122 +86,178 @@ public class Parser : DataSource
             return;
         }
 
-        string[] lines = csvText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-
-        var directives = new Directives();
-        List<List<string>> grid = new List<List<string>>(lines.Length);
-        foreach (string line in lines)
+        string label = name;
+        Task.Run(() => Table.Read(csvText, label)).ContinueWith(read => MainThread.Run(() =>
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            if (grid.Count == 0 && line.TrimStart().StartsWith("#", StringComparison.Ordinal))
+            if (this == null || ticket != _readTicket) return;
+            if (read.Status != TaskStatus.RanToCompletion)
             {
-                ReadDirective(line, directives);
-                continue;
+                Debug.LogException(read.Exception?.GetBaseException() ?? new Exception("Read cancelled."));
+                Fail("That dataset could not be read.");
+                return;
             }
-            grid.Add(ParseCSVLine(line));
-        }
-        int groupSize = directives.groupSize;
+            Apply(read.Result);
+        }));
+    }
 
-        if (grid.Count < 2)
+    private void Apply(Table table)
+    {
+        using (ApplyMarker.Auto())
         {
-            Fail("That dataset has no data rows.");
-            return;
-        }
-
-        List<string> header = grid[0];
-        if (header.Count > 0) SetAxisTitles(header[0]);
-
-        // '#heights N': the header's last N columns are the heights of the N
-        // before them, so only those first N are columns of the sheet.
-        int heights = directives.heights;
-        if (heights > 0 && header.Count - 1 != heights * 2)
-        {
-            Debug.LogWarning($"[Parser:{name}] '#heights {heights}' does not halve the " +
-                             $"{header.Count - 1} columns; drawing the cells as their own heights.");
-            heights = 0;
-        }
-        int titled = heights > 0 ? heights : header.Count - 1;
-        for (int c = 1; c <= titled; c++)
-            _columnTitles.Add(header[c].Trim());
-
-        if (groupSize > 1 && _columnTitles.Count % groupSize != 0)
-        {
-            Debug.LogWarning($"[Parser:{name}] '#group {groupSize}' does not divide the " +
-                             $"{_columnTitles.Count} columns; loading them ungrouped.");
-            groupSize = 1;
-        }
-        SetColumnGroupSize(groupSize);
-
-        // The '#metro', '#color' and '#city' directives carry one value per data row as
-        // the server wrote them, so dropping a short row here has to drop its
-        // place in them too. Keeping each survivor's original position is what
-        // lets the rest of the sheet keep its colour.
-        int sourceRows = grid.Count - 1;
-        var rows = new List<List<string>>(sourceRows);
-        var sourceRow = new List<int>(sourceRows);
-        for (int g = 1; g < grid.Count; g++)
-        {
-            if (grid[g].Count < header.Count) continue;
-            sourceRow.Add(g - 1);
-            rows.Add(grid[g]);
-        }
-
-        int skipped = sourceRows - rows.Count;
-        if (skipped > 0)
-            Debug.LogWarning($"[Parser:{name}] Skipped {skipped} row(s) shorter than the {header.Count}-column header.");
-
-        int rowCount = rows.Count;
-        int colCount = _columnTitles.Count;
-
-        if (rowCount == 0 || colCount == 0)
-        {
-            Fail("That dataset has no rows or columns.");
-            return;
-        }
-
-        for (int r = 0; r < rowCount; r++)
-        {
-            List<string> fields = rows[r];
-            _rowTitles.Add(fields.Count > 0 ? fields[0].Trim() : "");
-        }
-
-        SetRowCategories(directives, sourceRows, sourceRow);
-
-        int numericCells = FillGrid(rowCount, colCount, (r, c) =>
-        {
-            List<string> fields = rows[r];
-            string field = (c + 1 < fields.Count) ? fields[c + 1] : null;
-            return TryParseFloat(field, out float v) ? v : (float?)null;
-        });
-
-        if (heights > 0)
-            FillHeights(rowCount, colCount, (r, c) =>
+            if (table.failure != null)
             {
-                List<string> fields = rows[r];
-                int at = c + 1 + heights;
-                string field = at < fields.Count ? fields[at] : null;
-                return TryParseFloat(field, out float v) ? v : (float?)null;
-            });
+                Fail(table.failure);
+                return;
+            }
 
-        if (numericCells == 0)
+            List<string> header = table.header;
+            if (header.Count > 0) SetAxisTitles(header[0]);
+            for (int c = 1; c <= table.columns; c++)
+                _columnTitles.Add(header[c].Trim());
+            SetColumnGroupSize(table.groupSize);
+
+            int rowCount = table.rows.Count;
+            int colCount = table.columns;
+            for (int r = 0; r < rowCount; r++)
+            {
+                List<string> fields = table.rows[r];
+                _rowTitles.Add(fields.Count > 0 ? fields[0].Trim() : "");
+            }
+
+            SetRowCategories(table.directives, table.sourceRows, table.sourceRow);
+
+            FillGrid(rowCount, colCount, (r, c) => table.values[r, c]);
+            if (table.heights != null)
+                FillHeights(rowCount, colCount, (r, c) => table.heights[r, c]);
+
+            Debug.Log($"[Parser:{name}] Loaded grid {rowCount} rows x {colCount} cols " +
+                      $"({ColumnGroupSize} col(s) per group, normalised range [{_globalMin}, {_globalMax}])");
+            RaiseDataLoaded();
+            ReportResult(true, null);
+        }
+    }
+
+    // What a sheet's text says, read without touching Unity, so it can be read
+    // on any thread. A sheet that will not do says why in 'failure'.
+    private sealed class Table
+    {
+        public string failure;
+        public Directives directives;
+        public List<string> header;
+        public int columns;
+        public int groupSize;
+        public List<List<string>> rows;
+        public List<int> sourceRow;
+        public int sourceRows;
+        public float?[,] values;
+        public float?[,] heights;
+
+        public static Table Read(string csvText, string label)
         {
-            Fail("That dataset has no numeric values.");
-            return;
+            var table = new Table();
+            string[] lines = csvText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+            var directives = new Directives();
+            table.directives = directives;
+            List<List<string>> grid = new List<List<string>>(lines.Length);
+            foreach (string line in lines)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (grid.Count == 0 && line.TrimStart().StartsWith("#", StringComparison.Ordinal))
+                {
+                    ReadDirective(line, directives, label);
+                    continue;
+                }
+                grid.Add(ParseCSVLine(line));
+            }
+
+            if (grid.Count < 2) return table.Failed("That dataset has no data rows.");
+
+            List<string> header = grid[0];
+            table.header = header;
+
+            // '#heights N': the header's last N columns are the heights of the N
+            // before them, so only those first N are columns of the sheet.
+            int heights = directives.heights;
+            if (heights > 0 && header.Count - 1 != heights * 2)
+            {
+                Debug.LogWarning($"[Parser:{label}] '#heights {heights}' does not halve the " +
+                                 $"{header.Count - 1} columns; drawing the cells as their own heights.");
+                heights = 0;
+            }
+            int colCount = heights > 0 ? heights : header.Count - 1;
+            table.columns = colCount;
+
+            int groupSize = directives.groupSize;
+            if (groupSize > 1 && colCount % groupSize != 0)
+            {
+                Debug.LogWarning($"[Parser:{label}] '#group {groupSize}' does not divide the " +
+                                 $"{colCount} columns; loading them ungrouped.");
+                groupSize = 1;
+            }
+            table.groupSize = groupSize;
+
+            // The '#metro', '#color' and '#city' directives carry one value per data row as
+            // the server wrote them, so dropping a short row here has to drop its
+            // place in them too. Keeping each survivor's original position is what
+            // lets the rest of the sheet keep its colour.
+            int sourceRows = grid.Count - 1;
+            var rows = new List<List<string>>(sourceRows);
+            var sourceRow = new List<int>(sourceRows);
+            for (int g = 1; g < grid.Count; g++)
+            {
+                if (grid[g].Count < header.Count) continue;
+                sourceRow.Add(g - 1);
+                rows.Add(grid[g]);
+            }
+            table.rows = rows;
+            table.sourceRow = sourceRow;
+            table.sourceRows = sourceRows;
+
+            int skipped = sourceRows - rows.Count;
+            if (skipped > 0)
+                Debug.LogWarning($"[Parser:{label}] Skipped {skipped} row(s) shorter than the {header.Count}-column header.");
+
+            int rowCount = rows.Count;
+            if (rowCount == 0 || colCount == 0) return table.Failed("That dataset has no rows or columns.");
+
+            table.values = new float?[rowCount, colCount];
+            int numericCells = 0;
+            for (int r = 0; r < rowCount; r++)
+                for (int c = 0; c < colCount; c++)
+                {
+                    float? v = FieldAt(rows[r], c + 1);
+                    table.values[r, c] = v;
+                    if (v.HasValue) numericCells++;
+                }
+
+            if (heights > 0)
+            {
+                table.heights = new float?[rowCount, colCount];
+                for (int r = 0; r < rowCount; r++)
+                    for (int c = 0; c < colCount; c++)
+                        table.heights[r, c] = FieldAt(rows[r], c + 1 + heights);
+            }
+
+            if (numericCells == 0) return table.Failed("That dataset has no numeric values.");
+            return table;
         }
 
-        EnsureOrders();
+        private Table Failed(string reason)
+        {
+            failure = reason;
+            return this;
+        }
 
-        Debug.Log($"[Parser:{name}] Loaded grid {rowCount} rows x {colCount} cols " +
-                  $"({ColumnGroupSize} col(s) per group, normalised range [{_globalMin}, {_globalMax}])");
-        RaiseDataLoaded();
-        ReportResult(true, null);
+        private static float? FieldAt(List<string> fields, int at) =>
+            at < fields.Count && TryParseFloat(fields[at], out float v) ? v : (float?)null;
     }
 
     private void Fail(string reason)
     {
+        _readTicket++;
         Debug.LogWarning($"[Parser:{name}] {reason}");
         ClearGrid();
-        EnsureOrders();
         RaiseLoadFailed();
         ReportResult(false, reason);
     }
@@ -219,7 +284,7 @@ public class Parser : DataSource
     // columns are the heights of the N before them; '#metro', '#color' and
     // '#city' carry one value per data row, in row order. Anything else is
     // ignored, so a file may carry comments without becoming a row.
-    private void ReadDirective(string line, Directives into)
+    private static void ReadDirective(string line, Directives into, string label)
     {
         string body = line.TrimStart().TrimStart('#').Trim();
 
@@ -236,7 +301,7 @@ public class Parser : DataSource
         {
             if (int.TryParse(count, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n > 0)
                 into.heights = n;
-            else Debug.LogWarning($"[Parser:{name}] Ignored unreadable directive '{line.Trim()}'.");
+            else Debug.LogWarning($"[Parser:{label}] Ignored unreadable directive '{line.Trim()}'.");
             return;
         }
 
@@ -247,20 +312,23 @@ public class Parser : DataSource
             into.groupSize = size;
             return;
         }
-        Debug.LogWarning($"[Parser:{name}] Ignored unreadable directive '{line.Trim()}'.");
+        Debug.LogWarning($"[Parser:{label}] Ignored unreadable directive '{line.Trim()}'.");
     }
 
     private static bool TryBody(string body, string name, out string rest)
     {
         rest = null;
         if (!body.StartsWith(name, StringComparison.OrdinalIgnoreCase)) return false;
+        // The whole word, so a comment such as '# colors follow...' stays a comment.
+        if (body.Length > name.Length && !char.IsWhiteSpace(body[name.Length])) return false;
 
         rest = body.Substring(name.Length).Trim();
         return true;
     }
 
     // A row's metro, its colour and its city only mean anything together and
-    // only if there is exactly one of each per row: a sheet whose directives
+    // only if there is exactly one of each per row (the city is only checked,
+    // not kept): a sheet whose directives
     // disagree with its rows is drawn uncoloured rather than coloured by a
     // guess. 'sourceRows' is how many data rows the directives were written
     // for, and 'sourceRow' says where each row that survived stood among them.
@@ -268,7 +336,6 @@ public class Parser : DataSource
     {
         _rowCategories.Clear();
         _rowColors.Clear();
-        _rowCities.Clear();
         List<string> categories = directives.categories, colors = directives.colors, cities = directives.cities;
         if (categories.Count == 0 && colors.Count == 0) return;
 
@@ -285,7 +352,6 @@ public class Parser : DataSource
             int at = sourceRow[r];
             _rowCategories.Add(categories[at].Trim());
             _rowColors.Add(ColorUtility.TryParseHtmlString(colors[at].Trim(), out Color c) ? c : Color.white);
-            if (cities.Count > 0) _rowCities.Add(cities[at].Trim());
         }
     }
 
@@ -319,7 +385,6 @@ public class Parser : DataSource
         _rowTitles.Clear();
         _rowCategories.Clear();
         _rowColors.Clear();
-        _rowCities.Clear();
         _heights = null;
         _columnAxisTitle = null;
         _rowAxisTitle = null;

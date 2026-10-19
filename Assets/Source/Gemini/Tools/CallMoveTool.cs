@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Google.GenAI.Types;
 using UnityEngine;
@@ -23,17 +22,14 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "CallMoveTool",
         Description = "Move the sheet, as if the user grabbed and slid it: a distance in a direction, including " +
-                      "diagonals. It passes freely through anything in the room.",
+                      "diagonals.",
         Parameters = ParametersFor(typeof(Args))
     };
 
     protected override void Run(Args args, Dictionary<string, object> result) {
         if (!EnsureToolSelected(ToolType.Move, result)) return;
 
-        var manager = Scene.Sheets;
-        if (manager == null || !manager.IsBuilt) { result["error"] = "The sheet is not ready to move."; return; }
-
-        string dir = args.direction?.Trim().ToLowerInvariant();
+        string dir = args.direction;
         if (!TryWorldDirection(dir, out Vector3 dirVec)) {
             result["error"] = $"Unknown direction '{args.direction}'. Use left, right, forward, back, up, down, " +
                               "or a diagonal such as forward-left.";

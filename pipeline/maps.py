@@ -183,6 +183,41 @@ def visible(geometry, detail):
     return unary_union(kept)
 
 
+# The smallest lake a map keeps once simplified, in square millimetres as the
+# app draws it: about a headset pixel across at arm's length.
+SPECK_MM2 = 1.5
+
+
+def without_specks(geometry, detail):
+    """The geometry without the lakes simplifying shrank to specks: a lake
+    visible() kept can come out of the simplification a sliver or a tiny
+    triangle. A detail is about a millimetre on the drawn map, so a square
+    detail is about a square millimetre. Only holes go, so no map's bounds
+    move."""
+    smallest = SPECK_MM2 * detail ** 2
+    kept = [Polygon(p.exterior, [r for r in p.interiors if Polygon(r).area >= smallest])
+            for p in polygons(geometry)]
+    return unary_union(kept)
+
+
+def with_border_lakes_filled(simplified, detail):
+    """A lake on a border between regions is a notch in each and a hole only
+    in the country they make together, so without_specks() never sees it. A
+    speck of one is given to the region it shares the most shore with, so the
+    country and the colours drawn over it lose it together."""
+    country = unary_union(list(simplified.values()))
+    smallest = SPECK_MM2 * detail ** 2
+    filled = dict(simplified)
+    for p in polygons(country):
+        for r in p.interiors:
+            lake = Polygon(r)
+            if lake.area >= smallest:
+                continue
+            owner = max(filled, key=lambda region: filled[region].boundary.intersection(lake.boundary).length)
+            filled[owner] = unary_union([filled[owner], lake])
+    return filled
+
+
 def mesh(land):
     """(vertices, triangles, outlines) for a flat mesh: vertices as x, y pairs
     in kilometres, triangles as vertex indexes, each outline a closed ring."""
@@ -288,7 +323,8 @@ def build(states, lakes):
     national_detail = detail_of(unary_union(list(lands.values())))
     together = shapely.coverage_simplify(
         [visible(lands[region], national_detail) for region in US_REGIONS], national_detail)
-    simplified = dict(zip(US_REGIONS, together))
+    simplified = {region: without_specks(g, national_detail) for region, g in zip(US_REGIONS, together)}
+    simplified = with_border_lakes_filled(simplified, national_detail)
     country = unary_union(list(simplified.values()))
     borders = unary_union([simplified[a].boundary.intersection(simplified[b].boundary)
                            for i, a in enumerate(US_REGIONS) for b in US_REGIONS[i + 1:]])
@@ -296,7 +332,7 @@ def build(states, lakes):
     maps = [{"name": "United States", "region": None,
              "bounds": [round(v, 3) for v in country.bounds],
              "vertices": vertices, "triangles": triangles, "outlines": outlines,
-             "borders": lines(borders)}]
+             "borders": lines(borders), "fills": fills(simplified)}]
     print(f"United States  {len(vertices) // 2:6d} vertices {len(triangles) // 3:6d} triangles")
 
     # Each region on its own, as detailed as its own map can show, and cut out
@@ -304,16 +340,29 @@ def build(states, lakes):
     cells = nearest_regions(lands)
     for region in US_REGIONS:
         detail = detail_of(lands[region])
-        land = visible(lands[region], detail).simplify(detail, preserve_topology=True)
+        land = without_specks(visible(lands[region], detail).simplify(detail, preserve_topology=True), detail)
         cell = cells[region].simplify(detail, preserve_topology=True)
         vertices, triangles, outlines = mesh(land)
+        cell_vertices, cell_triangles, _ = mesh(cell)
         maps.append({"name": region_title(region), "region": region,
                      "bounds": [round(v, 3) for v in land.bounds],
                      "vertices": vertices, "triangles": triangles, "outlines": outlines,
-                     "cell": rings(cell)})
+                     "cell": rings(cell),
+                     "cellMesh": {"vertices": cell_vertices, "triangles": cell_triangles}})
         print(f"{region_title(region):14s} {len(vertices) // 2:6d} vertices {len(triangles) // 3:6d} triangles")
 
     return {"radiusKm": RADIUS, "frames": FRAMES, "checks": check_points(), "maps": maps}
+
+
+def fills(simplified):
+    """Each region's land on the national map, in its colour: the very pieces
+    the national land was joined from, so the colours cover it exactly, with
+    no white left between them and none spilling past the coast."""
+    found = []
+    for region in US_REGIONS:
+        vertices, triangles, _ = mesh(simplified[region])
+        found.append({"region": region, "vertices": vertices, "triangles": triangles})
+    return found
 
 
 def preview(document, directory):

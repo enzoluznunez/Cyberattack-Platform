@@ -1,5 +1,6 @@
 using Oculus.Interaction;
 using Oculus.Interaction.Grab;
+using Oculus.Interaction.HandGrab;
 using UnityEngine;
 
 [RequireComponent(typeof(BoxCollider), typeof(Rigidbody))]
@@ -15,85 +16,127 @@ public class SortLineProxy : MonoBehaviour
 
     public float Coord => columns ? transform.localPosition.x : transform.localPosition.z;
 
-    private const float RowBand = 0.25f;
-    private const float ColumnBand = 0.75f;
-    private const float BandHeight = 0.45f;
+    // Where a row's and a column's handle stand, as shares of the bars' full
+    // height, and how tall each is: rows below, columns above, a gap between.
+    public const float RowBand = 0.25f;
+    public const float ColumnBand = 0.75f;
+    public const float BandHeight = 0.45f;
+
+    private BoxCollider _box;
+    private BoxCollider[] _grips;
+    private HandGrabInteractable _handGrab;
+    private OneGrabTranslateTransformer _slide;
 
     // One handle per block, so a grouped axis is grabbed a whole metric at a time
-    // and its years can never be pulled apart.
-    public static SortLineProxy Create(CreateSheet owner, bool columns, int block, float height)
+    // and its years can never be pulled apart. Made with nothing to hold yet,
+    // put away, while the app loads, and stood on a sheet's line by Place
+    // whenever the Sort tool is out.
+    public static SortLineProxy Make(Transform parent)
     {
-        if (owner == null) return null;
-
-        float cell = owner.CellSize;
-        if (cell <= 1e-6f || height <= 1e-6f) return null;
-
-        int min = owner.BlockMin(columns);
-        int max = owner.BlockMax(columns);
-        if (block < min || block > max) return null;
-
-        int perpMin = columns ? owner.rowMin : owner.colMin;
-        int perpMax = columns ? owner.rowMax : owner.colMax;
-        float span = owner.LineCoord(!columns, perpMax) - owner.LineCoord(!columns, perpMin) + cell;
-        float thickness = owner.GroupSizeOn(columns) * owner.PitchOn(columns);
-
-        GameObject go = new GameObject($"SortLine_{(columns ? "Col" : "Row")}_{block}");
-        go.transform.SetParent(owner.transform, false);
-
-        float coord = owner.BlockCoord(columns, block);
-        float bandCentre = height * (columns ? ColumnBand : RowBand);
-        go.transform.localPosition = columns
-            ? new Vector3(coord, bandCentre, 0f)
-            : new Vector3(0f, bandCentre, coord);
-        go.transform.localRotation = Quaternion.identity;
-        go.transform.localScale = Vector3.one;
-
+        GameObject go = new GameObject("SortLine");
+        go.transform.SetParent(parent, false);
         SortLineProxy proxy = go.AddComponent<SortLineProxy>();
-        proxy.sheet = owner;
-        proxy.columns = columns;
-        proxy.block = block;
-        proxy.Build(thickness, span, height, owner.BlockPitch(columns),
-            owner.BlockCoord(columns, min) - coord, owner.BlockCoord(columns, max) - coord);
+        proxy.Init();
+        proxy.SetLive(false);
         return proxy;
     }
 
-    private void Build(float cell, float span, float height, float handle, float back, float forward)
+    private void Init()
     {
-        BoxCollider box = GetComponent<BoxCollider>();
-        box.center = Vector3.zero;
-        box.size = columns
+        _box = GetComponent<BoxCollider>();
+        _grips = new[] { gameObject.AddComponent<BoxCollider>(), gameObject.AddComponent<BoxCollider>() };
+        (_grabbable, _handGrab) = SlideGrab.Attach(gameObject, GetComponent<Rigidbody>(), Limits(0f, 0f, 0f),
+            GrabTypeFlags.Pinch);
+        _slide = GetComponent<OneGrabTranslateTransformer>();
+    }
+
+    // Stands the handle on a block of a sheet's lines, sliding along that
+    // axis from the first block's place to the last. False, leaving it put
+    // away, when there is no such block.
+    public bool Place(CreateSheet owner, bool columns, int block, float height)
+    {
+        if (owner == null) return false;
+
+        float cell = owner.CellSize;
+        if (cell <= 1e-6f || height <= 1e-6f) return false;
+
+        int min = owner.BlockMin(columns);
+        int max = owner.BlockMax(columns);
+        if (block < min || block > max) return false;
+
+        // Across every place on the other axis, empty ones included, as the
+        // sheet itself spans them: a line filtered off at either end leaves
+        // the sheet its size and its middle where it was, so the handle,
+        // centred on that middle, would otherwise slide toward the empty end
+        // and its grip stand over the first lines at the other. The Filter
+        // tool measures the ends the same way (FilterTool.Outside).
+        bool across = !columns;
+        float span = owner.SlotCoord(across, owner.LastSlot(across))
+                     - owner.SlotCoord(across, owner.FirstSlot(across)) + owner.PitchOn(across);
+        float thickness = owner.GroupSizeOn(columns) * owner.PitchOn(columns);
+
+        sheet = owner;
+        this.columns = columns;
+        this.block = block;
+        gameObject.name = $"SortLine_{(columns ? "Col" : "Row")}_{block}";
+        if (transform.parent != owner.transform) transform.SetParent(owner.transform, false);
+
+        float coord = owner.BlockCoord(columns, block);
+        float bandCentre = height * (columns ? ColumnBand : RowBand);
+        transform.localPosition = columns
+            ? new Vector3(coord, bandCentre, 0f)
+            : new Vector3(0f, bandCentre, coord);
+        transform.localRotation = Quaternion.identity;
+        transform.localScale = Vector3.one;
+
+        Size(thickness, span, height, owner.BlockPitch(columns));
+        _slide.InjectOptionalConstraints(Limits(coord, owner.BlockCoord(columns, min) - coord,
+            owner.BlockCoord(columns, max) - coord));
+        _slide.Initialize(_grabbable);
+        SetLive(true);
+        return true;
+    }
+
+    // Put away, it takes no hand and no poke; nothing of it is drawn either way.
+    public void SetLive(bool on)
+    {
+        _box.enabled = on;
+        for (int i = 0; i < _grips.Length; i++) _grips[i].enabled = on;
+        _grabbable.enabled = on;
+        _handGrab.enabled = on;
+    }
+
+    private void Size(float cell, float span, float height, float handle)
+    {
+        _box.center = Vector3.zero;
+        _box.size = columns
             ? new Vector3(cell, height * BandHeight, span)
             : new Vector3(span, height * BandHeight, cell);
 
         float lift = height * 0.5f - transform.localPosition.y;
-        for (int end = -1; end <= 1; end += 2)
+        for (int g = 0; g < _grips.Length; g++)
         {
-            BoxCollider grip = gameObject.AddComponent<BoxCollider>();
+            int end = g == 0 ? -1 : 1;
             float along = (span + handle) * 0.5f * end;
-            grip.center = columns ? new Vector3(0f, lift, along) : new Vector3(along, lift, 0f);
-            grip.size = columns ? new Vector3(cell, height, handle) : new Vector3(handle, height, cell);
+            _grips[g].center = columns ? new Vector3(0f, lift, along) : new Vector3(along, lift, 0f);
+            _grips[g].size = columns ? new Vector3(cell, height, handle) : new Vector3(handle, height, cell);
         }
-
-        _grabbable = SlideGrab.Attach(gameObject, GetComponent<Rigidbody>(), Limits(back, forward),
-            GrabTypeFlags.Pinch).grabbable;
     }
 
-    private OneGrabTranslateTransformer.OneGrabTranslateConstraints Limits(float back, float forward)
+    // Stated in the sheet's own space rather than from where the handle stood
+    // when it was readied, so a handle can be stood on any line again.
+    private OneGrabTranslateTransformer.OneGrabTranslateConstraints Limits(float coord, float back, float forward)
     {
         var limits = new OneGrabTranslateTransformer.OneGrabTranslateConstraints
         {
-            ConstraintsAreRelative = true,
-            MinX = SlideGrab.Pin(0f),
-            MaxX = SlideGrab.Pin(0f),
-            MinY = SlideGrab.Pin(0f),
-            MaxY = SlideGrab.Pin(0f),
-            MinZ = SlideGrab.Pin(0f),
-            MaxZ = SlideGrab.Pin(0f)
+            ConstraintsAreRelative = false,
+            MinX = SlideGrab.Pin(columns ? coord + back : 0f),
+            MaxX = SlideGrab.Pin(columns ? coord + forward : 0f),
+            MinY = SlideGrab.Pin(transform.localPosition.y),
+            MaxY = SlideGrab.Pin(transform.localPosition.y),
+            MinZ = SlideGrab.Pin(columns ? 0f : coord + back),
+            MaxZ = SlideGrab.Pin(columns ? 0f : coord + forward)
         };
-
-        if (columns) { limits.MinX = SlideGrab.Pin(back); limits.MaxX = SlideGrab.Pin(forward); }
-        else { limits.MinZ = SlideGrab.Pin(back); limits.MaxZ = SlideGrab.Pin(forward); }
-
         return limits;
     }
 }

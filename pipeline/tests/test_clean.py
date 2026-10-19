@@ -9,7 +9,7 @@ import clean
 import maps
 import metros
 import places
-from metrics import COUNTRIES, FIRST_YEAR, LAST_YEAR
+from metrics import COUNTRIES, FIRST_YEAR, LAST_YEAR, METRICS
 
 
 @pytest.fixture(scope="module")
@@ -17,19 +17,35 @@ def sic(raw):
     return clean.company_sic(*raw)
 
 
-def test_every_breach_with_a_ticker_survives_cleaning(raw, breaches):
-    """Only the breaches whose company traded under no ticker when they were
-    disclosed are left out, and tickers.csv names every one of them."""
+def incomplete(raw):
+    """The export's breach keys missing any of the six figures a sheet draws."""
+    blank = pd.concat([raw[0][column].str.strip().isin(clean.MISSING) for column in FIGURE_COLUMNS], axis=1)
+    return set(raw[0].loc[blank.any(axis=1), "breach_key"].str.strip().astype(int))
+
+
+# The export's columns for the six figures.
+FIGURE_COLUMNS = ["revenue", "earnings_net_income", "assets", "book_value", "market_cap", "stock_price"]
+
+
+def test_only_breaches_with_a_ticker_and_every_figure_survive_cleaning(raw, breaches):
+    """The breaches whose company traded under no ticker when they were
+    disclosed, which tickers.csv names, and those missing any of the six
+    figures are left out; every other one is kept."""
     none = {key for key, ticker in clean.looked_up_tickers().items() if ticker is None}
-    assert len(breaches) == len(raw[0]) - len(none)
-    assert not none & set(breaches["breach_key"])
+    every = set(raw[0]["breach_key"].str.strip().astype(int))
+    assert set(breaches["breach_key"]) == every - none - incomplete(raw)
     assert breaches["breach_key"].is_unique
+
+
+def test_every_breach_reports_every_figure(breaches):
+    assert breaches[list(METRICS)].notna().all().all()
 
 
 @pytest.fixture(scope="module")
 def kept(raw, breaches):
     """The export's breach rows for the breaches cleaning keeps: those it
-    leaves out, for having no ticker, are checked above, not by every count."""
+    leaves out, for having no ticker or a missing figure, are checked above,
+    not by every count."""
     keys = set(breaches["breach_key"])
     return raw[0][raw[0]["breach_key"].str.strip().astype(int).isin(keys)]
 
@@ -40,10 +56,16 @@ def test_every_breach_has_a_ticker(breaches):
     assert breaches["ticker"].str.fullmatch(r"[A-Z]{1,5}(\.[A-Z])?").all()
 
 
-def test_a_blank_ticker_is_filled_from_tickers_csv(breaches):
+def test_a_blank_ticker_is_filled_from_tickers_csv(raw, breaches):
+    """Every kept breach the export gave no ticker carries the one tickers.csv
+    looked up for it, such as Google Inc.'s GOOG in 2010."""
+    blank = set(raw[0].loc[raw[0]["ticker"].str.strip().isin(clean.MISSING), "breach_key"].str.strip().astype(int))
+    looked_up = clean.looked_up_tickers()
     ticker = breaches.set_index("breach_key")["ticker"]
-    assert ticker[1] == "GOOG"            # Google Inc., 2010
-    assert ticker[469] == "TWX"           # AOL, while part of Time Warner
+    filled = blank & set(ticker.index)
+    assert filled
+    assert all(ticker[key] == looked_up[key] for key in filled)
+    assert ticker[1] == "GOOG"
 
 
 def test_a_blank_ticker_tickers_csv_does_not_list_stops_the_rebuild():
@@ -64,9 +86,9 @@ def test_pipe_lists_become_lists():
     assert clean.items(cells).tolist() == [["Malware", "Phishing"], ["Ransomware"], []]
 
 
-def test_a_list_cell_holds_what_the_export_listed(raw, breaches):
+def test_a_list_cell_holds_what_the_export_listed(kept, breaches):
     by_key = breaches.set_index("breach_key")
-    row = raw[0].iloc[0]
+    row = kept.iloc[0]
     expected = [item for item in row["type_of_attack"].strip("|").split("|") if item]
     assert by_key.loc[int(row["breach_key"]), "attack_types"] == expected
 
@@ -89,10 +111,11 @@ def test_a_fiscal_year_that_disagrees_with_the_disclosure_stops_the_rebuild(raw,
         clean.breaches(changed, sic)
 
 
-def test_a_breach_outside_the_year_range_stops_the_rebuild(raw, sic):
+def test_a_breach_outside_the_year_range_stops_the_rebuild(raw, kept, sic):
     changed = raw[0].copy()
-    changed.loc[0, "fyear"] = str(LAST_YEAR + 1)
-    changed.loc[0, "date_of_breach_disclosure"] = f"{LAST_YEAR + 1}-01-15"
+    at = kept.index[0]
+    changed.loc[at, "fyear"] = str(LAST_YEAR + 1)
+    changed.loc[at, "date_of_breach_disclosure"] = f"{LAST_YEAR + 1}-01-15"
     with pytest.raises(ValueError, match="outside"):
         clean.breaches(changed, sic)
 
@@ -147,10 +170,10 @@ def test_a_company_has_one_industry_in_both_tables(breaches, fundamentals):
     assert (both["division_b"] == both["division_f"]).all()
 
 
-def test_only_companies_no_export_classifies_lack_an_industry(raw, breaches):
-    breaches_raw, fundamentals_raw = raw
-    no_code = breaches_raw["sic_code"].str.strip() == ""
-    unclassified = breaches_raw[no_code & ~breaches_raw["cik"].isin(fundamentals_raw["cik"])]
+def test_only_companies_no_export_classifies_lack_an_industry(raw, kept, breaches):
+    fundamentals_raw = raw[1]
+    no_code = kept["sic_code"].str.strip() == ""
+    unclassified = kept[no_code & ~kept["cik"].isin(fundamentals_raw["cik"])]
     assert breaches["division"].isna().sum() == len(unclassified)
 
 
@@ -162,8 +185,8 @@ def test_every_breach_has_a_country(kept, breaches):
 
 def test_every_breach_with_a_city_is_placed(kept, breaches):
     blank = kept["city"].map(places.city_key).isna()
-    assert breaches["city"].isna().sum() == blank.sum() == 1
-    assert breaches["lat"].notna().sum() == breaches["lon"].notna().sum() == len(breaches) - 1
+    assert breaches["city"].isna().sum() == blank.sum() <= 1
+    assert breaches["lat"].notna().sum() == breaches["lon"].notna().sum() == len(breaches) - blank.sum()
     assert breaches["lat"].dropna().between(-90, 90).all()
     assert breaches["lon"].dropna().between(-180, 180).all()
 
@@ -217,11 +240,11 @@ def test_every_us_breach_with_a_city_has_a_metro(breaches):
 
 def test_cities_whose_pins_overlap_on_their_regions_map_are_one_metro(breaches):
     metro = breaches.dropna(subset=["metro"]).drop_duplicates("city").set_index("city")["metro"]
-    assert metro["Newark, NJ"] == metro["Philadelphia, PA"] == "New York, NY"
+    assert metro["Jersey City, NJ"] == metro["Philadelphia, PA"] == "New York, NY"
     assert metro["Woonsocket, RI"] == metro["Burlington, MA"] == "Boston, MA"
     assert metro["San Francisco, CA"] == metro["San Jose, CA"]
     # Stamford is in New England, and a metro never reaches over a border.
-    assert metro["Stamford, CT"] != metro["Newark, NJ"]
+    assert metro["Stamford, CT"] != metro["Jersey City, NJ"]
 
 
 def test_no_metros_pin_has_its_centre_inside_another_on_their_regions_map(breaches):
@@ -241,9 +264,9 @@ def test_no_metros_pin_has_its_centre_inside_another_on_their_regions_map(breach
                     assert math.hypot(u - x, v - y) >= r, region
 
 
-def test_a_region_that_disagrees_with_its_state_stops_the_rebuild(raw, sic):
+def test_a_region_that_disagrees_with_its_state_stops_the_rebuild(raw, kept, sic):
     changed = raw[0].copy()
-    texan = changed.index[changed["state_code"].str.strip() == "TX"][0]
+    texan = kept.index[kept["state_code"].str.strip() == "TX"][0]
     changed.loc[texan, "region"] = "US West"
     with pytest.raises(ValueError, match="STATE_REGIONS"):
         clean.breaches(changed, sic)

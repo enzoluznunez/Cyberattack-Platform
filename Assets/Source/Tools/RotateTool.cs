@@ -3,19 +3,9 @@ using Oculus.Interaction;
 
 public class RotateTool : GrabTool
 {
-    private static ITransformer YawTransformerFor(CreateSheet sheet)
-    {
-        TwoGrabRotateTransformer yaw = sheet.GetComponent<TwoGrabRotateTransformer>();
-        if (yaw != null) return yaw;
+    private static ITransformer YawTransformerFor(CreateSheet sheet) => PanelPlacement.FreeSpin(sheet.gameObject);
 
-        yaw = sheet.gameObject.AddComponent<TwoGrabRotateTransformer>();
-        yaw.InjectOptionalConstraints(new TwoGrabRotateTransformer.TwoGrabRotateConstraints
-        {
-            MinAngle = new FloatConstraint(),
-            MaxAngle = new FloatConstraint()
-        });
-        return yaw;
-    }
+    protected override void PrepareSheet(CreateSheet sheet) => YawTransformerFor(sheet);
 
     protected override ToolType Kind => ToolType.Rotate;
 

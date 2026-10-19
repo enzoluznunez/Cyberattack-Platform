@@ -7,7 +7,7 @@ public class ProfileTool : Tool
     [Tooltip("How far a pressed finger must travel, in cells, before the sweep direction chooses the axis.")]
     public float travelCells = 0.6f;
 
-    private readonly AxisIntent _intent = new AxisIntent { deadband = 0.25f };
+    private readonly AxisIntent _intent = new AxisIntent();
     private bool _pressed;
     private Vector3 _pressLocal;
 
@@ -15,17 +15,11 @@ public class ProfileTool : Tool
 
     protected override bool UsesSheetEvents => true;
 
-    protected override void OnResetTool() => StatsTooltip.Hide();
-
     protected override void OnActiveChanged(bool active)
     {
         _pressed = false;
         _intent.Reset();
-        if (!active)
-        {
-            ClearTint();
-            StatsTooltip.Hide();
-        }
+        if (!active) ClearTint();
     }
 
     private static bool Usable(ReadSheets.Reading reading) =>
@@ -106,59 +100,11 @@ public class ProfileTool : Tool
 
         bool columns = _intent.Columns;
         if (!Project(columns, reading.cube.dataRow, reading.cube.dataCol, reading.visRow, reading.visCol)) return;
-
-        ShowStats(columns, reading);
+        UIPressFeedback.Play();
     }
 
-    private void ShowStats(bool columns, ReadSheets.Reading reading)
-    {
-        if (!StatsTooltip.TryResolve(sheetManager, reading,
-                out Tooltip tooltip, out DataSource data, out CreateSheet piece)) return;
-
-        int line = columns ? reading.visCol : reading.visRow;
-        string name = columns && data.IsGrouped(true)
-            ? DataSource.GroupLabelAt(data, true, data.GroupOf(true, line))
-            : data.TitleAt(columns, line);
-        string title = string.IsNullOrEmpty(name) ? $"{(columns ? "Column" : "Row")} {line + 1}" : name;
-
-        // Across a grouped axis the cells hold different metrics, so a row's
-        // summary is taken over the one metric that was touched rather than over
-        // every column, which would average dollars with share counts.
-        int colLo = piece.colMin;
-        int colHi = piece.colMax;
-        if (!columns && data.IsGrouped(true))
-        {
-            int group = data.GroupOf(true, reading.visCol);
-            data.GroupSpan(true, group, out colLo, out colHi);
-            colLo = Mathf.Max(colLo, piece.colMin);
-            colHi = Mathf.Min(colHi, piece.colMax);
-            title += " · " + DataSource.GroupLabelAt(data, true, group);
-        }
-
-        // A column strip raises the whole metric, so its summary covers every year.
-        int stripLo = line, stripHi = line;
-        if (columns) sheetManager.ColumnStripSpan(piece, line, out stripLo, out stripHi);
-
-        Tooltip.SelectionStats selection = new Tooltip.SelectionStats
-        {
-            title = title,
-            stats = columns
-                ? SheetStats.Over(data, piece.rowMin, piece.rowMax, stripLo, stripHi)
-                : SheetStats.Over(data, line, line, colLo, colHi)
-        };
-
-        ManageSheets sheets = sheetManager;
-        CreateSheet target = piece;
-        float lift = liftAboveMaximumHeight;
-        Vector3 fallback = reading.point;
-
-        tooltip.ShowStats(
-            () => sheets != null && sheets.TryStripTopPoint(target, columns, line, lift, out Vector3 raised)
-                ? raised
-                : fallback,
-            selection);
-    }
-
+    // Raises a line for the assistant. One already raised is left up, rather
+    // than lowered as a press on it would.
     public bool ShowProfile(bool columns, int visRow, int visCol)
     {
         if (!Active || sheetManager == null) return false;
@@ -166,27 +112,30 @@ public class ProfileTool : Tool
         CreateCube cube = sheetManager.CubeAt(visRow, visCol);
         if (cube == null) return false;
 
+        if (sheetManager.IsProjected(Record(columns, cube.dataRow, cube.dataCol))) return true;
         return Project(columns, cube.dataRow, cube.dataCol, visRow, visCol);
     }
 
+    private ProjectionRecord Record(bool columns, int dataRow, int dataCol) => new ProjectionRecord
+    {
+        isColumn = columns,
+        dataRow = dataRow,
+        dataCol = dataCol,
+        lift = liftAboveMaximumHeight
+    };
+
+    // Raises the line, or lowers it when it is already raised.
     private bool Project(bool columns, int dataRow, int dataCol, int visRow, int visCol)
     {
-        ProjectionRecord rec = new ProjectionRecord
-        {
-            isColumn = columns,
-            dataRow = dataRow,
-            dataCol = dataCol,
-            lift = liftAboveMaximumHeight
-        };
-
-        if (!sheetManager.PushProjection(rec, EditKind.Profile)) return false;
+        if (!sheetManager.PushProjection(Record(columns, dataRow, dataCol), EditKind.Profile, out bool lowered))
+            return false;
 
         DataSource data = Scene.Data;
         int line = columns ? visCol : visRow;
         string label = columns && data != null && data.IsGrouped(true)
             ? DataSource.GroupLabelAt(data, true, data.GroupOf(true, line))
             : DataSource.LabelAt(data, columns, line);
-        Report($"projected {label}");
+        Report(lowered ? $"lowered {label}" : $"projected {label}");
         return true;
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Google.GenAI.Types;
 
 public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
@@ -11,13 +12,25 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
         [Doc("Raise several strips in one go: each a name or 1-based position. Use this instead of calling repeatedly."), Optional]
         public string[] indexes;
         [Doc("Pick the line by its numbers instead of by name: the tool reads them itself. " +
-             "Use this for requests like 'show me the best month' rather than reading the values first."), Optional]
+             "Use this for requests like 'raise the breach with the highest market cap' rather than reading the values first."), Optional]
         public Of of;
+        [Doc("Raise every row whose breach matches these conditions, looked up in the breach database: " +
+             "anything a breach is (attack type, industry, year, place, what was taken) and bounds on any " +
+             "amount, in dollars. For 'profile all companies with revenue over 10 million' send " +
+             "{revenue_min: 10000000}. Rows only; give no other way of picking lines with it."), Optional]
+        public BreachFilters where;
+
+        // The breaches 'where' named, looked up before the call runs.
+        internal BreachMatch matched;
     }
 
     public class Of {
-        [Doc("Which number to judge each line by, worked out across the other axis."),
-         Values("sum", "average", "max", "min")]
+        [Doc("Rank each line by one line of the other axis, by name or 1-based position, such as 'Market " +
+             "Cap' for the breaches: what 'the highest market cap' means. Give 'line' or 'measure'."), Optional]
+        public string line;
+        [Doc("Or judge each line by a number worked out across every line of the other axis, which mixes " +
+             "the columns' units. Give 'line' or 'measure'."),
+         Values("sum", "average", "max", "min"), Optional]
         public string measure;
         [Doc("'highest' takes the biggest, 'lowest' takes the smallest. Defaults to highest."),
          Values("highest", "lowest"), Optional]
@@ -30,26 +43,32 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "CallProfileTool",
-        Description = "Raise a whole row or column as a projection: a copy of that strip floating above it. Pass 'axis' " +
-                      "when the name you give does not say which. The strip keeps the sheet's height scale, so its bars " +
-                      "are comparable with the sheet it came from. It stays up after the tool is put away, is an edit " +
-                      "on the undo timeline, and follows its values through a Sort reorder. Several can stand at once. " +
-                      "Pass 'of' to pick the line by its numbers: 'measure' (sum, average, max, min), 'pick' " +
-                      "(highest or lowest) and 'count' for the top few; the tool reads them itself, so " +
-                      "profiling the strongest line, or the top three, is one call with no separate read.",
-        Parameters = ParametersFor(typeof(Args))
+        Description = "Raise a whole row or column as a strip floating above the sheet, at the sheet's own " +
+                      "heights. Pass 'axis' when the name does not say which. A strip stays up after the tool is " +
+                      "put away, follows its line through a sort, and is an edit on the undo timeline; any number " +
+                      "can stand, and raising one already up leaves it up. Pass 'of' to pick lines by their " +
+                      "numbers ('measure', 'pick', and 'count' for the top few): the tool reads them itself, so " +
+                      "the top three is one call with no separate read. The columns are in different units, " +
+                      "so judging lines across them rarely means much; name the line when you can.",
+        Parameters = WithNames(ParametersFor(typeof(Args)))
     };
 
-    protected override void Run(Args args, Dictionary<string, object> result) {
-        if (!EnsureToolSelected(ToolType.Profile, result)) return;
+    // The most rows one 'where' raises: each is a strip of its own, and more
+    // than this buries the sheet under them.
+    private const int MostStrips = 50;
 
+    protected override Task<string> Prepare(Args args) => LookUp(args.where, m => args.matched = m);
+
+    protected override void Run(Args args, Dictionary<string, object> result) {
         var profile = Scene.Profile;
-        if (profile == null) { result["error"] = "Profile tool not found in scene."; return; }
+        if (!EnsureToolSelected(ToolType.Profile, profile, result)) return;
+
+        if (args.where != null) {
+            RaiseMatching(args, profile, result);
+            return;
+        }
 
         if (!ResolveAxis("profile", args.axis, args.index, result, out bool columns)) return;
-
-        var mgr = Scene.Sheets;
-        if (mgr == null || !mgr.IsBuilt) { result["error"] = "No sheet in scene."; return; }
 
         if (!TryResolveTargetBounds(result, out int rowMin, out int rowMax, out int colMin, out int colMax))
             return;
@@ -82,6 +101,13 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
             lines.Add(lo);
         }
 
+        Raise(profile, columns, lines, rowMin, rowMax, colMin, colMax, blockMin, result);
+    }
+
+    // Raises each of 'lines', visible positions on the axis, as one undo entry.
+    private static void Raise(ProfileTool profile, bool columns, List<int> lines,
+        int rowMin, int rowMax, int colMin, int colMax, int blockMin, Dictionary<string, object> result) {
+        var data = Scene.Data;
         var raised = new List<object>();
         bool ok = RunGrouped(lines.Count, i => {
             int line = lines[i];
@@ -89,12 +115,12 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
             int vc = columns ? line : (colMin + colMax) / 2;
             if (!profile.ShowProfile(columns, vr, vc)) {
                 result["error"] = raised.Count == 0
-                    ? "That row or column could not be projected; it has no values, or it is already projected."
+                    ? "That row or column could not be projected; it has no values."
                     : $"Raised {raised.Count}, then one could not be projected.";
                 if (raised.Count > 0) result["projected"] = raised;
                 return false;
             }
-            object at = data != null ? data.GroupOf(columns, line) - blockMin + 1 : line - lineMin + 1;
+            object at = data != null ? data.GroupOf(columns, line) - blockMin + 1 : line - (columns ? colMin : rowMin) + 1;
             if (!raised.Contains(at)) raised.Add(at);
             return true;
         });
@@ -102,6 +128,40 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
 
         result["projected"] = columns ? "column" : "row";
         result["indexes"] = raised;
+    }
+
+    private static void RaiseMatching(Args args, ProfileTool profile, Dictionary<string, object> result) {
+        if (args.index != null || args.indexes != null || args.of != null) {
+            result["error"] = "'where' picks the rows itself; send it without 'index', 'indexes' or 'of'.";
+            return;
+        }
+        if (!TryResolveTargetBounds(result, out int rowMin, out int rowMax, out int colMin, out int colMax)) return;
+
+        var data = Scene.Data;
+        List<int> matching = args.matched.RowsOn(data, result);
+
+        var lines = new List<int>();
+        foreach (int row in matching) {
+            int vis = data.VisIndexOf(false, row);
+            if (vis >= rowMin && vis <= rowMax) lines.Add(vis);
+        }
+
+        if (lines.Count == 0) {
+            result["projected"] = "row";
+            result["indexes"] = new List<object>();
+            result["note"] = matching.Count > 0
+                ? "Every matching row is filtered off the sheet; bring them back with the Filter tool first."
+                : "No row on this sheet matches.";
+            return;
+        }
+        if (lines.Count > MostStrips) {
+            Refuse(result, "fewer matching rows",
+                $"{lines.Count} rows match, more than the {MostStrips} that can stand raised at once. Narrow the " +
+                "conditions, or use the Filter tool's 'where' to show only the matching rows instead.");
+            return;
+        }
+
+        Raise(profile, false, lines, rowMin, rowMax, colMin, colMax, data.GroupOf(false, rowMin), result);
     }
 
     private static bool PickLines(Of of, bool columns, int lineMin, int lineMax, int crossMin, int crossMax,
@@ -114,13 +174,32 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
         // different metrics, so neither axis can be ranked this way: judging metrics
         // against each other is meaningless, and judging a row means adding dollars
         // to share counts.
-        if (data.IsGrouped(true)) {
-            result["error"] = "The metrics on this sheet are in different units, so there is no single number to " +
-                "judge lines by. Name the metric or row you want in 'index' instead.";
+        bool byLine = !string.IsNullOrWhiteSpace(of.line);
+        if (byLine == !string.IsNullOrWhiteSpace(of.measure)) {
+            result["error"] = "'of' needs exactly one of 'line' or 'measure'.";
             return false;
         }
 
-        if (!TryParseMeasure(of.measure, "of", result, out string measure)) return false;
+        if (data.IsGrouped(true) && !byLine) {
+            result["error"] = "The metrics on this sheet are in different units, so there is no single number to " +
+                "judge lines by. Name the metric to judge by in 'of.line', or the line you want in 'index'.";
+            return false;
+        }
+        if (columns && data.IsGrouped(true)) {
+            result["error"] = "The metrics on this sheet are in different units, so they cannot be ranked against " +
+                "each other. Name the metric you want in 'index'.";
+            return false;
+        }
+
+        // By one line of the other axis, its cells alone are read: a single
+        // cell's sum is its value, and a paired metric's is its years together.
+        string measure = "sum";
+        if (byLine) {
+            if (!TryResolveLine(of.line, !columns, crossMin, crossMax, result, out int crossBlock)) return false;
+            BlockSpan(!columns, crossBlock, crossMin, crossMax, out crossMin, out crossMax);
+            result["judgedBy"] = DataSource.GroupLabelAt(data, !columns, crossBlock);
+        }
+        else if (!TryParseMeasure(of.measure, "of", result, out measure)) return false;
         bool highest = !string.Equals(of.pick, "lowest", System.StringComparison.OrdinalIgnoreCase);
         int count = of.count ?? 1;
 
@@ -140,7 +219,8 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
         var picked = new List<object>(take);
         var scores = new List<object>(take);
         for (int i = 0; i < take; i++) {
-            into.Add(scored[i].Value);
+            // 'into' holds blocks, as TryResolveLine's do.
+            into.Add(data.GroupOf(columns, scored[i].Value));
             picked.Add(data.TitleAt(columns, scored[i].Value));
             scores.Add(System.Math.Round(scored[i].Key, 2));
         }

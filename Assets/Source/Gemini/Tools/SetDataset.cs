@@ -2,23 +2,22 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Google.GenAI.Types;
-using Type = Google.GenAI.Types.Type;
 
 public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 
     public class Args {
-        [Doc("The dataset's name, or its position in the list ListDatasets returns where 1 is the newest. " +
-             "Prefer the name.")]
+        [Doc("The dataset's name, or its position in the list ListDatasets returns, 1 first. Prefer the name.")]
         public string dataset;
     }
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "SetDataset",
-        Description = "Open one of the listed datasets (switch to it); each keeps its own edits and undo " +
-                      "history. There is one per metro, named for it ('New York, NY', 'Boston, MA'), all listed " +
-                      "from the start and read the first time they are opened, so this works whether or not " +
-                      "one has been read yet. The map slides to the metro's region. Poking a pin on the map " +
-                      "opens its metro's sheet too.",
+        Description = "Open one of the listed datasets; each keeps its own edits and undo history. There is one " +
+                      "for the whole country ('United States'), one per region ('West') and one per metro " +
+                      "('New York, NY'), each read the first time it is opened if it has not been. The map " +
+                      "follows: a metro's sheet slides it to the metro's region and selects its pin; the " +
+                      "country's slides it to the United States map with nothing selected; a region's selects " +
+                      "the region if the United States map is up, else slides to the region's map.",
         Parameters = ParametersFor(typeof(Args))
     };
 
@@ -26,21 +25,18 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
     // a frame or two, so the wait happens here, before Run reports on the dataset:
     // otherwise the reply would describe the dataset being left rather than the one
     // being opened.
-    protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
-        var bound = ToolArguments.Bind(typeof(Args), args, out _) as Args;
-
+    protected override async Task<string> Prepare(Args args) {
         Task<bool> reading = null;
         await MainThread.Run(() => {
             var datasets = Scene.Datasets;
-            if (datasets == null || bound == null) return;
-            if (!TryResolveIndex(datasets, bound.dataset?.Trim(), out int index)) return;
+            if (datasets == null) return;
+            if (!TryResolveIndex(datasets, args.dataset?.Trim(), out int index)) return;
             if (datasets.Datasets[index].loaded) return;
             reading = datasets.EnsureLoaded(index);
         }).ConfigureAwait(false);
 
         if (reading != null) await reading.ConfigureAwait(false);
-
-        return await base.Execute(args).ConfigureAwait(false);
+        return null;
     }
 
     protected override void Run(Args args, Dictionary<string, object> result) {
@@ -50,7 +46,7 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
         string query = args.dataset?.Trim();
 
         if (!TryResolveIndex(datasets, query, out int index)) {
-            result["error"] = $"No single open dataset matches '{query}'; if several match, ask the user which one.";
+            result["error"] = $"No single listed dataset matches '{query}'; if several match, ask the user which one.";
             result["available"] = ListLabels(datasets);
             return;
         }

@@ -4,11 +4,13 @@
 // </auto-generated>
 
 public static class CyberContract {
-    public const int FirstYear = 2004;
-    public const int LastYear = 2024;
+    public const int FirstYear = 2005;
+    public const int LastYear = 2023;
 
     public const int BreachLimitDefault = 10;
     public const int BreachLimitMaximum = 50;
+    public const int QueryLimitDefault = 25;
+    public const int QueryLimitMaximum = 100;
 
     public static readonly string[] Industries = { "Agriculture", "Mining", "Construction", "Manufacturing", "Transportation & Public Utilities", "Wholesale Trade", "Retail Trade", "Finance, Insurance, Real Estate", "Services", "Public Administration" };
     public static readonly string[] AttackTypes = { "Unauthorized Access", "Malware", "Ransomware", "Phishing", "Misconfiguration", "Credential Stuffing", "Not Disclosed" };
@@ -17,4 +19,8 @@ public static class CyberContract {
     public static readonly string[] Relationships = { "Parent", "Subsidiary / Affiliate" };
     public static readonly string[] Regions = { "US West", "US Southwest", "US Midwest", "US Southeast", "US Mid Atlantic", "US New England" };
     public static readonly string[] Markets = { "NYSE", "NYSE MKT", "NASDAQ Global Select Market", "NASDAQ Global Market", "NASDAQ Capital Market", "OTCQX U.S.", "OTCQX International", "OTCQX International Premier", "OTCQB", "Pink Current", "Pink Limited", "Expert Market" };
+    public static readonly string[] Amounts = { "revenue", "net_income", "assets", "book_value", "market_cap", "stock_price", "records_lost", "cost" };
+    public static readonly string[] Groups = { "industry", "attack", "information", "accessed", "relationship", "region", "market", "state", "metro", "city", "year", "company", "ticker", "sec", "auditor", "filing" };
+    public static readonly string[] Measures = { "count", "companies", "sum", "average", "median", "min", "max" };
+    public static readonly string[] BreachSorts = { "newest", "oldest", "revenue", "net_income", "assets", "book_value", "market_cap", "stock_price", "records_lost", "cost" };
 }

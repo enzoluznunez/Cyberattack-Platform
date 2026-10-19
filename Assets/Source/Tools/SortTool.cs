@@ -8,6 +8,11 @@ public class SortTool : Tool
 
     private readonly List<SortLineProxy> _proxies = new List<SortLineProxy>();
 
+    // Handles put away, made while the app loads (Prepare): taking the tool
+    // out or finishing a move stands them on the lines again, making none.
+    private readonly List<SortLineProxy> _spare = new List<SortLineProxy>();
+    private Transform _spareRoot;
+
     private SortLineProxy _held;
     private CreateSheet _dragSheet;
     private bool _dragColumns;
@@ -29,7 +34,31 @@ public class SortTool : Tool
         CompleteOrderSequence();
         CancelDrag();
         ClearProxies();
+        foreach (SortLineProxy proxy in _spare)
+            if (proxy != null) Destroy(proxy.gameObject);
+        _spare.Clear();
     }
+
+    // Makes handles, put away, until there are 'count', within 'budgetMs'
+    // this frame. True once there are that many.
+    public bool Prepare(int count, double budgetMs)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (_spare.Count + _proxies.Count < count)
+        {
+            if (clock.Elapsed.TotalMilliseconds >= budgetMs) return false;
+            _spare.Add(SortLineProxy.Make(SpareRoot()));
+        }
+        return true;
+    }
+
+    private Transform SpareRoot()
+    {
+        if (_spareRoot == null) _spareRoot = new GameObject("SortLines").transform;
+        return _spareRoot;
+    }
+
+    private SortLineProxy TakeProxy() => ManageSheets.PopLive(_spare) ?? SortLineProxy.Make(SpareRoot());
 
     private void OnDisable() => CompleteOrderSequence();
 
@@ -37,8 +66,14 @@ public class SortTool : Tool
     {
         CompleteOrderSequence();
         CancelDrag();
-        if (sheetManager != null) sheetManager.SuppressNextReflow();
-        Scene.Data?.ResetOrder();
+        // Already in the data's order, as after undoing every sort, there is
+        // nothing to rebuild.
+        DataSource data = Scene.Data;
+        if (data != null && !data.InDataOrder)
+        {
+            if (sheetManager != null) sheetManager.SuppressNextReflow();
+            data.ResetOrder();
+        }
         RebuildProxies();
     }
 
@@ -57,29 +92,28 @@ public class SortTool : Tool
 
     private void RebuildProxies()
     {
-        if (_sequence != null) return;
+        // While a set order walks, the handles stay as they stand, unless the
+        // tool is put away: then they go, or they would stay live under the
+        // next tool, sliding when pinched with nothing to commit them.
+        if (_sequence != null && Active) return;
         if (_held != null) CancelDrag();
         ClearProxies();
 
         if (!Active || sheetManager == null || !sheetManager.IsBuilt) return;
 
-        IReadOnlyList<CreateSheet> sheets = sheetManager.Sheets;
+        CreateSheet sheet = sheetManager.Sheet;
+        if (sheet == null || !sheet.IsBuilt) return;
 
-        for (int i = 0; i < sheets.Count; i++)
+        for (int axis = 0; axis < 2; axis++)
         {
-            CreateSheet sheet = sheets[i];
-            if (sheet == null || !sheet.IsBuilt) continue;
-
-            for (int axis = 0; axis < 2; axis++)
+            bool columns = axis == 1;
+            int min = sheet.BlockMin(columns);
+            int max = sheet.BlockMax(columns);
+            for (int block = min; block <= max; block++)
             {
-                bool columns = axis == 1;
-                int min = sheet.BlockMin(columns);
-                int max = sheet.BlockMax(columns);
-                for (int block = min; block <= max; block++)
-                {
-                    SortLineProxy proxy = SortLineProxy.Create(sheet, columns, block, sheetManager.Height);
-                    if (proxy != null) _proxies.Add(proxy);
-                }
+                SortLineProxy proxy = TakeProxy();
+                if (proxy.Place(sheet, columns, block, sheetManager.Height)) _proxies.Add(proxy);
+                else _spare.Add(proxy);
             }
         }
     }
@@ -87,7 +121,11 @@ public class SortTool : Tool
     private void ClearProxies()
     {
         for (int i = 0; i < _proxies.Count; i++)
-            if (_proxies[i] != null) Destroy(_proxies[i].gameObject);
+        {
+            if (_proxies[i] == null) continue;
+            _proxies[i].SetLive(false);
+            _spare.Add(_proxies[i]);
+        }
         _proxies.Clear();
     }
 
@@ -129,6 +167,13 @@ public class SortTool : Tool
         _dragColumns = proxy.columns;
         bool columns = _dragColumns;
 
+        // Lines still sliding from the last change, or bars still growing
+        // back after a filter, are put where they end first: both move the
+        // same bars this drag moves, and would pull them back each frame.
+        sheetManager.CompleteLineMotion();
+        sheet.CompleteGrow();
+        sheetManager.LinesDragged = true;
+
         _dragSheet = sheet;
         _blockMin = sheet.BlockMin(columns);
         _blockMax = sheet.BlockMax(columns);
@@ -139,7 +184,7 @@ public class SortTool : Tool
 
     private void Reflow(float dragged)
     {
-        float t = 1f - Mathf.Exp(-reflowSmoothing * Time.deltaTime);
+        float t = Style.Damp(reflowSmoothing, Time.deltaTime);
         bool columns = _dragColumns;
 
         for (int block = _blockMin; block <= _blockMax; block++)
@@ -162,11 +207,19 @@ public class SortTool : Tool
         int target = _dragTarget;
         CreateSheet sheet = _dragSheet;
 
-        _held = null;
         ClearDrag();
 
-        if (!MoveLine(_dragColumns, from, target)) RestLayout(sheet);
-        RebuildProxies();
+        // A drag lets go with the lines sliding into their places: Sort is
+        // one of the user's changes that plays out rather than landing.
+        if (sheetManager != null) sheetManager.UserChangeAnimates = true;
+        bool moved = MoveLine(_dragColumns, from, target);
+        if (sheetManager != null) sheetManager.UserChangeAnimates = false;
+        // A move rebuilds the sheet, and the handles with it (OnSheetsChanged).
+        if (!moved)
+        {
+            RestLayout(sheet);
+            RebuildProxies();
+        }
     }
 
     [Tooltip("Beyond this many steps a set-order request stops animating one line at a time and moves them together.")]
@@ -199,7 +252,11 @@ public class SortTool : Tool
         return true;
     }
 
-    public bool SetOrder(bool columns, IReadOnlyList<int> targetOrder)
+    // 'fullOrder', when given, is the whole arrangement the sort ends on,
+    // hidden lines included: a sort that ranks every line, so a filtered line
+    // comes back where it belongs. The lines on the sheet walk to their places
+    // as ever; the hidden ones, which nobody sees, are put in place at the end.
+    public bool SetOrder(bool columns, IReadOnlyList<int> targetOrder, IReadOnlyList<int> fullOrder = null)
     {
         if (!Active) return false;
 
@@ -218,32 +275,42 @@ public class SortTool : Tool
         List<int> targetBlocks = Blocks(targetOrder, size);
 
         var steps = PlanSteps(preBlocks, targetBlocks);
-        if (steps.Count == 0) return false;
+        List<int> preFull = src.FullOrder(columns);
+        bool fullChanged = fullOrder != null && !SameOrder(preFull, fullOrder);
+        if (steps.Count == 0 && !fullChanged) return false;
 
         int changed = 0;
         for (int i = 0; i < targetBlocks.Count && i < preBlocks.Count; i++)
             if (preBlocks[i] != targetBlocks[i]) changed++;
         LastReorderedLines = changed;
 
-        ManageDatasets.ActiveEdits.PushReorder(columns, preOrder, changed);
-        Report($"set the order of {changed} {DataSource.GroupNoun(src, columns)}s");
+        ManageDatasets.ActiveEdits.PushReorder(columns, preOrder, changed, fullChanged ? preFull : null);
+        string nouns = DataSource.Plural(DataSource.GroupNoun(src, columns));
+        Report(changed > 0
+            ? $"set the order of {changed} {nouns}"
+            : $"left the {nouns} on the sheet where they were and reordered only the filtered-off ones, " +
+              "which come back in their new places");
+
+        if (steps.Count == 0)
+        {
+            src.SetFullOrder(columns, fullOrder);
+            return true;
+        }
 
         var final = new List<int>(targetOrder);
+        IReadOnlyList<int> whole = fullChanged ? new List<int>(fullOrder) : null;
         bool stepwise = sheetManager != null && sheetManager.AgentMotionAnimates
                         && steps.Count <= maxSequencedSteps;
 
         if (!stepwise)
         {
-            Apply(src, columns, final);
+            Apply(src, columns, final, whole);
             return true;
         }
 
         sheetManager.ForceAgentMotion = true;
-        _sequenceFinish = () => {
-            if (sheetManager != null) sheetManager.ForceAgentMotion = false;
-            Apply(src, columns, final);
-        };
-        _sequence = StartCoroutine(WalkOrder(src, columns, steps, final));
+        _sequenceFinish = () => FinishSequence(src, columns, final, whole);
+        _sequence = StartCoroutine(WalkOrder(src, columns, steps, final, whole));
         return true;
     }
 
@@ -254,10 +321,18 @@ public class SortTool : Tool
         return blocks;
     }
 
-    private static void Apply(DataSource src, bool columns, IReadOnlyList<int> order)
+    private static void Apply(DataSource src, bool columns, IReadOnlyList<int> order, IReadOnlyList<int> whole)
     {
+        if (whole != null && src.SetFullOrder(columns, whole)) return;
         if (columns) src.SetColumnOrder(order);
         else src.SetRowOrder(order);
+    }
+
+    private static bool SameOrder(IReadOnlyList<int> a, IReadOnlyList<int> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++) if (a[i] != b[i]) return false;
+        return true;
     }
 
     private struct OrderStep
@@ -282,7 +357,8 @@ public class SortTool : Tool
         return steps;
     }
 
-    private IEnumerator WalkOrder(DataSource src, bool columns, List<OrderStep> steps, List<int> final)
+    private IEnumerator WalkOrder(DataSource src, bool columns, List<OrderStep> steps, List<int> final,
+        IReadOnlyList<int> whole)
     {
         int size = src.GroupSize(columns);
         for (int i = 0; i < steps.Count; i++)
@@ -300,10 +376,15 @@ public class SortTool : Tool
             else yield return null;
         }
 
-        if (sheetManager != null) sheetManager.ForceAgentMotion = false;
         _sequence = null;
         _sequenceFinish = null;
-        Apply(src, columns, final);
+        FinishSequence(src, columns, final, whole);
+    }
+
+    private void FinishSequence(DataSource src, bool columns, List<int> final, IReadOnlyList<int> whole)
+    {
+        if (sheetManager != null) sheetManager.ForceAgentMotion = false;
+        Apply(src, columns, final, whole);
     }
 
     // 'from' and 'to' are block positions: whole metrics on a grouped axis, single
@@ -323,12 +404,10 @@ public class SortTool : Tool
         var preOrder = new List<int>(order);
 
         string what = DataSource.GroupLabelAt(src, columns, from);
-        string noun = DataSource.GroupNoun(src, columns) + "s";
+        string noun = DataSource.Plural(DataSource.GroupNoun(src, columns));
 
         var postOrder = new List<int>(preOrder);
-        List<int> moved = postOrder.GetRange(from * size, size);
-        postOrder.RemoveRange(from * size, size);
-        postOrder.InsertRange(to * size, moved);
+        DataSource.MoveGroupWithin(postOrder, from, to, size);
 
         string arrangement = "";
         if (blocks <= 40)
@@ -339,7 +418,7 @@ public class SortTool : Tool
 
         Report($"moved {what} from position {from + 1} to {to + 1}{arrangement}");
 
-        if (StateChannel.UserDriven) StalePositions.MarkDirty(columns);
+        StalePositions.MarkDirty(columns);
 
         ManageDatasets.ActiveEdits.PushSort(columns, preOrder, from, to);
 
@@ -351,13 +430,14 @@ public class SortTool : Tool
     private void CancelDrag()
     {
         CreateSheet sheet = _dragSheet;
-        _held = null;
         ClearDrag();
         RestLayout(sheet);
     }
 
     private void ClearDrag()
     {
+        _held = null;
+        if (sheetManager != null) sheetManager.LinesDragged = false;
         _dragSheet = null;
         _dragBlock = -1;
     }

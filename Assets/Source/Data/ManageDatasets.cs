@@ -13,16 +13,26 @@ public class ManageDatasets : MonoBehaviour
 
     public event Action<int> OnActiveDatasetChanged;
 
+    // A sheet someone asked for could not be read, by its payload: what is
+    // open stays open, and whatever already showed the request takes it back.
+    public event Action<string> OnRequestFailed;
+
+    // A sheet was read, asked for or not: whatever shows sheets readies room
+    // for it now rather than when it is opened.
+    public event Action<DataSource> OnDatasetRead;
+
     public class Dataset
     {
         public string label;
         public string payload;
 
-        // Listed from the database's catalogue of sheets rather than scanned in:
-        // it stands in the rail from startup and is read the first time someone
+        // What the dataset is called when it is spoken of, label or not.
+        public string Name => string.IsNullOrEmpty(label) ? "dataset" : label;
+
+        // Every dataset is listed from the database's catalogue of sheets: it
+        // stands in the rail from startup and is read the first time someone
         // opens it, so a session begins with every sheet named and none of them
         // read. The description says what it would show once read.
-        public bool catalogued;
         public string description;
 
         public DataSource source;
@@ -77,36 +87,17 @@ public class ManageDatasets : MonoBehaviour
 
     private void ResolveRefs()
     {
-        if (sheetManager == null) sheetManager = FindAnyObjectByType<ManageSheets>();
-        if (toolManager == null) toolManager = FindAnyObjectByType<ManageTools>();
-    }
-
-    public void AddDataset(string payload, string label = null)
-    {
-        if (string.IsNullOrEmpty(payload)) return;
-
-        int open = IndexOf(payload);
-        if (open >= 0)
-        {
-            bool alreadyActive = open == _active;
-            string openLabel = _datasets[open].label;
-            SwitchDataset(open);
-            Notices.Show(this, "Already Open",
-                alreadyActive ? $"{openLabel} is already open." : $"Switched to {openLabel}.");
-            return;
-        }
-
-        Dataset dataset = new Dataset
-        {
-            payload = payload,
-            label = label ?? Stylize(DeriveLabel(payload, _datasetsCreated))
-        };
-        _datasets.Add(dataset);
-        SwitchDataset(_datasets.Count - 1);
+        if (sheetManager == null) sheetManager = Scene.Sheets;
+        if (toolManager == null) toolManager = Scene.Tools;
     }
 
     // The dataset with this payload, or -1 when none has it.
-    public int IndexOf(string payload) => _datasets.FindIndex(d => d.payload == payload);
+    public int IndexOf(string payload)
+    {
+        for (int i = 0; i < _datasets.Count; i++)
+            if (_datasets[i].payload == payload) return i;
+        return -1;
+    }
 
     // Datasets the app knows of but has not read. They are listed straight away
     // and cost nothing until they are opened.
@@ -122,7 +113,6 @@ public class ManageDatasets : MonoBehaviour
             {
                 payload = file,
                 label = string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label,
-                catalogued = true,
                 description = description
             });
         }
@@ -164,9 +154,39 @@ public class ManageDatasets : MonoBehaviour
     // Reads a listed dataset ahead of anyone asking for it, so switching to it
     // later shows it at once. Nobody is told it was read, or that it could not
     // be: a failed read is tried again when it is asked for.
+    // Sheets read ahead of being asked for go a few at a time, in the order
+    // they were queued, so startup does not send every request at once. One
+    // asked for meanwhile is read at once, ahead of the queue.
+    private const int PreloadsAtOnce = 3;
+    private readonly Queue<Dataset> _preloads = new Queue<Dataset>();
+    private readonly HashSet<Dataset> _preloading = new HashSet<Dataset>();
+
     public void Preload(int index)
     {
-        if (index >= 0 && index < _datasets.Count) BeginLoad(_datasets[index]);
+        if (index < 0 || index >= _datasets.Count) return;
+        _preloads.Enqueue(_datasets[index]);
+        PreloadsQueued++;
+        PumpPreloads();
+    }
+
+    // How many reads ahead were asked for, and how many have not answered.
+    public int PreloadsQueued { get; private set; }
+    public int PreloadsLeft => _preloads.Count + _preloading.Count;
+
+    private void PumpPreloads()
+    {
+        while (_preloading.Count < PreloadsAtOnce && _preloads.Count > 0)
+        {
+            Dataset next = _preloads.Dequeue();
+            if (next.loading || next.loaded || !_datasets.Contains(next)) continue;
+            _preloading.Add(next);
+            BeginLoad(next);
+        }
+    }
+
+    private void SettlePreload(Dataset dataset)
+    {
+        if (_preloading.Remove(dataset)) PumpPreloads();
     }
 
     private void BeginLoad(Dataset dataset)
@@ -188,6 +208,7 @@ public class ManageDatasets : MonoBehaviour
     {
         if (!_reads.TryGetValue(reader, out Dataset dataset)) return;
         _reads.Remove(reader);
+        SettlePreload(dataset);
 
         int index = _datasets.IndexOf(dataset);
         if (index < 0) return;
@@ -200,62 +221,24 @@ public class ManageDatasets : MonoBehaviour
 
         if (!ok)
         {
-            if (preloaded && dataset.catalogued) { Unload(dataset); return; }
-
             // A listed sheet stays listed when it will not read: it is still
             // one of the regions, and trying again is a slide away.
-            if (dataset.catalogued)
+            Unload(dataset);
+            if (!preloaded)
             {
-                Unload(dataset);
                 Notices.Show(this, "Sheet Unavailable",
                     reason ?? $"{dataset.label} could not be read.");
-                return;
+                OnRequestFailed?.Invoke(dataset.payload);
             }
-
-            RemoveDataset(index);
-            Notices.Show(this, "Not Read",
-                reason ?? "That dataset could not be read.");
             return;
         }
 
         dataset.loaded = true;
+        OnDatasetRead?.Invoke(dataset.source);
 
-        if (!preloaded) StateChannel.Record("Dataset", $"loaded a new dataset, {dataset.label}");
+        if (!preloaded) StateChannel.Record($"loaded a new dataset, {dataset.label}");
         if (requested) Activate(index);
     }
-
-    public void RemoveDataset(int index)
-    {
-        if (index < 0 || index >= _datasets.Count) return;
-
-        Dataset dataset = _datasets[index];
-        bool wasActive = index == _active;
-        if (dataset == _requested) _requested = null;
-
-        if (wasActive && sheetManager != null) sheetManager.CommitPendingGrabs();
-
-        _datasets.RemoveAt(index);
-        if (_active > index) _active--;
-        else if (wasActive) _active = -1;
-
-        if (dataset.source is Parser reader) _reads.Remove(reader);
-        if (dataset.source != null) Destroy(dataset.source.gameObject);
-        SettleLoad(dataset, false);
-
-        if (wasActive)
-        {
-            if (_datasets.Count > 0) SwitchDataset(_datasets.Count - 1);
-            else
-            {
-                if (sheetManager != null) sheetManager.SetDataSource(null);
-            }
-        }
-
-        if (dataset.loaded)
-            StateChannel.Record("Dataset", $"closed the dataset {dataset.label}");
-        if (wasActive && _datasets.Count == 0) OnActiveDatasetChanged?.Invoke(-1);
-    }
-
 
     public void SwitchDataset(int index)
     {
@@ -279,35 +262,28 @@ public class ManageDatasets : MonoBehaviour
         Activate(index);
     }
 
-    // Takes the sheet off the table: no dataset is open and nothing is drawn,
-    // and a read still pending is not shown when it lands. The national map
-    // shows no sheet.
-    public void CloseActive()
-    {
-        _requested = null;
-        if (_active < 0) return;
+    // Drops a read still pending from an earlier request, so it is not shown
+    // when it lands; what is open stays open.
+    public void CancelRequest() => _requested = null;
 
-        SettleHands();
-        _active = -1;
-        TryStep("sheetManager", () => { if (sheetManager != null) sheetManager.SetDataSource(null); });
-        OnActiveDatasetChanged?.Invoke(-1);
-        StateChannel.RecordState("dataset", "no dataset is open; the table is empty");
-    }
 
     // Shows a read dataset on the table.
+    private static readonly Unity.Profiling.ProfilerMarker ActivateMarker =
+        new Unity.Profiling.ProfilerMarker("ManageDatasets.Activate");
+
     private void Activate(int index)
     {
+        using var marker = ActivateMarker.Auto();
         SettleHands();
 
         _active = index;
         Dataset next = _datasets[index];
 
         Rebind(next);
-        if (sheetManager != null) sheetManager.PlaySwitchGrow();
         OnActiveDatasetChanged?.Invoke(index);
 
         StateChannel.RecordState("dataset",
-            $"the {(string.IsNullOrEmpty(next.label) ? "dataset" : next.label)} dataset is open" +
+            $"the {next.Name} dataset is open" +
             "; row and column numbers and edits all belong to it");
 
         ReportAxes(next.source);

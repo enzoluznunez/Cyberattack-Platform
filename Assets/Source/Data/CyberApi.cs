@@ -25,13 +25,36 @@ public static class CyberApi {
     // StreamingAssets or another site's URL, and neither should ever see it.
     public static bool IsApi(string url) =>
         !string.IsNullOrEmpty(url) &&
-        url.StartsWith(BaseUrl.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
+        url.StartsWith(Url("/"), StringComparison.OrdinalIgnoreCase);
+
+    // An endpoint of the API, 'path' starting with a slash.
+    public static string Url(string path) => BaseUrl.TrimEnd('/') + path;
+
+    // A file shipped in StreamingAssets, as a URL a web request can read: on
+    // Android it already is one, elsewhere it is a path on disk.
+    public static string StreamingAssetUrl(string fileName) {
+        string path = System.IO.Path.Combine(Application.streamingAssetsPath, fileName);
+        return path.Contains("://") ? path : "file://" + path;
+    }
+
+    // The one line a StreamingAssets file holds, trimmed: configuration such
+    // as a key or an address. Null when the file cannot be read.
+    public static Task<string> ReadStreamingLine(string fileName) {
+        var done = new TaskCompletionSource<string>();
+        var req = UnityWebRequest.Get(StreamingAssetUrl(fileName));
+        req.SendWebRequest().completed += _ => {
+            done.SetResult(req.result == UnityWebRequest.Result.Success ? req.downloadHandler.text.Trim() : null);
+            req.Dispose();
+        };
+        return done.Task;
+    }
 
     public static void Authorize(UnityWebRequest request) {
         if (!string.IsNullOrEmpty(ApiKey) && IsApi(request.url)) request.SetRequestHeader(KeyHeader, ApiKey);
     }
 
     public const string Unreachable = "The breach database could not be reached.";
+    public const string Unreadable = "The breach database answered, but its reply was not in the expected shape.";
 
     private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
 
@@ -42,7 +65,7 @@ public static class CyberApi {
     }
 
     public static async Task<string> Get(string path) {
-        using var request = new HttpRequestMessage(HttpMethod.Get, BaseUrl.TrimEnd('/') + path);
+        using var request = new HttpRequestMessage(HttpMethod.Get, Url(path));
         if (!string.IsNullOrEmpty(ApiKey)) request.Headers.Add(KeyHeader, ApiKey);
         using HttpResponseMessage response = await http.SendAsync(request).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -55,21 +78,41 @@ public static class CyberApi {
     public static string Explain(Exception e) =>
         e is ApiError api && api.Status < 500 ? api.Message : Unreachable;
 
-    // Runs one GET and hands the parsed body to fill, so every read-only tool
-    // shares the same error path and the same 'ok' marker.
-    public static async Task<Dictionary<string, object>> Fetch(string tag, string path,
-        Action<JsonElement, Dictionary<string, object>> fill) {
-        var result = new Dictionary<string, object>();
+    // Runs one GET and hands the parsed body to read, so every caller of the
+    // API shares the same error path: what read returns, or why there is none.
+    public static async Task<(T value, string error)> Read<T>(string tag, string path, Func<JsonElement, T> read) {
+        string json;
         try {
-            string json = await Get(path).ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(json);
-            fill(doc.RootElement, result);
-            result["ok"] = true;
+            json = await Get(path).ConfigureAwait(false);
         }
         catch (Exception e) {
             Debug.LogWarning($"[{tag}] {e.Message}");
-            result["error"] = Explain(e);
+            return (default, Explain(e));
         }
+
+        // The server did answer: a reply that will not parse is a reply the
+        // tool cannot read, not a database that cannot be reached.
+        try {
+            using JsonDocument doc = JsonDocument.Parse(json);
+            return (read(doc.RootElement), null);
+        }
+        catch (Exception e) {
+            Debug.LogWarning($"[{tag}] unreadable reply: {e}");
+            return (default, Unreadable);
+        }
+    }
+
+    // Read for a read-only tool: the parsed body fills its result, which gets
+    // the same 'ok' marker every time.
+    public static async Task<Dictionary<string, object>> Fetch(string tag, string path,
+        Action<JsonElement, Dictionary<string, object>> fill) {
+        var result = new Dictionary<string, object>();
+        var (_, error) = await Read(tag, path, root => { fill(root, result); return true; }).ConfigureAwait(false);
+        if (error != null) {
+            result.Clear();
+            result["error"] = error;
+        }
+        else result["ok"] = true;
         return result;
     }
 

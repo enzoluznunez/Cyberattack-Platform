@@ -1,25 +1,10 @@
 using UnityEngine;
 
-// The ten division colours the pipeline paints rows with, restated here so a
-// poster figure and a sheet in the headset name the same industry with the same
-// colour. The source of truth is pipeline/metrics.py (DIVISION_COLORS); this is
-// a copy kept in the order that file lists them.
+// The poster figures' ten colours. They were the pipeline's industry-division
+// colours, which it no longer has (pipeline/metrics.py now colours regions
+// and metros with PALETTE), so these are the posters' own.
 public static class PosterPalette
 {
-    public static readonly string[] Names =
-    {
-        "Agriculture",
-        "Mining",
-        "Construction",
-        "Manufacturing",
-        "Transportation & Public Utilities",
-        "Wholesale Trade",
-        "Retail Trade",
-        "Finance, Insurance, Real Estate",
-        "Services",
-        "Public Administration",
-    };
-
     private static readonly string[] Hex =
     {
         "#2a78d6", "#eb6834", "#12a3b4", "#e34948", "#9b4dca",
@@ -27,11 +12,6 @@ public static class PosterPalette
     };
 
     public static readonly Color[] Colors = Build();
-
-    public static int Count => Colors.Length;
-
-    public static Color At(int index) =>
-        Colors[((index % Colors.Length) + Colors.Length) % Colors.Length];
 
     // The same ten colours, reordered darkest to lightest.
     //

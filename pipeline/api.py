@@ -12,6 +12,7 @@ import database
 import metros
 import sheetcsv
 from metrics import (
+    AMOUNTS,
     ATTACK_TYPES,
     BREACH_LIMIT,
     BREACH_LIMIT_MAXIMUM,
@@ -23,6 +24,8 @@ from metrics import (
     MARKETS,
     METRICS,
     OTHER_METRO_COLOR,
+    QUERY_LIMIT,
+    QUERY_LIMIT_MAXIMUM,
     REGION_COLORS,
     RELATIONSHIPS,
     US,
@@ -44,6 +47,7 @@ Accessed = named("Accessed", INFORMATION_ACCESSED)
 Relationship = named("Relationship", RELATIONSHIPS)
 RegionName = named("RegionName", US_REGIONS)
 MarketName = named("MarketName", MARKETS)
+Amount = named("Amount", AMOUNTS)
 
 # The names each filter takes, which a rejection lists so the assistant can say
 # what would have worked.
@@ -69,6 +73,13 @@ FILTER_COLUMNS = {
     "region": ("b.region", False),
     "market": ("b.market", False),
     "state": ("b.state", False),
+}
+
+# Filters on a place by its name as /map gives it, in any case. Never split on
+# commas: a metro's name holds one ('New York, NY').
+PLACE_COLUMNS = {
+    "metro": "b.metro",
+    "city": "b.city",
 }
 
 # Nothing here checks who is asking. Deployed, the service is private: Cloud
@@ -125,6 +136,35 @@ class Filters(BaseModel):
     state: list[str] = []
     sec: bool | None = None
 
+    # Places by the names /map gives them; repeat the parameter to name several.
+    metro: list[str] = []
+    city: list[str] = []
+
+    # Part of a company's name, or of a breached subsidiary's ('Sam's Club'),
+    # in any case.
+    company: Annotated[str | None, Field(min_length=2, max_length=100)] = None
+    ticker: Annotated[str | None, Field(min_length=1, max_length=10)] = None
+
+    # Inclusive bounds on an amount (metrics.AMOUNTS), in dollars, or records
+    # for records_lost. A breach that does not report the amount fails a bound
+    # on it.
+    revenue_min: float | None = None
+    revenue_max: float | None = None
+    net_income_min: float | None = None
+    net_income_max: float | None = None
+    assets_min: float | None = None
+    assets_max: float | None = None
+    book_value_min: float | None = None
+    book_value_max: float | None = None
+    market_cap_min: float | None = None
+    market_cap_max: float | None = None
+    stock_price_min: float | None = None
+    stock_price_max: float | None = None
+    records_lost_min: float | None = None
+    records_lost_max: float | None = None
+    cost_min: float | None = None
+    cost_max: float | None = None
+
     # Callers send these as one comma-separated value; FastAPI hands a list only
     # when the parameter is repeated. Accept both and flatten.
     @field_validator(*(name for name in FILTER_COLUMNS if name != "industry"), mode="before")
@@ -153,6 +193,10 @@ class Filters(BaseModel):
     def years_in_order(self):
         if self.since > self.until:
             raise ValueError(f"since ({self.since}) is after until ({self.until})")
+        for name in AMOUNTS:
+            low, high = getattr(self, f"{name}_min"), getattr(self, f"{name}_max")
+            if low is not None and high is not None and low > high:
+                raise ValueError(f"{name}_min ({low:g}) is above {name}_max ({high:g})")
         return self
 
     @property
@@ -176,6 +220,24 @@ class Filters(BaseModel):
         if self.sec is not None:
             clauses.append("b.disclosed_to_sec = @sec")
             parameters.append(ScalarQueryParameter("sec", "BOOL", self.sec))
+        for name, column in PLACE_COLUMNS.items():
+            values = getattr(self, name)
+            if values:
+                clauses.append(f"LOWER({column}) IN UNNEST(@{name})")
+                parameters.append(ArrayQueryParameter(name, "STRING", [v.strip().lower() for v in values]))
+        if self.company:
+            clauses.append("(LOWER(b.company) LIKE @company"
+                           " OR EXISTS (SELECT 1 FROM UNNEST(b.targets) AS t WHERE LOWER(t) LIKE @company))")
+            parameters.append(ScalarQueryParameter("company", "STRING", like(self.company)))
+        if self.ticker:
+            clauses.append("b.ticker = @ticker")
+            parameters.append(ScalarQueryParameter("ticker", "STRING", self.ticker.strip().upper()))
+        for name, column in AMOUNTS.items():
+            for bound, test in (("min", ">="), ("max", "<=")):
+                value = getattr(self, f"{name}_{bound}")
+                if value is not None:
+                    clauses.append(f"b.{column} {test} @{name}_{bound}")
+                    parameters.append(ScalarQueryParameter(f"{name}_{bound}", "FLOAT64", value))
         return " AND ".join(clauses), parameters
 
     def describe(self):
@@ -189,21 +251,94 @@ class Filters(BaseModel):
 
 
 class SheetQuery(BaseModel):
-    """One metro's sheet, by the name /map gives it ('New York, NY'). It takes
-    no filters: a bar's height is its place among every US breach, so a sheet
-    of fewer breaches would measure them against the same whole."""
+    """Which sheet: one metro's, by the name /map gives it ('New York, NY'), one
+    region's, or with neither the whole United States. It takes no filters: a
+    bar's height is its place among every US breach, so a sheet of fewer
+    breaches would measure them against the same whole."""
 
     model_config = {"extra": "forbid"}
 
-    metro: str = Field(min_length=1)
+    metro: Annotated[str | None, Field(min_length=1)] = None
+    region: RegionName | None = None
+
+    @model_validator(mode="after")
+    def one_place(self):
+        if self.metro is not None and self.region is not None:
+            raise ValueError("name a metro or a region, not both; name neither for the whole United States")
+        return self
+
+
+# How /breaches lists what it finds: newest or oldest first, or by an amount.
+BreachSort = named("BreachSort", ["newest", "oldest", *AMOUNTS])
+Order = named("Order", ["desc", "asc"])
 
 
 class BreachQuery(Filters):
-    # Part of a company's name, or of a breached subsidiary's ('Sam's Club'),
-    # in any case.
-    company: Annotated[str | None, Field(min_length=2, max_length=100)] = None
-    ticker: Annotated[str | None, Field(min_length=1, max_length=10)] = None
     limit: Annotated[int, Field(ge=1, le=BREACH_LIMIT_MAXIMUM)] = BREACH_LIMIT
+    # An amount sorts largest first, or smallest first with order=asc; a
+    # breach that does not report it comes last either way.
+    sort: BreachSort = BreachSort.newest
+    order: Order = Order.desc
+
+
+# What /query can group breaches by: {name: (SQL on breaches aliased b, whether
+# it holds a list)}. A breach counts once in every group its list names, so a
+# breach that was both malware and ransomware is in both.
+GROUPS = {
+    **FILTER_COLUMNS,
+    "metro": ("b.metro", False),
+    "city": ("b.city", False),
+    "year": ("CAST(b.year AS STRING)", False),
+    "company": ("b.company", False),
+    "ticker": ("b.ticker", False),
+    "sec": ("IF(b.disclosed_to_sec, 'disclosed to the SEC', 'not disclosed to the SEC')", False),
+    "auditor": ("b.auditor", False),
+    "filing": ("b.filing_type", False),
+}
+GroupName = named("GroupName", GROUPS)
+
+# What /query measures each group by. Count and companies need no amount; the
+# rest are of the amount 'of' names, over the breaches that report it.
+MEASURES = {
+    "count": "COUNT(DISTINCT breach_key)",
+    "companies": "COUNT(DISTINCT cik)",
+    "sum": "SUM(amount)",
+    "average": "AVG(amount)",
+    "median": "ANY_VALUE(median)",
+    "min": "MIN(amount)",
+    "max": "MAX(amount)",
+}
+Measure = named("Measure", MEASURES)
+
+
+class AnswerQuery(Filters):
+    group: GroupName | None = None
+    measure: Measure = Measure.count
+    of: Amount | None = None
+    order: Order = Order.desc
+    limit: Annotated[int, Field(ge=1, le=QUERY_LIMIT_MAXIMUM)] = QUERY_LIMIT
+
+    @model_validator(mode="after")
+    def amount_named(self):
+        needs = self.measure not in (Measure.count, Measure.companies)
+        if needs and self.of is None:
+            raise ValueError(f"a {self.measure} needs 'of', the amount to take it of: {', '.join(AMOUNTS)}")
+        return self
+
+
+class CompanyQuery(BaseModel):
+    """One company's figures year by year, by its ticker or part of its name."""
+
+    model_config = {"extra": "forbid"}
+
+    ticker: Annotated[str | None, Field(min_length=1, max_length=10)] = None
+    company: Annotated[str | None, Field(min_length=2, max_length=100)] = None
+
+    @model_validator(mode="after")
+    def one_company(self):
+        if (self.ticker is None) == (self.company is None):
+            raise ValueError("name the company by its ticker or by its name, one of the two")
+        return self
 
 
 class Health(BaseModel):
@@ -236,6 +371,13 @@ class Breach(BaseModel):
     filing_type: str | None
     filing_url: str | None
     auditor: str | None
+    metro: str | None
+    revenue_usd: float | None
+    net_income_usd: float | None
+    assets_usd: float | None
+    book_value_usd: float | None
+    market_cap_usd: float | None
+    stock_price_usd: float | None
 
 
 class BreachList(BaseModel):
@@ -258,11 +400,59 @@ class City(BaseModel):
     lat: float
     lon: float
     breaches: int
+    # How many of them report at least one figure, and so stand on its
+    # metro's sheet.
+    charted: int
 
 
 class BreachMap(BaseModel):
     regions: list[Region]
     cities: list[City]
+
+
+class Holder(BaseModel):
+    """The breach that holds a group's smallest or largest amount."""
+    company: str
+    ticker: str | None
+    disclosed_on: date
+    amount: float
+
+
+class Group(BaseModel):
+    # None when the answer is not grouped, or for breaches the grouped column
+    # leaves empty.
+    key: str | None
+    value: float | None
+    breaches: int
+    companies: int
+    # How many of its breaches report the amount measured, when there is one.
+    reported: int
+    holder: Holder | None = None
+
+
+class Answer(BaseModel):
+    matched: int
+    groups_total: int
+    groups: list[Group]
+
+
+class Match(BaseModel):
+    total: int
+    labels: list[str]
+
+
+class CompanyYear(BaseModel):
+    ticker: str
+    company: str | None
+    industry: str | None
+    year: int
+    assets_usd: float | None
+    net_income_usd: float | None
+    stock_price_usd: float | None
+
+
+class CompanyHistory(BaseModel):
+    years: list[CompanyYear]
 
 
 @app.get("/health", response_model=Health)
@@ -314,35 +504,80 @@ def ranks(rows, column):
             for row in rows if row[column] is not None}
 
 
+def charted(row):
+    """Whether a breach reports all six figures, and so stands on a sheet.
+    Cleaning keeps no other breach, so every one does; this holds the sheets
+    to that should a breach missing a figure ever reach the table."""
+    return all(row[column] is not None for column in METRICS)
+
+
 def breach_label(row):
     """What a breach's row is called: its company's ticker and the day it was
     disclosed, which tells one company's breaches apart."""
     return f"{row['ticker']} {row['disclosed_on']:%Y/%m/%d}"
 
 
-def metro_sheet(rows, metro):
-    """One row per breach in the metro, its six figures and their heights, in
-    the colour the metro's pin is drawn in. Rows run city by city, so a city's
-    breaches stand together, and within a city oldest first. None when the
-    metro holds no breach."""
+def metro_order(rows):
+    """{metro: its place} for every metro, largest first by its breaches, as
+    the app lists them: a region's sheet runs metro by metro in this order."""
+    counts = {}
+    for row in rows:
+        if row["metro"] is not None:
+            counts[row["metro"]] = counts.get(row["metro"], 0) + 1
+    return {metro: i for i, metro in enumerate(sorted(counts, key=lambda m: (-counts[m], m)))}
+
+
+def place_sheet(rows, here, colour_of):
+    """One row per breach in 'here' that reports a figure, its six figures and
+    their heights, in the colour colour_of(row) gives. Rows run region by
+    region west to east, then metro by metro largest first, then city by city,
+    so a metro's and a city's breaches stand together, and within a city
+    oldest first. None when no such breach is there."""
     placed = {column: ranks(rows, column) for column in METRICS}
-    color = metro_colors(rows)
-    here = [row for row in rows if row["metro"] == metro]
+    here = [row for row in here if charted(row)]
     if not here:
         return None
 
-    lines = [(breach_label(row), metro, row["city"], color.get(metro, OTHER_METRO_COLOR),
+    region_at = {region: i for i, region in enumerate(US_REGIONS)}
+    metro_at = metro_order(rows)
+    last = len(metro_at)
+    here.sort(key=lambda row: (region_at.get(row["region"], len(region_at)),
+                               metro_at.get(row["metro"], last), row["city"] or "",
+                               row["disclosed_on"], row["breach_key"]))
+    lines = [(breach_label(row), row["metro"], row["city"], colour_of(row),
               [row[column] for column in METRICS],
               [placed[column].get(row["breach_key"]) for column in METRICS])
-             for row in sorted(here, key=lambda row: (row["city"] or "", row["disclosed_on"], row["breach_key"]))]
+             for row in here]
     return sheetcsv.render("Breach / Figure", list(METRICS.values()), lines)
+
+
+def metro_coloured_sheet(rows, keep):
+    """The breaches keep(row) picks, each in its metro's colour, as a metro's
+    pin and a region's map draw them."""
+    color = metro_colors(rows)
+    return place_sheet(rows, [row for row in rows if keep(row)],
+                       lambda row: color.get(row["metro"], OTHER_METRO_COLOR))
+
+
+def us_sheet(rows):
+    """Every US breach, each in its region's colour, as the national map fills
+    its regions."""
+    return place_sheet(rows, rows, lambda row: REGION_COLORS.get(row["region"], OTHER_METRO_COLOR))
 
 
 @app.get("/sheet", response_class=PlainTextResponse)
 def sheet(query: Annotated[SheetQuery, Query()]):
-    text = metro_sheet(us_breaches(), query.metro)
+    rows = us_breaches()
+    if query.metro is not None:
+        text = metro_coloured_sheet(rows, lambda row: row["metro"] == query.metro)
+        if text is None:
+            raise HTTPException(404, f"there is no metro called '{query.metro}' with a breach that reports a "
+                                     "figure; /map lists the metros and how many of their breaches do")
+        return text
+    text = (metro_coloured_sheet(rows, lambda row: row["region"] == query.region)
+            if query.region is not None else us_sheet(rows))
     if text is None:
-        raise HTTPException(404, f"there is no metro called '{query.metro}'; /map lists them")
+        raise HTTPException(404, f"no breach in {query.region or 'the United States'} reports a figure")
     return text
 
 
@@ -359,20 +594,17 @@ def breaches(query: Annotated[BreachQuery, Query()]):
     what was taken, and where it was reported. A search that finds nothing is
     an answer, not an error."""
     where, parameters = query.where()
-    if query.company:
-        where += (" AND (LOWER(b.company) LIKE @company"
-                  " OR EXISTS (SELECT 1 FROM UNNEST(b.targets) AS t WHERE LOWER(t) LIKE @company))")
-        parameters.append(ScalarQueryParameter("company", "STRING", like(query.company)))
-    if query.ticker:
-        where += " AND b.ticker = @ticker"
-        parameters.append(ScalarQueryParameter("ticker", "STRING", query.ticker.upper()))
     parameters.append(ScalarQueryParameter("limit", "INT64", query.limit))
+    if query.sort in (BreachSort.newest, BreachSort.oldest):
+        order = "b.disclosed_on " + ("DESC" if query.sort == BreachSort.newest else "ASC")
+    else:
+        order = f"b.{AMOUNTS[query.sort]} {query.order.upper()} NULLS LAST, b.disclosed_on DESC"
 
     found = database.query(f"""
         SELECT b.*, b.division AS industry, COUNT(*) OVER () AS total
         FROM {database.table(database.BREACHES)} AS b
         WHERE {where}
-        ORDER BY b.disclosed_on DESC, b.breach_key
+        ORDER BY {order}, b.breach_key
         LIMIT @limit
     """, parameters)
     listed = [{field: row[field] for field in Breach.model_fields} for row in found]
@@ -393,8 +625,9 @@ def breach_map(rows):
             continue
         city = cities.setdefault(row["city"], {
             "city": row["city"], "region": row["region"], "metro": row["metro"],
-            "color": color[row["metro"]], "lat": row["lat"], "lon": row["lon"], "breaches": 0})
+            "color": color[row["metro"]], "lat": row["lat"], "lon": row["lon"], "breaches": 0, "charted": 0})
         city["breaches"] += 1
+        city["charted"] += charted(row)
     return {
         "regions": [{"region": region, "title": region_title(region), "color": REGION_COLORS[region],
                      "breaches": n} for region, n in regions.items()],
@@ -405,3 +638,97 @@ def breach_map(rows):
 @app.get("/map", response_model=BreachMap)
 def us_map():
     return breach_map(us_breaches())
+
+
+def answer_sql(query):
+    """(SQL, parameters) for one /query. Every value travels as a parameter;
+    the column and the aggregate come from GROUPS, MEASURES and AMOUNTS, keyed
+    by names the request was checked against."""
+    where, parameters = query.where()
+    amount = f"b.{AMOUNTS[query.of]}" if query.of else "CAST(NULL AS FLOAT64)"
+    table = database.table(database.BREACHES)
+    if query.group is None:
+        key, joined, partition = "CAST(NULL AS STRING)", "", ""
+    else:
+        column, holds_list = GROUPS[query.group]
+        key = "item" if holds_list else column
+        joined = f" LEFT JOIN UNNEST({column}) AS item" if holds_list else ""
+        partition = "PARTITION BY key"
+    median = f", PERCENTILE_CONT(amount, 0.5) OVER ({partition}) AS median" if query.measure == Measure.median else ""
+    # The breach holding the smallest or largest amount, for min and max.
+    holder = ""
+    if query.measure in (Measure.min, Measure.max):
+        direction = "ASC" if query.measure == Measure.min else "DESC"
+        holder = (", ARRAY_AGG(IF(amount IS NULL, NULL, STRUCT(company, ticker, disclosed_on, amount)) "
+                  f"IGNORE NULLS ORDER BY amount {direction} LIMIT 1)[SAFE_OFFSET(0)] AS holder")
+    parameters.append(ScalarQueryParameter("limit", "INT64", query.limit))
+    sql = f"""
+        WITH matched AS (
+            SELECT b.breach_key, b.cik, b.company, b.ticker, b.disclosed_on, {key} AS key, {amount} AS amount
+            FROM {table} AS b{joined}
+            WHERE {where}
+        ), measured AS (
+            SELECT *{median} FROM matched
+        )
+        SELECT key, {MEASURES[query.measure]} AS value, COUNT(DISTINCT breach_key) AS breaches,
+               COUNT(DISTINCT cik) AS companies, COUNT(amount) AS reported{holder},
+               COUNT(*) OVER () AS groups_total,
+               (SELECT COUNT(*) FROM {table} AS b WHERE {where}) AS matched
+        FROM measured
+        GROUP BY key
+        ORDER BY value {query.order.upper()} NULLS LAST, key
+        LIMIT @limit
+    """
+    return sql, parameters
+
+
+@app.get("/query", response_model=Answer)
+def answer(query: Annotated[AnswerQuery, Query()]):
+    """Counts, totals, averages, medians and extremes over the breaches the
+    filters keep, whole or group by group, largest first (order=asc for
+    smallest). What the sheets cannot answer on their own: anything about
+    breaches by what they were, or across places the open sheet does not hold."""
+    rows = database.query(*answer_sql(query))
+    if not rows:
+        return {"matched": 0, "groups_total": 0, "groups": []}
+    groups = [{"key": row["key"], "value": row["value"], "breaches": row["breaches"],
+               "companies": row["companies"], "reported": row["reported"],
+               "holder": row.get("holder")}
+              for row in rows]
+    return {"matched": rows[0]["matched"], "groups_total": rows[0]["groups_total"], "groups": groups}
+
+
+@app.get("/match", response_model=Match)
+def match(query: Annotated[Filters, Query()]):
+    """Every breach the filters keep, by the label its row carries on a sheet
+    (breach_label), however many: what the app needs to act on those rows."""
+    where, parameters = query.where()
+    figures = ", ".join(f"b.{column}" for column in METRICS)
+    rows = database.query(f"""
+        SELECT b.ticker, b.disclosed_on, {figures}
+        FROM {database.table(database.BREACHES)} AS b
+        WHERE {where}
+        ORDER BY b.disclosed_on, b.breach_key
+    """, parameters)
+    return {"total": len(rows), "labels": [breach_label(row) for row in rows if charted(row)]}
+
+
+@app.get("/fundamentals", response_model=CompanyHistory)
+def fundamentals(query: Annotated[CompanyQuery, Query()]):
+    """A company's figures year by year, breached or not: its assets and net
+    income (the export's millions, given here in dollars) and its year-end
+    share price. Several companies when a name matches several."""
+    if query.ticker:
+        test, value = "f.ticker = @named", query.ticker.strip().upper()
+    else:
+        test, value = "LOWER(f.company) LIKE @named", like(query.company)
+    rows = database.query(f"""
+        SELECT f.ticker, f.company, f.division AS industry, f.year,
+               f.assets_musd * 1e6 AS assets_usd, f.net_income_musd * 1e6 AS net_income_usd,
+               f.price_close AS stock_price_usd
+        FROM {database.table(database.FUNDAMENTALS)} AS f
+        WHERE {test}
+        ORDER BY f.company, f.ticker, f.year
+        LIMIT 200
+    """, [ScalarQueryParameter("named", "STRING", value)])
+    return {"years": [dict(row.items()) for row in rows]}

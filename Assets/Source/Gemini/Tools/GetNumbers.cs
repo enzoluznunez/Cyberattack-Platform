@@ -8,27 +8,17 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
     public class Args {
         [Doc("The row to read: its name, or its 1-based position. Give it with 'column' for one cell, or alone to read across the row."), Optional]
         public string row;
-        [Doc("The metric to read: its name, or its 1-based position. Give it with 'row' for one company's figures, or alone to read down the metric."), Optional]
+        [Doc("The column to read: its name, or its 1-based position. Give it with 'row' for one cell, or alone to read down the column."), Optional]
         public string column;
-        [Doc("Which column of a grouped figure to read, by its title within the group, such as '-1' for the " +
-             "year before a breach. Leave it out to get them all."), Optional]
-        public string year;
     }
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "GetNumbers",
-        Description = "Read the numbers behind the bars: the cell values of the open dataset. " +
-                      "Give 'row' and 'column' together for a single cell, 'row' alone to read across that row, " +
-                      "'column' alone to read down that column, or neither to read the whole block; a block over " +
-                      "100 cells is refused, so read a large sheet a row or column at a time. " +
-                      "When the sheet groups its columns, 'column' names the figure and covers every column of " +
-                      "it; add 'year' to read just one of them. " +
-                      "Rows and columns take a name or a 1-based position, and readings come back in display order, " +
-                      "so a Sort reorder is reflected in them. A cell with no value reads as null, never as zero. " +
-                      "This is the source for anything numeric: read the values you need and work out totals, averages, " +
-                      "differences, percentages and comparisons from them. " +
-                      "Values are exact; the spreadsheet the user sees abbreviates them (1.2M), so round when you read " +
-                      "one aloud.",
+        Description = "Read the figures behind the bars, in dollars (stock price in dollars per share). " +
+                      "Give 'row' and 'column' for one cell, 'row' alone to read across it, 'column' alone to read " +
+                      "down it, or neither for the whole sheet; over 100 cells is refused, so read a large sheet a " +
+                      "line at a time. Lines take a name or a 1-based position among those showing, and come back " +
+                      "in display order. Values are exact, so round when you say one aloud.",
         Parameters = ParametersFor(typeof(Args))
     };
 
@@ -49,16 +39,6 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
         if (hasColumn) {
             if (!TryResolveLine(args.column, true, colMin, colMax, result, out int block)) return;
             BlockSpan(true, block, colMin, colMax, out colLo, out colHi);
-
-            // A named year narrows a paired metric to the one cell it asks for.
-            if (!string.IsNullOrWhiteSpace(args.year)) {
-                if (!TryResolveSeries(args.year, true, result, out int series)) return;
-                if (series >= 0) colLo = colHi = System.Math.Min(colLo + series, colHi);
-            }
-        }
-        else if (!string.IsNullOrWhiteSpace(args.year)) {
-            result["error"] = "'year' picks one column of a grouped figure, so give 'column' as well.";
-            return;
         }
 
         bool wholeRows = rowMin == 0 && rowMax == mgr.RowCount - 1;

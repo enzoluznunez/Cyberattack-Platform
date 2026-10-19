@@ -61,14 +61,9 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         int count = 1;
         if (!undoAll && args.count.HasValue) count = args.count.Value < 1 ? 1 : args.count.Value;
 
-        if (!string.IsNullOrWhiteSpace(args.tool)) {
-            string requested = args.tool.Trim().ToLowerInvariant();
-            // Names only: TryParse alone would also take "3" or "move, rotate".
-            if (!System.Enum.TryParse(requested, true, out EditKind expected) ||
-                !string.Equals(expected.ToString(), requested, System.StringComparison.OrdinalIgnoreCase)) {
-                result["error"] = $"Unknown tool '{args.tool}'. Use move, rotate, scale, sort, filter, or profile.";
-                return;
-            }
+        if (args.tool != null) {
+            string requested = args.tool;
+            var expected = (EditKind)System.Enum.Parse(typeof(EditKind), requested, true);
             if (top.kind != expected) {
                 Refuse(result, "matching newest edit",
                     $"The newest edit is from the {Edit.KindName(top.kind)} tool, not the {requested} tool. Undo always " +

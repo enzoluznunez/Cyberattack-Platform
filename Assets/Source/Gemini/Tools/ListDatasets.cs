@@ -6,14 +6,10 @@ public sealed class ListDatasets : AgenticTool {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "ListDatasets",
-        Description = "List the datasets and what stands on each: 'name', 'active' (whether it is the dataset " +
-                      "currently open), 'read' (false for a sheet that is listed but has not been read yet; " +
-                      "SetDataset reads it, and 'description' says what it would show) and 'edits' (the tool " +
-                      "edits that currently stand on it, newest first). " +
-                      "This is cheap and carries no row, column or value data; call DescribeSheet for the sheet's " +
-                      "titles, ranges, position and industries, GetNumbers for its numbers, or DescribeDataset for " +
-                      "the open dataset's raw source text. " +
-                      "Call it when you need to know which datasets exist or which one is open."
+        Description = "List the datasets: 'name', 'active' (whether it is open), 'read' (false until it is first " +
+                      "opened; 'description' then says what it holds) and 'edits' (the tool edits standing on it, " +
+                      "newest first). Cheap, and it carries no titles or values: DescribeSheet gives the open " +
+                      "sheet's titles and metros, GetNumbers its figures."
     };
 
     protected override void Run(Dictionary<string, object> args, Dictionary<string, object> result) {
@@ -33,7 +29,7 @@ public sealed class ListDatasets : AgenticTool {
                 // edits; what it would show is the whole of what there is to report.
                 if (!dataset.loaded) {
                     list.Add(new Dictionary<string, object> {
-                        { "name", string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label },
+                        { "name", dataset.Name },
                         { "active", false },
                         { "read", false },
                         { "description", dataset.description }
@@ -42,7 +38,7 @@ public sealed class ListDatasets : AgenticTool {
                 }
 
                 list.Add(new Dictionary<string, object> {
-                    { "name", string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label },
+                    { "name", dataset.Name },
                     { "active", active },
                     { "read", true },
                     { "edits", DescribeStack(dataset.Edits, dataset.source, active) }
@@ -137,7 +133,7 @@ public sealed class ListDatasets : AgenticTool {
                 break;
             case EditKind.Profile:
                 e["direction"] = r.projection.isColumn ? "column" : "row";
-                e[r.projection.isColumn ? "column" : "row"] = DataTitle(data, r.projection.isColumn,
+                e[r.projection.isColumn ? "column" : "row"] = data?.GroupTitleOfData(r.projection.isColumn,
                     r.projection.isColumn ? r.projection.dataCol : r.projection.dataRow);
                 break;
         }
@@ -153,18 +149,4 @@ public sealed class ListDatasets : AgenticTool {
             names.Add(rows ? DataSource.RowLabelOfData(data, hidden[i]) : data.DataGroupTitleAt(hidden[i]));
         return names;
     }
-
-    private static string DataTitle(DataSource data, bool columns, int dataIndex)
-    {
-        if (data == null) return null;
-
-        // On a grouped axis the metric is what the model addresses, so edits read
-        // back in the same words they were asked for.
-        if (data.IsGrouped(columns)) return data.GroupTitleOfData(columns, dataIndex);
-
-        IReadOnlyList<string> titles = columns ? data.ColumnTitles : data.RowTitles;
-        return dataIndex >= 0 && dataIndex < titles.Count ? titles[dataIndex] : null;
-    }
-
 }
-

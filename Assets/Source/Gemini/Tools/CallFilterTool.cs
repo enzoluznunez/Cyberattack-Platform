@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Google.GenAI.Types;
 
 public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
@@ -16,43 +17,58 @@ public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
         public string[] only;
         [Doc("Clear the filter on this axis and put everything back on the sheet."), Optional]
         public bool? showAll;
+        [Doc("Pick rows by what their breaches are, looked up in the breach database: anything a breach is " +
+             "(attack type, industry, year, place, what was taken) and bounds on any amount, in dollars. " +
+             "'Show only breaches at companies losing money' is {net_income_max: 0}. Rows only; " +
+             "'whereDoes' says what happens to them."), Optional]
+        public BreachFilters where;
+        [Doc("With 'where': 'only' leaves just the matching rows on the sheet (the default), 'hide' takes them " +
+             "off, 'show' brings them back."), Values("only", "hide", "show"), Optional]
+        public string whereDoes;
+
+        // The breaches 'where' named, looked up before the call runs.
+        internal BreachMatch matched;
     }
 
     protected override bool EditsAreOutcome => true;
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "CallFilterTool",
-        Description = "Choose what stands on the sheet: which columns, or which rows. A hidden column leaves " +
-                      "with every bar it holds \u2014 on a sheet that groups its columns, a whole figure with all " +
-                      "its years \u2014 and keeps its place in the arrangement, so bringing it back does not " +
-                      "disturb a sort. The same call filters the rows when 'axis' is 'row': a hidden row is off " +
-                      "the sheet, and it keeps its place in the arrangement too. " +
-                      "Give 'hide' and 'show' to change particular ones, 'only' to leave just the ones named, " +
-                      "or 'showAll' to clear the filter on that axis. " +
-                      "Everything in one call is one edit on the undo timeline. " +
-                      "What is off the sheet is not gone: it comes back with this tool, and no other " +
-                      "tool can read it while it is hidden. At least one column and one row always stay on the sheet.",
-        Parameters = ParametersFor(typeof(Args))
+        Description = "Take columns, or rows with 'axis' 'row', off the sheet or bring them back: 'hide' and " +
+                      "'show' change particular ones, 'only' leaves just those named, 'showAll' clears the axis. " +
+                      "Nothing else moves: a hidden line's place, title and all, is left empty, and the user pokes " +
+                      "it to bring the line back. No other tool can read a hidden line. One call is one undo " +
+                      "entry, and at least one row and one column always stay.",
+        Parameters = WithNames(ParametersFor(typeof(Args)))
     };
 
-    protected override void Run(Args args, Dictionary<string, object> result) {
-        if (!EnsureToolSelected(ToolType.Filter, result)) return;
+    protected override Task<string> Prepare(Args args) => LookUp(args.where, m => args.matched = m);
 
+    protected override void Run(Args args, Dictionary<string, object> result) {
         var filter = Scene.Filter;
-        if (filter == null) { result["error"] = "Filter tool not found in scene."; return; }
+        if (!EnsureToolSelected(ToolType.Filter, filter, result)) return;
 
         var data = Scene.Data;
         if (data == null || !data.IsLoaded) { result["error"] = "No dataset is open."; return; }
-
-        bool rows;
-        if (!ReadAxis(args.axis, out rows, result)) return;
 
         bool showAll = args.showAll ?? false;
         bool only = args.only != null && args.only.Length > 0;
         bool named = (args.hide != null && args.hide.Length > 0) || (args.show != null && args.show.Length > 0);
 
+        if (args.where != null) {
+            if (showAll || only || named) {
+                result["error"] = "'where' picks the rows itself; send it without 'hide', 'show', 'only' or 'showAll'.";
+                return;
+            }
+            FilterMatching(args, filter, data, result);
+            return;
+        }
+
+        bool rows;
+        if (!ReadAxis(args.axis, out rows, result)) return;
+
         if (!showAll && !only && !named) {
-            string nouns = DataSource.Plural(rows ? DataSource.RowNoun(data) : DataSource.GroupNoun(data, true));
+            string nouns = DataSource.Plural(DataSource.FilterNoun(data, rows));
             NeedChoice(result, rows ? "rows" : "columns",
                 filter.Names(rows),
                 $"Say which {nouns} to hide or show.");
@@ -66,16 +82,17 @@ public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
 
         var hidden = new HashSet<int>(showAll
             ? new List<int>()
-            : rows ? data.HiddenRowsInOrder() : data.HiddenGroupsInOrder());
+            : data.HiddenInOrder(rows));
 
         if (only) {
             List<int> keep = new List<int>();
             if (!Resolve(filter, rows, args.only, result, keep)) return;
 
             hidden.Clear();
-            List<int> all = rows ? data.DataRowsInOrder() : data.DataGroupsInOrder();
+            var kept = new HashSet<int>(keep);
+            List<int> all = data.FilterLinesInOrder(rows);
             for (int i = 0; i < all.Count; i++)
-                if (!keep.Contains(all[i])) hidden.Add(all[i]);
+                if (!kept.Contains(all[i])) hidden.Add(all[i]);
         }
         else {
             var toHide = new List<int>();
@@ -106,17 +123,13 @@ public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
         rows = false;
         if (string.IsNullOrWhiteSpace(axis)) return true;
 
-        string wanted = axis.Trim().ToLowerInvariant();
-        switch (wanted) {
-            case "company": case "companies": case "row": case "rows":
-                rows = true;
-                return true;
-            case "metric": case "metrics": case "column": case "columns":
-                return true;
-            default:
-                result["error"] = $"'{axis.Trim()}' is not an axis; say 'column' or 'row'.";
-                return false;
+        switch (axis.Trim().ToLowerInvariant()) {
+            case "company": case "companies": rows = true; return true;
+            case "metric": case "metrics": return true;
         }
+        if (TryParseAxis(axis, out bool columns)) { rows = !columns; return true; }
+        result["error"] = $"'{axis.Trim()}' is not an axis; say 'column' or 'row'.";
+        return false;
     }
 
     private static bool Resolve(FilterTool filter, bool rows, string[] wanted,
@@ -139,24 +152,59 @@ public sealed class CallFilterTool : AgenticTool<CallFilterTool.Args> {
         return true;
     }
 
+    private static void FilterMatching(Args args, FilterTool filter, DataSource data, Dictionary<string, object> result) {
+        List<int> matching = args.matched.RowsOn(data, result);
+
+        var match = new HashSet<int>(matching);
+        var hidden = new HashSet<int>(data.HiddenInOrder(rows: true));
+        switch (args.whereDoes ?? "only") {
+            case "only":
+                if (match.Count == 0) {
+                    result["error"] = "No row on this sheet matches, and at least one row has to stay; nothing was hidden.";
+                    return;
+                }
+                hidden.Clear();
+                foreach (int row in data.FilterLinesInOrder(rows: true))
+                    if (!match.Contains(row)) hidden.Add(row);
+                break;
+            case "hide": hidden.UnionWith(match); break;
+            case "show": hidden.ExceptWith(match); break;
+        }
+
+        bool applied = filter.Apply(true, new List<int>(hidden), out string refusal);
+        if (!applied && refusal != null) {
+            result["error"] = refusal;
+            return;
+        }
+        Report(data, true, result);
+    }
+
     private static void Report(DataSource data, bool rows, Dictionary<string, object> result) {
         var showing = new List<object>();
         var off = new List<object>();
 
-        if (rows)
-            foreach (int row in data.DataRowsInOrder())
-                (data.IsRowHidden(row) ? off : showing).Add(DataSource.RowLabelOfData(data, row));
-        else
-            foreach (int group in data.DataGroupsInOrder())
-                (data.IsDataGroupHidden(group) ? off : showing).Add(DataSource.GroupLabelOfData(data, group));
+        foreach (int id in data.FilterLinesInOrder(rows))
+            (data.IsHidden(rows, id) ? off : showing).Add(DataSource.FilterLabel(data, rows, id));
 
         string noun = rows ? "row" : "column";
         result["axis"] = noun;
-        result["showing"] = showing;
-        result["hidden"] = off;
+        result["showingCount"] = showing.Count;
+        result["hiddenCount"] = off.Count;
+        // A long list costs the conversation more than it tells: the counts
+        // stand in for it, and DescribeSheet reads the rows when they matter.
+        bool listed = showing.Count + off.Count <= MostListed;
+        if (listed) {
+            result["showing"] = showing;
+            result["hidden"] = off;
+        }
         result["note"] = off.Count == 0
             ? $"Every {noun} is on the sheet."
-            : $"Positions have shifted; the {noun}s on the sheet are the ones listed in 'showing', in that order.";
+            : $"Nothing moved on the sheet, but positions count only what is showing, so they have shifted; " +
+              (listed ? $"the {noun}s on the sheet are the ones listed in 'showing', in that order."
+                      : $"call DescribeSheet for the {noun}s now on the sheet before naming one by position.");
     }
+
+    // The most lines a result lists by name.
+    private const int MostListed = 60;
 
 }

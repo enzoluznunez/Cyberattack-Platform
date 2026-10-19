@@ -29,6 +29,7 @@ from metrics import (
     INFORMATION_TYPES,
     LAST_YEAR,
     MARKETS,
+    METRICS,
     REGIONS,
     RELATIONSHIPS,
     STATE_REGIONS,
@@ -214,9 +215,6 @@ def breaches(raw, sic):
     # for the export, not something to settle here.
     if (disclosed_on.map(lambda d: d.year) != year).any():
         raise ValueError("a breach's fyear differs from the year it was disclosed")
-    if year.min() < FIRST_YEAR or year.max() > LAST_YEAR:
-        raise ValueError(f"breaches run {year.min()}-{year.max()}, outside "
-                         f"metrics.FIRST_YEAR-LAST_YEAR ({FIRST_YEAR}-{LAST_YEAR})")
 
     disclosed_to_sec = raw["disclosed_to_sec"].str.strip()
     if not disclosed_to_sec.isin(["Yes", "No"]).all():
@@ -267,7 +265,13 @@ def breaches(raw, sic):
         "financials_on": date(raw["financials_date"]),
     })
     frame = with_tickers(frame, looked_up_tickers())
+    frame = complete(frame)
     frame["metro"] = metro_of(frame)
+
+    # Checked on the breaches kept: the years every table holds.
+    if frame["year"].min() < FIRST_YEAR or frame["year"].max() > LAST_YEAR:
+        raise ValueError(f"breaches run {frame['year'].min()}-{frame['year'].max()}, outside "
+                         f"metrics.FIRST_YEAR-LAST_YEAR ({FIRST_YEAR}-{LAST_YEAR})")
 
     us = frame["country"] == US
     drawn = frame.loc[us, "state"].map(STATE_REGIONS)
@@ -282,6 +286,15 @@ def breaches(raw, sic):
     if (frame["attack_types"].map(len) == 0).any():
         raise ValueError("a breach lists no attack type, not even 'Not Disclosed'")
     return frame.sort_values("breach_key").reset_index(drop=True)
+
+
+def complete(frame):
+    """The breaches that report every one of the six figures a sheet draws. A
+    breach missing any is left out of every table, so every bar on every sheet
+    stands for a reported figure and an empty place on a sheet can only be a
+    line the user filtered away. It is dropped before metros are grouped, so
+    the map counts only what the sheets show."""
+    return frame[frame[list(METRICS)].notna().all(axis=1)].reset_index(drop=True)
 
 
 def metro_of(frame):

@@ -9,7 +9,6 @@ using Google.GenAI.Types;
 using GTool = Google.GenAI.Types.Tool;
 using UnityEngine;
 using UnityEngine.Android;
-using UnityEngine.Networking;
 
 public enum GeminiStatus {
     Off,
@@ -26,8 +25,6 @@ public static class Gemini {
 
     private static Client client;
     private static LiveConnectConfig config;
-    private static string promptBody;
-    private static string promptTail;
     private static readonly ConcurrentQueue<byte[]> sendQueue = new ConcurrentQueue<byte[]>();
     private static SemaphoreSlim sendSignal;
     private static SemaphoreSlim actionSignal;
@@ -35,7 +32,6 @@ public static class Gemini {
     private static readonly ConcurrentQueue<string> protocolLog = new ConcurrentQueue<string>();
     private static volatile bool setupCompleted;
     private static volatile bool generationActive;
-    private static volatile bool turnPending;
     private static volatile bool shutdownAfterTurn;
 
     private static CancellationTokenSource sessionCts;
@@ -67,7 +63,7 @@ public static class Gemini {
     private const int GoAwayGraceMs = 8000;
     private const int PreviousDrainMs = 5000;
 
-    public static bool Busy => generationActive || turnPending;
+    public static bool Busy => generationActive;
     public static GeminiStatus Status => _status;
     public static int ToolRoundId => Volatile.Read(ref toolRoundId);
 
@@ -107,7 +103,7 @@ public static class Gemini {
     private static readonly ConcurrentDictionary<string, PendingCall> pendingCalls =
         new ConcurrentDictionary<string, PendingCall>();
 
-    public static void NoteToolDispatched(string id, string name) {
+    private static void NoteToolDispatched(string id, string name) {
         if (string.IsNullOrEmpty(id)) return;
         pendingCalls[id] = new PendingCall { Name = name, SentUtc = DateTime.UtcNow };
     }
@@ -177,25 +173,11 @@ public static class Gemini {
         return tcs.Task;
     }
 
-    private static Task<string> loadApiKey() {
-        var path = Application.streamingAssetsPath + "/gemini.key";
-        if (!path.Contains("://"))
-            path = "file://" + path;
-
-        var tcs = new TaskCompletionSource<string>();
-        var req = UnityWebRequest.Get(path);
-        var op = req.SendWebRequest();
-        op.completed += _ => {
-            if (req.result == UnityWebRequest.Result.Success) {
-                tcs.SetResult(req.downloadHandler.text.Trim());
-            }
-            else {
-                Debug.LogError($"[Gemini] Failed to load API key from {path}: {req.error}");
-                tcs.SetResult("");
-            }
-            req.Dispose();
-        };
-        return tcs.Task;
+    private static async Task<string> loadApiKey() {
+        string key = await CyberApi.ReadStreamingLine("gemini.key");
+        if (key != null) return key;
+        Debug.LogError($"[Gemini] Failed to load API key from {CyberApi.StreamingAssetUrl("gemini.key")}.");
+        return "";
     }
 
     private static Task initTask;
@@ -208,7 +190,7 @@ public static class Gemini {
         }
     }
 
-    public static async Task Init(bool webSearch) {
+    private static async Task Init(bool webSearch) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         try {
             webSearchEnabled = webSearch;
@@ -246,12 +228,12 @@ public static class Gemini {
         if (webSearchEnabled) tools.Add(new GTool { GoogleSearch = new GoogleSearch() });
         tools.Add(new GTool { FunctionDeclarations = SystemPrompt.ToolDeclarations() });
 
-        promptBody = SystemPrompt.PromptBody(webSearchEnabled);
-        promptTail = SystemPrompt.PromptTail();
+        string instruction = SystemPrompt.PromptBody(webSearchEnabled) + SystemPrompt.PromptTail();
+        instructionChars = instruction.Length;
 
         config = new LiveConnectConfig {
             SystemInstruction = new Content {
-                Parts = new List<Part> { new Part { Text = promptBody + promptTail } }
+                Parts = new List<Part> { new Part { Text = instruction } }
             },
             ContextWindowCompression = new ContextWindowCompressionConfig {
                 TriggerTokens = SafetyNetTrigger,
@@ -320,8 +302,7 @@ public static class Gemini {
         }
         if (_listening) return;
         _listening = true;
-        ResetMicAccumulator();
-        while (sendQueue.TryDequeue(out _)) { }
+        DropPendingAudio();
         runAudio(() => {
             Speaker.start();
             Voip.start();
@@ -331,15 +312,14 @@ public static class Gemini {
     public static void Mute() {
         if (!_listening) return;
         _listening = false;
-        ResetMicAccumulator();
-        while (sendQueue.TryDequeue(out _)) { }
+        DropPendingAudio();
         runAudio(() => {
             Speaker.stop();
             Voip.stop();
         });
     }
 
-    public static void BeginGoAwayReconnect() {
+    private static void BeginGoAwayReconnect() {
         if (goAwayPending) return;
         goAwayGraceUtc = DateTime.UtcNow.AddMilliseconds(GoAwayGraceMs);
         goAwayPending = true;
@@ -353,7 +333,7 @@ public static class Gemini {
             CheckStalledTools();
             if (!goAwayPending) continue;
 
-            bool quiet = !generationActive && !turnPending;
+            bool quiet = !Busy;
             if (!quiet && DateTime.UtcNow < goAwayGraceUtc) continue;
 
             goAwayPending = false;
@@ -364,17 +344,7 @@ public static class Gemini {
         }
     }
 
-    private static int lastInstructionChars;
-
-    private static void RefreshSystemInstruction() {
-        if (config == null || promptBody == null) return;
-
-        string instruction = promptBody + promptTail;
-        lastInstructionChars = instruction.Length;
-        config.SystemInstruction = new Content {
-            Parts = new List<Part> { new Part { Text = instruction } }
-        };
-    }
+    private static int instructionChars;
 
     private static async Task RunSessionAsync(int gen, CancellationToken token) {
         int backoffMs = 500;
@@ -384,16 +354,14 @@ public static class Gemini {
             goAwayPending = false;
             AsyncSession s = null;
             try {
-                RefreshSystemInstruction();
                 config.SessionResumption = new SessionResumptionConfig { Handle = resumeHandle };
                 resumedConnection = resumeHandle != null;
                 setupCompleted = false;
                 generationActive = false;
-                turnPending = false;
-                Interlocked.Exchange(ref toolRoundsThisTurn, 0);
+                    Interlocked.Exchange(ref toolRoundsThisTurn, 0);
                 ResetTranscripts();
                 ClearPendingCalls();
-                Debug.Log($"[Gemini][diag] connecting: model={ModelId}, tools={config.Tools?.Sum(t => t.FunctionDeclarations?.Count ?? 0)}, promptChars={lastInstructionChars}, resume={resumeHandle != null}, serverTrim={SafetyNetTrigger}/{SafetyNetTarget}");
+                Debug.Log($"[Gemini][diag] connecting: model={ModelId}, tools={config.Tools?.Sum(t => t.FunctionDeclarations?.Count ?? 0)}, promptChars={instructionChars}, resume={resumeHandle != null}, serverTrim={SafetyNetTrigger}/{SafetyNetTarget}");
                 s = await client.Live.ConnectAsync(model: ModelId, config: config).ConfigureAwait(false);
                 if (!Current(gen)) break;
                 _status = GeminiStatus.Live;
@@ -422,8 +390,7 @@ public static class Gemini {
                     backoffMs = 500;
                 }
                 else {
-                    failures++;
-                    backoffMs = Mathf.Min(backoffMs * 2, 5000);
+                    BackOff(ref failures, ref backoffMs);
                     if (resumeHandle != null) {
                         Debug.LogWarning("[Gemini] session died immediately; dropping stale resume handle and starting fresh");
                         resumeHandle = null;
@@ -436,8 +403,7 @@ public static class Gemini {
             catch (Exception e) {
                 Debug.LogError($"[Gemini] session error: {e}");
                 if (s == null) resumeHandle = null;
-                failures++;
-                backoffMs = Mathf.Min(backoffMs * 2, 5000);
+                BackOff(ref failures, ref backoffMs);
             }
             finally {
                 if (s != null) {
@@ -489,7 +455,12 @@ public static class Gemini {
         int gen = Interlocked.Increment(ref sessionGeneration);
         var cts = new CancellationTokenSource();
         sessionCts = cts;
-        sessionTask = RunAfterAsync(previous, gen, cts.Token);
+        // Started off the main thread: until its first wait, the loop would
+        // otherwise run inline on the frame that asked for it, opening the
+        // socket (address lookup, connect) there, a third of a second the
+        // headset showed as one frame when the tool panel opened. Past that
+        // first wait it was on the thread pool already, as every reconnect is.
+        sessionTask = Task.Run(() => RunAfterAsync(previous, gen, cts.Token));
     }
 
     private static async Task RunAfterAsync(Task previous, int gen, CancellationToken token) {
@@ -534,6 +505,12 @@ public static class Gemini {
     private static int rawFrames;
     private static int rawMin = int.MaxValue;
     private static int rawMax;
+
+    // The mic audio gathered or queued so far, dropped.
+    private static void DropPendingAudio() {
+        ResetMicAccumulator();
+        while (sendQueue.TryDequeue(out _)) { }
+    }
 
     private static void ResetMicAccumulator() {
         lock (micGate) micAccumLen = 0;
@@ -670,19 +647,24 @@ public static class Gemini {
         return flat.Length <= MaxSpokenChars ? flat : flat.Substring(0, MaxSpokenChars) + "...";
     }
 
-    private static void FlushUtterance(System.Text.StringBuilder buf, string type) {
+    private static void BackOff(ref int failures, ref int backoffMs) {
+        failures++;
+        backoffMs = Mathf.Min(backoffMs * 2, 5000);
+    }
+
+    private static void FlushUtterance(System.Text.StringBuilder buf, bool user) {
         if (buf.Length == 0) return;
         string text = buf.ToString().Trim();
         buf.Clear();
 
         if (text.Length == 0) return;
 
-        if (type == "user_utterance") {
+        if (user) {
             if (text == lastUserText) return;
             lastUserText = text;
         }
 
-        Debug.Log($"[Gemini][{(type == "user_utterance" ? "user" : "ada")}] {Spoken(text)}");
+        Debug.Log($"[Gemini][{(user ? "user" : "ada")}] {Spoken(text)}");
     }
 
     private static async Task ReceivePump(AsyncSession s, int gen, int conn, CancellationToken token) {
@@ -715,7 +697,7 @@ public static class Gemini {
         HandleContent(response.ServerContent);
         if (pendingUserFlush) {
             pendingUserFlush = false;
-            FlushUtterance(inTranscript, "user_utterance");
+            FlushUtterance(inTranscript, user: true);
         }
     }
 
@@ -805,38 +787,39 @@ public static class Gemini {
         var inTx = content.InputTranscription;
         if (inTx != null) {
             if (!string.IsNullOrEmpty(inTx.Text)) inTranscript.Append(inTx.Text);
-            if (inTx.Finished == true) FlushUtterance(inTranscript, "user_utterance");
+            if (inTx.Finished == true) FlushUtterance(inTranscript, user: true);
         }
 
         var outTx = content.OutputTranscription;
         if (outTx != null) {
             if (!string.IsNullOrEmpty(outTx.Text)) { outTranscript.Append(outTx.Text); generationActive = true; }
-            if (outTx.Finished == true) FlushUtterance(outTranscript, "model_utterance");
+            if (outTx.Finished == true) FlushUtterance(outTranscript, user: false);
         }
 
         if (content.Interrupted == true) {
             generationActive = false;
-            turnPending = false;
             NoteProtocol("<- interrupted");
             Speaker.flush();
-            FlushUtterance(outTranscript, "model_utterance");
+            FlushUtterance(outTranscript, user: false);
             return;
         }
 
         if (content.TurnComplete == true) {
             generationActive = false;
-            turnPending = false;
             NoteProtocol("<- turnComplete");
 
             var reason = content.TurnCompleteReason;
             if (reason != null) NoteProtocol($"<- turnCompleteReason {reason}");
 
-            FlushUtterance(inTranscript, "user_utterance");
-            FlushUtterance(outTranscript, "model_utterance");
+            FlushUtterance(inTranscript, user: true);
+            FlushUtterance(outTranscript, user: false);
             pendingUserFlush = false;
             lastUserText = null;
             Interlocked.Exchange(ref toolRoundsThisTurn, 0);
-            AgentTurn.Clear();
+            // The turn's bookkeeping is the main thread's: tool calls and the
+            // user taking over read it there, so it is cleared there too, in
+            // order behind whatever this turn already queued.
+            _ = MainThread.Run(AgentTurn.Clear);
             if (ConsumeShutdownRequest())
                 _ = MainThread.Run(() => {
                     var watch = Scene.Assistant;
@@ -876,13 +859,14 @@ public static class Gemini {
     public static bool Exhausted => exhausted;
 
     public static void ResetWindow() {
-        exhausted = false;
-        exhaustWarned = false;
+        ClearExhaustion();
         ResetContextEstimate();
         StateChannel.ClearPending();
+        PanelGuard.ClearToolPanel();
+        DescribeDataset.Forget();
     }
 
-    public static void ResetContextEstimate() {
+    private static void ResetContextEstimate() {
         usageConnection = 0;
         contextTokens = 0;
         sessionPromptTokens = 0;

@@ -1,13 +1,16 @@
 using UnityEngine;
 
-[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer), typeof(BoxCollider))]
+// A bar on a sheet. It has no collider: a fingertip finds the bar it is at
+// by where it stands among the sheet's lines (SheetRaycast), so a sheet of
+// thousands of bars puts nothing in the physics scene, and the sheet's grab
+// has one box to test rather than a collider per bar.
+[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class CreateCube : MonoBehaviour
 {
     public int visRow = -1;
     public int visCol = -1;
     public int dataRow = -1;
     public int dataCol = -1;
-    public float value;
 
     public CreateSheet Sheet { get; private set; }
 
@@ -15,7 +18,6 @@ public class CreateCube : MonoBehaviour
 
     private MeshFilter _filter;
     private MeshRenderer _renderer;
-    private BoxCollider _collider;
     private Mesh _mesh;
 
     private readonly Color[] _colors = new Color[24];
@@ -23,9 +25,37 @@ public class CreateCube : MonoBehaviour
     private Vector3 _baseScale = Vector3.one;
     private float _swell;
     private bool _painted;
-    private bool _visible = true;
 
-    public BoxCollider Collider => _collider;
+    // Drawn only while its line is on the sheet (visible) and its sheet is up
+    // (shown); touchable only while drawn, while its sheet takes pokes, and
+    // while it is not rising or falling with its whole sheet (moving), as a
+    // sheet mid-switch is not touched.
+    private bool _visible = true;
+    private bool _shown = true;
+    private bool _pickable = true;
+    private bool _moving;
+
+    public bool Touchable => _visible && _shown && _pickable && !_moving;
+
+    // The point of the bar nearest a world point, the point itself when it
+    // is inside: the bar is the unit cube its transform stretches.
+    public Vector3 ClosestPoint(Vector3 world)
+    {
+        Vector3 p = transform.InverseTransformPoint(world);
+        p.x = Mathf.Clamp(p.x, -0.5f, 0.5f);
+        p.y = Mathf.Clamp(p.y, -0.5f, 0.5f);
+        p.z = Mathf.Clamp(p.z, -0.5f, 0.5f);
+        return transform.TransformPoint(p);
+    }
+
+    public bool Contains(Vector3 world)
+    {
+        Vector3 p = transform.InverseTransformPoint(world);
+        return Mathf.Abs(p.x) <= 0.5f && Mathf.Abs(p.y) <= 0.5f && Mathf.Abs(p.z) <= 0.5f;
+    }
+
+    // The colour it is drawn in, before any lighting.
+    public Color BaseColor => _baseColor;
 
     public bool IsVisible => _visible;
 
@@ -64,10 +94,7 @@ public class CreateCube : MonoBehaviour
     {
         if (_filter == null) _filter = GetComponent<MeshFilter>();
         if (_renderer == null) _renderer = GetComponent<MeshRenderer>();
-        if (_collider == null) _collider = GetComponent<BoxCollider>();
 
-        _collider.center = Vector3.zero;
-        _collider.size = Vector3.one;
         transform.localRotation = Quaternion.identity;
 
         if (material != null) _renderer.sharedMaterial = material;
@@ -82,19 +109,17 @@ public class CreateCube : MonoBehaviour
         }
     }
 
-    public void SetCell(int vRow, int vCol, int dRow, int dCol, float cellValue)
+    public void SetCell(int vRow, int vCol, int dRow, int dCol)
     {
         visRow = vRow;
         visCol = vCol;
         dataRow = dRow;
         dataCol = dCol;
-        value = cellValue;
     }
 
     public void SetBox(Vector3 localCenter, Vector3 size)
     {
-        transform.localPosition = localCenter;
-        transform.localRotation = Quaternion.identity;
+        transform.SetLocalPositionAndRotation(localCenter, Quaternion.identity);
         _baseScale = new Vector3(
             Mathf.Max(size.x, 1e-4f),
             Mathf.Max(size.y, 1e-4f),
@@ -137,8 +162,34 @@ public class CreateCube : MonoBehaviour
     {
         if (_visible == visible) return;
         _visible = visible;
-        if (_renderer != null) _renderer.enabled = visible;
-        if (_collider != null) _collider.enabled = visible;
+        Apply();
+    }
+
+    // The sheet's own showing, apart from whether this bar's line is on it.
+    public void SetShown(bool shown)
+    {
+        if (_shown == shown) return;
+        _shown = shown;
+        Apply();
+    }
+
+    public void SetPickable(bool pickable)
+    {
+        if (_pickable == pickable) return;
+        _pickable = pickable;
+        Apply();
+    }
+
+    public void SetMoving(bool moving)
+    {
+        if (_moving == moving) return;
+        _moving = moving;
+        Apply();
+    }
+
+    private void Apply()
+    {
+        if (_renderer != null) _renderer.enabled = _visible && _shown;
     }
 
     private void OnDestroy()

@@ -32,6 +32,10 @@ ENUMS = {
     "Relationships": "Relationship",
     "Regions": "RegionName",
     "Markets": "MarketName",
+    "Amounts": "Amount",
+    "Groups": "GroupName",
+    "Measures": "Measure",
+    "BreachSorts": "BreachSort",
 }
 
 
@@ -56,6 +60,7 @@ def csharp_int(name, value):
 
 def render(document):
     breaches = parameters(document, "/breaches")
+    query = parameters(document, "/query")
     schemas = document["components"]["schemas"]
 
     out = [HEADER]
@@ -64,6 +69,8 @@ def render(document):
     out.append("\n")
     out.append(csharp_int("BreachLimitDefault", breaches["limit"]["default"]))
     out.append(csharp_int("BreachLimitMaximum", breaches["limit"]["maximum"]))
+    out.append(csharp_int("QueryLimitDefault", query["limit"]["default"]))
+    out.append(csharp_int("QueryLimitMaximum", query["limit"]["maximum"]))
     out.append("\n")
     for name, component in ENUMS.items():
         out.append(csharp_array(name, schemas[component]["enum"]))

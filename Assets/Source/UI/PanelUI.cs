@@ -17,7 +17,13 @@ public abstract class PanelUI : MonoBehaviour
 
     protected RectTransform CanvasRect => _canvas != null ? _canvas.transform as RectTransform : null;
 
-    public bool IsVisible => _canvas != null && _canvas.gameObject.activeInHierarchy;
+    // Whether the panel is open. A shut panel is hidden, not switched off: its
+    // canvas stays active with everything on it built, laid out and drawn
+    // once at startup (Prewarm), and only stops drawing and taking pokes, so
+    // opening and closing it never rebuilds it.
+    public bool IsVisible => _canvas != null && _shown && gameObject.activeInHierarchy;
+    private bool _shown;
+    private PokeInteractable[] _pokes = new PokeInteractable[0];
 
     public abstract void ShowPanel();
     public abstract void HidePanel();
@@ -35,30 +41,59 @@ public abstract class PanelUI : MonoBehaviour
 
     protected void ShowCanvas()
     {
-        PlaceInFrontOfCamera();
-        _canvas.gameObject.SetActive(true);
-
-        if (_layoutDirty)
-        {
-            _layoutDirty = false;
-            ResolveDeferredLayout();
-        }
-
+        PlaceAhead();
+        SetShown(true);
+        ResolveLayoutNow();
         SetGrabbable(true);
     }
 
     protected void HideCanvas()
     {
-        _canvas.gameObject.SetActive(false);
+        SetShown(false);
         SetGrabbable(false);
     }
 
-    private Prewarm.CanvasWarmState _prewarmState;
+    private void SetShown(bool on)
+    {
+        _shown = on;
+        UILayout.ShowCanvas(_canvas, _pokes, on, _warming);
+    }
 
-    public void PrewarmCanvas(bool on) => Prewarm.WarmCanvas(ref _prewarmState, _canvas, on);
+    // Draws the shut panel, unseen, for the frames Prewarm gives it, so its
+    // layout, text and meshes are built at startup rather than on first open.
+    private bool _warming;
+    private CanvasGroup _warmGroup;
+    private float _warmAlpha;
 
+    public void PrewarmCanvas(bool on)
+    {
+        if (_canvas == null || on == _warming) return;
+        _warming = on;
+        if (_warmGroup == null) _warmGroup = UILayout.Ensure<CanvasGroup>(_canvas.gameObject);
+        if (on && !_shown)
+        {
+            _warmAlpha = _warmGroup.alpha;
+            _warmGroup.alpha = 0f;
+        }
+        else if (!on && !_shown) _warmGroup.alpha = _warmAlpha;
+        _canvas.enabled = _shown || _warming;
+    }
 
+    // Builds the layout a first open would, now.
+    protected void ResolveLayoutNow()
+    {
+        if (!_layoutDirty) return;
+        _layoutDirty = false;
+        ResolveDeferredLayout();
+    }
 
+    // Starts the panel shut: built and active, but not drawn or poked.
+    protected void StartHidden()
+    {
+        if (_canvas == null) return;
+        _pokes = _canvas.GetComponentsInChildren<PokeInteractable>(true);
+        HideCanvas();
+    }
 
     protected void InitPanel(Vector2 size)
     {
@@ -77,20 +112,7 @@ public abstract class PanelUI : MonoBehaviour
         Grabbable grabbable = GetComponent<Grabbable>();
         if (grabbable == null) return;
 
-        TwoGrabRotateTransformer spin = GetComponent<TwoGrabRotateTransformer>();
-        if (spin == null)
-        {
-            spin = gameObject.AddComponent<TwoGrabRotateTransformer>();
-            spin.InjectOptionalConstraints(new TwoGrabRotateTransformer.TwoGrabRotateConstraints
-            {
-                MinAngle = new FloatConstraint(),
-                MaxAngle = new FloatConstraint()
-            });
-        }
-
-        spin.InjectOptionalPivotTransform(EnsureGrabPivot());
-        spin.InjectOptionalRotationAxis(TwoGrabRotateTransformer.Axis.Up);
-
+        TwoGrabRotateTransformer spin = PanelPlacement.UprightSpin(gameObject, EnsureGrabPivot());
         grabbable.InjectOptionalTwoGrabTransformer(spin);
         spin.Initialize(grabbable);
     }
@@ -117,21 +139,13 @@ public abstract class PanelUI : MonoBehaviour
     {
         if (bar == null) return;
 
-        RectTransform rt = bar.Find("Divider") as RectTransform;
-        if (rt == null)
-        {
-            GameObject obj = new GameObject("Divider", typeof(RectTransform));
-            rt = obj.GetComponent<RectTransform>();
-            rt.SetParent(bar, false);
+        RectTransform rt = UILayout.EnsureChild(bar, "Divider");
+        UILayout.Ensure<LayoutElement>(rt.gameObject).ignoreLayout = true;
 
-            LayoutElement le = obj.AddComponent<LayoutElement>();
-            le.ignoreLayout = true;
-
-            Image line = obj.AddComponent<Image>();
-            line.color = Style.Black;
-            line.raycastTarget = false;
-            ApplyFront(line);
-        }
+        Image line = UILayout.Ensure<Image>(rt.gameObject);
+        line.color = Style.Black;
+        line.raycastTarget = false;
+        ApplyFront(line);
 
         LayoutGroup parentLayout = bar.parent != null ? bar.parent.GetComponent<LayoutGroup>() : null;
         float padLeft = parentLayout != null ? parentLayout.padding.left : 0f;
@@ -144,9 +158,22 @@ public abstract class PanelUI : MonoBehaviour
         rt.offsetMax = new Vector2(padRight, Style.SmallBorder);
     }
 
+    // Whether the panel may be grabbed: while it is shown, and not while a
+    // hand is at one of the map's sliders, which would take the panel with
+    // the slide (FlatSlideBar.AnyBusy). A grab already under way is kept.
+    private bool _grabWanted;
+
     private void SetGrabbable(bool on)
     {
-        if (grabCollider != null) grabCollider.enabled = on;
+        _grabWanted = on;
+        ApplyGrabCollider();
+    }
+
+    private void ApplyGrabCollider()
+    {
+        if (grabCollider == null) return;
+        bool on = _grabWanted && (Held || !FlatSlideBar.AnyBusy);
+        if (grabCollider.enabled != on) grabCollider.enabled = on;
     }
 
     private RectTransform[] _grabRects;
@@ -156,15 +183,12 @@ public abstract class PanelUI : MonoBehaviour
 
     protected void InvalidateGrabBounds() => _grabBoundsDirty = true;
 
-    protected virtual void OnLateUpdate() { }
-
     private Grabbable _grabbable;
     private bool _grabbableSearched;
-    private bool _grabbedLook;
-    private Vector3 _restScale = Vector3.one;
+    private GrabSwell _swell;
 
     // The panel's scale at rest, without the swell it takes while held.
-    public Vector3 RestScale => _grabbedLook ? _restScale : transform.localScale;
+    public Vector3 RestScale => _swell.Rest(transform);
 
     private void ApplyGrabLook()
     {
@@ -175,23 +199,9 @@ public abstract class PanelUI : MonoBehaviour
         }
         if (_grabbable == null) return;
 
-        bool held = _grabbable.SelectingPointsCount > 0;
-        if (held == _grabbedLook) return;
-
-        if (held)
-        {
-            _restScale = transform.localScale;
-            transform.localScale = _restScale * Style.EngageScale;
-        }
-        else
-        {
-            transform.localScale = _restScale;
-        }
-
-        _grabbedLook = held;
+        _swell.Set(transform, _grabbable.SelectingPointsCount > 0);
     }
 
-    private const float FlipSeconds = 0.35f;
     private Coroutine _flip;
 
     private bool Held => _grabbable != null && _grabbable.SelectingPointsCount > 0;
@@ -209,27 +219,14 @@ public abstract class PanelUI : MonoBehaviour
 
     private IEnumerator FlipRoutine()
     {
-        Quaternion from = transform.rotation;
-        Quaternion to = Quaternion.AngleAxis(180f, Vector3.up) * from;
-
-        float t = 0f;
-        while (t < FlipSeconds)
-        {
-            yield return null;
-            if (Held) break;
-
-            t += Time.unscaledDeltaTime;
-            transform.rotation = Quaternion.Slerp(from, to, Mathf.Clamp01(t / FlipSeconds));
-        }
-
-        if (!Held) transform.rotation = to;
+        yield return PanelPlacement.Flip(transform, transform.position, () => Held);
         _flip = null;
         InvalidateGrabBounds();
     }
 
     private void LateUpdate()
     {
-        OnLateUpdate();
+        ApplyGrabCollider();
         ApplyGrabLook();
         ApplyFacing();
 
@@ -265,7 +262,7 @@ public abstract class PanelUI : MonoBehaviour
     {
         if (_canvas == null) return;
         RectTransform rt = _canvas.transform as RectTransform;
-        if (rt != null) rt.sizeDelta = CanvasSize(size);
+        if (rt != null) rt.sizeDelta = size;
 
         RectTransform primaryRt = FindTransform.FindDeep(transform, "PrimaryPanel") as RectTransform;
         if (primaryRt != null)
@@ -291,24 +288,11 @@ public abstract class PanelUI : MonoBehaviour
     {
         if (border == null) return;
 
-        Transform existing = border.Find("PanelBack");
-        RectTransform rt;
-        if (existing != null)
-            rt = existing as RectTransform ?? existing.gameObject.AddComponent<RectTransform>();
-        else
-        {
-            GameObject obj = new GameObject("PanelBack", typeof(RectTransform));
-            rt = obj.GetComponent<RectTransform>();
-            rt.SetParent(border, false);
-        }
+        RectTransform rt = UILayout.EnsureChild(border, "PanelBack");
 
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
-        rt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
+        UILayout.Stretch(rt, Style.SmallBorder);
 
-        Image back = rt.GetComponent<Image>();
-        if (back == null) back = rt.gameObject.AddComponent<Image>();
+        Image back = UILayout.Ensure<Image>(rt.gameObject);
 
         RoundedSprite.Apply(back, Style.PanelInnerRadius, back: true);
         back.color = Style.Black;
@@ -365,10 +349,7 @@ public abstract class PanelUI : MonoBehaviour
         for (int i = 0; i < roots.Count; i++)
         {
             if (!(roots[i] is RectTransform rt)) continue;
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
-            rt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
+            UILayout.Stretch(rt, Style.SmallBorder);
         }
     }
 
@@ -376,16 +357,7 @@ public abstract class PanelUI : MonoBehaviour
 
     private static void EnsureBarBottomSquare(Transform bar, Color tint)
     {
-        Transform existing = bar.Find("TitleBarSquare");
-        RectTransform rt;
-        if (existing != null)
-            rt = existing as RectTransform ?? existing.gameObject.AddComponent<RectTransform>();
-        else
-        {
-            GameObject go = new GameObject("TitleBarSquare", typeof(RectTransform));
-            rt = go.GetComponent<RectTransform>();
-            rt.SetParent(bar, false);
-        }
+        RectTransform rt = UILayout.EnsureChild(bar, "TitleBarSquare");
 
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = new Vector2(1f, 0f);
@@ -394,12 +366,10 @@ public abstract class PanelUI : MonoBehaviour
         rt.offsetMax = new Vector2(0f, Style.PanelInnerRadius);
         rt.SetAsFirstSibling();
 
-        LayoutElement le = rt.GetComponent<LayoutElement>();
-        if (le == null) le = rt.gameObject.AddComponent<LayoutElement>();
+        LayoutElement le = UILayout.Ensure<LayoutElement>(rt.gameObject);
         le.ignoreLayout = true;
 
-        Image img = rt.GetComponent<Image>();
-        if (img == null) img = rt.gameObject.AddComponent<Image>();
+        Image img = UILayout.Ensure<Image>(rt.gameObject);
         img.color = tint;
         img.raycastTarget = false;
         ApplyFront(img);
@@ -414,13 +384,7 @@ public abstract class PanelUI : MonoBehaviour
         {
             Transform bar = bars[i];
 
-            LayoutElement le = bar.GetComponent<LayoutElement>();
-            if (le != null)
-            {
-                le.minHeight = height;
-                le.preferredHeight = height;
-                le.flexibleHeight = 0f;
-            }
+            if (bar.GetComponent<LayoutElement>() != null) UILayout.FixedHeight(bar.gameObject, height);
 
             Image barFill = bar.GetComponent<Image>();
             if (barFill != null)
@@ -434,9 +398,7 @@ public abstract class PanelUI : MonoBehaviour
             HorizontalLayoutGroup hlg = bar.GetComponent<HorizontalLayoutGroup>();
             if (hlg != null)
             {
-                hlg.padding = new RectOffset(
-                    (int)Style.PanelInset, (int)Style.PanelInset,
-                    (int)Style.SmallPadding, (int)Style.SmallPadding);
+                hlg.padding = PanePadding();
                 hlg.childForceExpandHeight = false;
             }
 
@@ -447,8 +409,7 @@ public abstract class PanelUI : MonoBehaviour
             {
                 if (!StyleHeaderLabel(titles[t].GetComponent<TextMeshProUGUI>())) continue;
 
-                LayoutElement titleLE = titles[t].GetComponent<LayoutElement>();
-                if (titleLE == null) titleLE = titles[t].gameObject.AddComponent<LayoutElement>();
+                LayoutElement titleLE = UILayout.Ensure<LayoutElement>(titles[t].gameObject);
                 titleLE.preferredWidth = -1f;
                 titleLE.flexibleWidth = hasSpacer ? 0f : 1f;
             }
@@ -459,12 +420,14 @@ public abstract class PanelUI : MonoBehaviour
             StyleHeaderLabel(headers[i].GetComponent<TextMeshProUGUI>());
     }
 
+    // A pane's inset: the panel inset at the sides, small padding above and below.
+    protected static RectOffset PanePadding() => new RectOffset(
+        (int)Style.PanelInset, (int)Style.PanelInset,
+        (int)Style.SmallPadding, (int)Style.SmallPadding);
+
     protected static void ApplyPaneLayout(HorizontalOrVerticalLayoutGroup layout)
     {
-        layout.padding.left = (int)Style.PanelInset;
-        layout.padding.right = (int)Style.PanelInset;
-        layout.padding.top = (int)Style.SmallPadding;
-        layout.padding.bottom = (int)Style.SmallPadding;
+        layout.padding = PanePadding();
         layout.spacing = Style.SmallPadding;
     }
 
@@ -473,8 +436,7 @@ public abstract class PanelUI : MonoBehaviour
         Transform spacer = bar.Find("Spacer");
         if (spacer == null) return null;
 
-        LayoutElement le = spacer.GetComponent<LayoutElement>();
-        if (le == null) le = spacer.gameObject.AddComponent<LayoutElement>();
+        LayoutElement le = UILayout.Ensure<LayoutElement>(spacer.gameObject);
         le.flexibleWidth = 1f;
         return le;
     }
@@ -489,11 +451,8 @@ public abstract class PanelUI : MonoBehaviour
         return true;
     }
 
-    protected virtual Vector2 CanvasSize(Vector2 panelSize) => panelSize;
-
-    protected virtual float XOffsetFromCamera => 0f;
-
-    protected void PlaceInFrontOfCamera()
+    // Stands the panel ahead of the user without showing it.
+    public void PlaceAhead()
     {
         Transform cam = CameraRig.MainTransform;
         if (cam == null)
@@ -502,34 +461,20 @@ public abstract class PanelUI : MonoBehaviour
             return;
         }
 
-        Vector3 forward = CameraRig.Flatten(cam.forward, Vector3.forward);
-        PlaceGroup(cam.position + forward * zOffsetFromCamera, Quaternion.LookRotation(forward));
+        Vector3 forward = CameraRig.FlatForward;
+        transform.SetPositionAndRotation(cam.position + forward * zOffsetFromCamera, Quaternion.LookRotation(forward));
     }
 
-    // Turns the panel, with whatever stands beside it, square to a viewer at
-    // 'eye' without moving the two as a whole. False when the viewer is too
-    // close to tell which way that is.
+    // Turns the panel square to a viewer at 'eye' without moving it. False
+    // when the viewer is too close to tell which way that is.
     public bool SquareTo(Vector3 eye)
     {
-        Vector3 centre = GroupCentre;
-        Vector3 face = centre - eye;
+        Vector3 face = transform.position - eye;
         face.y = 0f;
         if (face.sqrMagnitude < 1e-6f) return false;
 
-        PlaceGroup(centre, Quaternion.LookRotation(face.normalized));
+        transform.rotation = Quaternion.LookRotation(face.normalized);
         return true;
-    }
-
-    // The middle of the panel and whatever stands beside it: the panel sits
-    // XOffsetFromCamera along its own right of it.
-    private Vector3 GroupCentre => transform.position - transform.right * XOffsetFromCamera;
-
-    // Both placements square the group, not the panel alone, so a panel set off
-    // to one side stands in the plane its neighbour does and the two face the
-    // user as one.
-    private void PlaceGroup(Vector3 centre, Quaternion rotation)
-    {
-        transform.SetPositionAndRotation(centre + rotation * Vector3.right * XOffsetFromCamera, rotation);
     }
 
 }

@@ -1,12 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using UnityEngine;
 
 public abstract class DataSource : MonoBehaviour
 {
-
-
     public IReadOnlyList<string> ColumnTitles => _columnTitles;
     public IReadOnlyList<string> RowTitles => _rowTitles;
     public int ColumnCount => _columnTitles.Count;
@@ -21,11 +18,6 @@ public abstract class DataSource : MonoBehaviour
     // loaded by hand is: uncoloured rather than wrongly coloured.
     public Color RowColorAt(int dataRow) =>
         dataRow >= 0 && dataRow < _rowColors.Count ? _rowColors[dataRow] : Color.white;
-
-    // The city a row's breach is headquartered in, which is the pin it stands
-    // for on the map, or null when the sheet does not say.
-    public string RowCityAt(int dataRow) =>
-        dataRow >= 0 && dataRow < _rowCities.Count && _rowCities[dataRow].Length > 0 ? _rowCities[dataRow] : null;
 
     // The categories present, in the order the rows are in. One entry per block,
     // so a sheet that arrived blocked by metro reads back one name per metro.
@@ -93,9 +85,7 @@ public abstract class DataSource : MonoBehaviour
 
     public int GroupCount(bool columns)
     {
-        int lines = (columns ? ColumnOrder : RowOrder).Count;
-        int size = GroupSize(columns);
-        return size > 1 ? lines / size : lines;
+        return (columns ? ColumnOrder : RowOrder).Count / GroupSize(columns);
     }
 
     // Filtering hides whole column groups: on a grouped axis that is one metric
@@ -106,44 +96,21 @@ public abstract class DataSource : MonoBehaviour
     private readonly HashSet<int> _hiddenGroups = new HashSet<int>();
     private readonly List<int> _visibleColumns = new List<int>();
 
-    public int DataGroupCount => _columnGroupSize > 1 ? ColumnCount / _columnGroupSize : ColumnCount;
+    public int DataGroupCount => ColumnCount / _columnGroupSize;
 
-    public bool IsDataGroupHidden(int dataGroup) => _hiddenGroups.Contains(dataGroup);
+    public int DataGroupOf(int dataColumn) => dataColumn / _columnGroupSize;
 
-    public int DataGroupOf(int dataColumn) =>
-        _columnGroupSize > 1 ? dataColumn / _columnGroupSize : dataColumn;
-
-    public string DataGroupTitleAt(int dataGroup)
-    {
-        int size = _columnGroupSize;
-        int first = size > 1 ? dataGroup * size : dataGroup;
-        return GroupTitleOfData(true, first);
-    }
+    public string DataGroupTitleAt(int dataGroup) => GroupTitleOfData(true, dataGroup * _columnGroupSize);
 
     // Data-space group ids in the order they stand on the sheet, hidden ones
     // included, so a list of metrics reads the same whether or not it is filtered.
-    public List<int> DataGroupsInOrder()
+    private List<int> DataGroupsInOrder()
     {
         var groups = new List<int>(DataGroupCount);
-        int size = Mathf.Max(_columnGroupSize, 1);
-        for (int i = 0; i < _columnOrder.Count; i += size)
+        for (int i = 0; i < _columnOrder.Count; i += _columnGroupSize)
             groups.Add(DataGroupOf(_columnOrder[i]));
         return groups;
     }
-
-    public List<int> HiddenGroupsInOrder()
-    {
-        var hidden = new List<int>(_hiddenGroups.Count);
-        List<int> groups = DataGroupsInOrder();
-        for (int i = 0; i < groups.Count; i++)
-            if (_hiddenGroups.Contains(groups[i])) hidden.Add(groups[i]);
-        return hidden;
-    }
-
-    // Refused rather than clamped when it would empty the sheet: a sheet with no
-    // columns is not a filter the user can see their way out of.
-    public bool SetHiddenGroups(IEnumerable<int> hidden, out string refusal) =>
-        SetHidden(_hiddenGroups, hidden, DataGroupCount, GroupNoun(this, true), out refusal);
 
     // Both axes filter by this: every id has to exist, one line has to stay,
     // and nothing is announced when the set is unchanged.
@@ -178,8 +145,6 @@ public abstract class DataSource : MonoBehaviour
         return true;
     }
 
-    public bool ClearHiddenGroups() => SetHiddenGroups(null, out _);
-
     // The row axis filters the same way the column axis does, one company at a
     // time rather than by group: rows carry no series, so a hidden row is a
     // single line off the sheet. Rows are named by their place in the data here
@@ -189,34 +154,80 @@ public abstract class DataSource : MonoBehaviour
     private readonly HashSet<int> _hiddenRows = new HashSet<int>();
     private readonly List<int> _visibleRows = new List<int>();
 
-    public bool IsRowHidden(int dataRow) => _hiddenRows.Contains(dataRow);
+    // A company is one row and a metric one column group; past that the two
+    // axes filter the same way, so these take the axis as 'rows'. Lines are
+    // listed in data-space ids in the order they stand on the sheet, hidden
+    // ones included, so a list reads the same whether or not it is filtered.
+    public List<int> FilterLinesInOrder(bool rows) => rows ? new List<int>(_rowOrder) : DataGroupsInOrder();
 
-    // Data-space row ids in the order they stand on the sheet, hidden ones
-    // included, so a list of companies reads the same whether or not it is
-    // filtered.
-    public List<int> DataRowsInOrder() => new List<int>(_rowOrder);
-
-    public List<int> HiddenRowsInOrder()
+    public List<int> HiddenInOrder(bool rows)
     {
-        var hidden = new List<int>(_hiddenRows.Count);
-        for (int i = 0; i < _rowOrder.Count; i++)
-            if (_hiddenRows.Contains(_rowOrder[i])) hidden.Add(_rowOrder[i]);
-        return hidden;
+        HashSet<int> hiddenSet = HiddenSet(rows);
+        List<int> lines = FilterLinesInOrder(rows);
+        lines.RemoveAll(id => !hiddenSet.Contains(id));
+        return lines;
     }
 
-    // Refused rather than clamped when it would empty the sheet, for the reason
-    // the column side is: a sheet with no rows is not a filter the user can see
-    // their way out of.
-    public bool SetHiddenRows(IEnumerable<int> hidden, out string refusal) =>
-        SetHidden(_hiddenRows, hidden, RowCount, RowNoun(this), out refusal);
+    public bool IsHidden(bool rows, int id) => HiddenSet(rows).Contains(id);
 
-    public bool ClearHiddenRows() => SetHiddenRows(null, out _);
+    // Refused rather than clamped when it would empty the sheet: a sheet with
+    // no rows or columns is not a filter the user can see their way out of.
+    public bool SetHiddenOn(bool rows, IEnumerable<int> hidden, out string refusal) =>
+        SetHidden(HiddenSet(rows), hidden, rows ? RowCount : DataGroupCount,
+            FilterNoun(this, rows), out refusal);
+
+    // What one filtered line on that axis is called: a row, or a column group.
+    public static string FilterNoun(DataSource data, bool rows) => rows ? RowNoun(data) : GroupNoun(data, true);
+
+    private HashSet<int> HiddenSet(bool rows) => rows ? _hiddenRows : _hiddenGroups;
+
+    public static string FilterLabel(DataSource data, bool rows, int id) =>
+        rows ? RowLabelOfData(data, id) : GroupLabelOfData(data, id);
 
     private void RebuildVisibleRows()
     {
         _visibleRows.Clear();
+        _rowSlots.Clear();
         for (int i = 0; i < _rowOrder.Count; i++)
-            if (!_hiddenRows.Contains(_rowOrder[i])) _visibleRows.Add(_rowOrder[i]);
+        {
+            if (_hiddenRows.Contains(_rowOrder[i])) continue;
+            _visibleRows.Add(_rowOrder[i]);
+            _rowSlots.Add(i);
+        }
+    }
+
+    // Where each line on the sheet stands among every line, hidden ones
+    // included: the place in the whole arrangement of the line at each
+    // visible position. The sheet is laid out by these, so a hidden line
+    // leaves its place empty and nothing else moves; everything that counts
+    // lines (the tools, the assistant) still counts the visible ones.
+    private readonly List<int> _rowSlots = new List<int>();
+    private readonly List<int> _columnSlots = new List<int>();
+
+    public IReadOnlyList<int> Slots(bool columns) => columns ? _columnSlots : _rowSlots;
+
+    public int SlotCount(bool columns) => columns ? _columnOrder.Count : _rowOrder.Count;
+
+    // The whole arrangement on an axis, hidden lines included, in data-space
+    // line ids.
+    public List<int> FullOrder(bool columns) => new List<int>(columns ? _columnOrder : _rowOrder);
+
+    // Sets the whole arrangement, hidden lines included: a sort that ranks the
+    // hidden lines too, so each comes back where it belongs, and the undo of
+    // one. False when it is not an arrangement of every line.
+    public bool SetFullOrder(bool columns, IReadOnlyList<int> order)
+    {
+        List<int> target = columns ? _columnOrder : _rowOrder;
+        if (order == null || order.Count != target.Count || !IsRearrangementOf(order, target)) return false;
+        if (columns && !IsGroupAligned(order, _columnGroupSize)) return false;
+
+        bool same = true;
+        for (int i = 0; i < order.Count && same; i++) same = order[i] == target[i];
+        if (same) return false;
+
+        for (int i = 0; i < order.Count; i++) target[i] = order[i];
+        RaiseOrderChanged();
+        return true;
     }
 
     // What one row is called: the sheet's own name for its rows when its corner
@@ -250,20 +261,21 @@ public abstract class DataSource : MonoBehaviour
     private void RebuildVisibleColumns()
     {
         _visibleColumns.Clear();
-        int size = Mathf.Max(_columnGroupSize, 1);
+        _columnSlots.Clear();
+        int size = _columnGroupSize;
 
         for (int i = 0; i + size <= _columnOrder.Count; i += size)
         {
             if (_hiddenGroups.Contains(DataGroupOf(_columnOrder[i]))) continue;
-            for (int s = 0; s < size; s++) _visibleColumns.Add(_columnOrder[i + s]);
+            for (int s = 0; s < size; s++)
+            {
+                _visibleColumns.Add(_columnOrder[i + s]);
+                _columnSlots.Add(i + s);
+            }
         }
     }
 
-    public int GroupOf(bool columns, int visIndex)
-    {
-        int size = GroupSize(columns);
-        return size > 1 ? visIndex / size : visIndex;
-    }
+    public int GroupOf(bool columns, int visIndex) => visIndex / GroupSize(columns);
 
     public void GroupSpan(bool columns, int group, out int lo, out int hi)
     {
@@ -393,7 +405,6 @@ public abstract class DataSource : MonoBehaviour
     public event Action OnDataLoaded;
 
     public event Action OnLayoutInvalidated;
-    public event Action OnOrderChanged;
 
     protected List<string> _columnTitles = new List<string>();
     protected List<string> _rowTitles = new List<string>();
@@ -406,7 +417,6 @@ public abstract class DataSource : MonoBehaviour
     // filtering rows away never repaints the ones that remain.
     protected List<string> _rowCategories = new List<string>();
     protected List<Color> _rowColors = new List<Color>();
-    protected List<string> _rowCities = new List<string>();
 
     // Each cell's bar height in [0, 1], when the sheet sends them: a bar's
     // height is then not its value but its value's place among a larger whole
@@ -433,12 +443,6 @@ public abstract class DataSource : MonoBehaviour
     protected List<int> _rowOrder = new List<int>();
 
     protected bool _isLoaded;
-
-    protected void NotifyChanged()
-    {
-        EnsureOrders();
-        OnLayoutInvalidated?.Invoke();
-    }
 
     protected int FillGrid(int rowCount, int colCount, Func<int, int, float?> sample)
     {
@@ -535,7 +539,7 @@ public abstract class DataSource : MonoBehaviour
         return k > 0f ? _values[rowIndex, colIndex] / k : _values[rowIndex, colIndex];
     }
 
-    protected virtual void EnsureOrders()
+    private void EnsureOrders()
     {
         EnsureOrder(_columnOrder, ColumnCount);
         EnsureOrder(_rowOrder, RowCount);
@@ -545,12 +549,15 @@ public abstract class DataSource : MonoBehaviour
 
     private void RaiseOrderChanged()
     {
-        NotifyChanged();
-        OnOrderChanged?.Invoke();
+        EnsureOrders();
+        OnLayoutInvalidated?.Invoke();
     }
 
     // The Sort tool's own reset: it puts the arrangement back, and leaves the
     // filter alone, because hiding a metric is the Filter tool's edit to undo.
+    // Whether every row and column stands where the data has it.
+    public bool InDataOrder => IsIdentity(_columnOrder, ColumnCount) && IsIdentity(_rowOrder, RowCount);
+
     public void ResetOrder()
     {
         InitIdentity(_columnOrder, ColumnCount);
@@ -576,7 +583,7 @@ public abstract class DataSource : MonoBehaviour
         if (!IsGroupAligned(order, _columnGroupSize)) return false;
 
         int taken = 0;
-        int size = Mathf.Max(_columnGroupSize, 1);
+        int size = _columnGroupSize;
         for (int i = 0; i + size <= _columnOrder.Count; i += size)
         {
             if (_hiddenGroups.Contains(DataGroupOf(_columnOrder[i]))) continue;
@@ -642,7 +649,7 @@ public abstract class DataSource : MonoBehaviour
         return true;
     }
 
-    private static bool MoveGroupWithin(List<int> order, int fromGroup, int toGroup, int groupSize)
+    public static bool MoveGroupWithin(List<int> order, int fromGroup, int toGroup, int groupSize)
     {
         int groups = order.Count / groupSize;
         if (groups <= 0 || fromGroup < 0 || fromGroup >= groups) return false;
@@ -679,6 +686,14 @@ public abstract class DataSource : MonoBehaviour
         for (int i = 0; i < count; i++) order.Add(i);
     }
 
+    private static bool IsIdentity(List<int> order, int count)
+    {
+        if (order.Count != count) return false;
+        for (int i = 0; i < count; i++)
+            if (order[i] != i) return false;
+        return true;
+    }
+
     private static void EnsureOrder(List<int> order, int count)
     {
         if (order.Count == count) return;
@@ -690,6 +705,18 @@ public abstract class DataSource : MonoBehaviour
         if (rowIndex < 0 || rowIndex >= RowCount || colIndex < 0 || colIndex >= ColumnCount)
             return 0f;
         return _values[rowIndex, colIndex];
+    }
+
+    // The value in the cell at a visible position, if there is one.
+    public bool TryValueAt(int visRow, int visCol, out double value)
+    {
+        value = 0d;
+        IReadOnlyList<int> rows = RowOrder, cols = ColumnOrder;
+        if (visRow < 0 || visRow >= rows.Count || visCol < 0 || visCol >= cols.Count) return false;
+        int dataRow = rows[visRow], dataCol = cols[visCol];
+        if (!HasValue(dataRow, dataCol)) return false;
+        value = GetValue(dataRow, dataCol);
+        return true;
     }
 
     public bool HasValue(int rowIndex, int colIndex)

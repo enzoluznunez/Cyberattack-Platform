@@ -4313,13 +4313,13 @@ MonoBehaviour:
   dataSource: {fileID: 0}
   sheetPrefab: {fileID: 3106634379877467101, guid: 4c66f860011ef48e59701331c2790731, type: 3}
   cubeMaterial: {fileID: 2100000, guid: 137244d2eaaca4feeadc62007d54ff30, type: 2}
-  cubeSide: 0.01875
-  cubeGap: 0.01875
-  groupGap: 0.0125
+  cubeSide: 0.015
+  cubeGap: 0.015
+  groupGap: 0.01
   maximumHeight: 0.25
   minimumZOffsetFromCamera: 0.35
   showLabels: 1
-  labelGap: 0.01
+  labelGap: 0.008
   systemMotionSpeed: 0.5
   minMotionSeconds: 0.1
   maxMotionSeconds: 1.5
@@ -5930,18 +5930,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aebd19aaad2bd47199bd2de786a54c9f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Study.Runtime::MapCarousel
-  gap: 0.05
+  panelGap: 0.08
+  sheetGap: 0.05
   mapBox: {x: 0.4, y: 0.4}
   oneBreachRadius: 0.004
-  thickness: 0.012
-  dotHeight: 0.004
-  smallestHold: 0.06
-  commitShare: 0.25
-  flickSpeed: 0.8
-  slideSeconds: 0.35
+  minScale: 0.25
+  maxScale: 2.5
+  startShare: 0.5
   peekScale: 0.4
-  pointDepth: 0.06
-  pointSlack: 0.01
 --- !u!4 &1064308811
 Transform:
   m_ObjectHideFlags: 0
@@ -6633,7 +6629,7 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.1
+  near clip plane: 0.02
   far clip plane: 1000
   field of view: 90
   orthographic: 0

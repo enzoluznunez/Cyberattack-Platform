@@ -7,17 +7,12 @@ public sealed class DescribeSheet : AgenticTool {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "DescribeSheet",
-        Description = "Read the sheet's shape and placement. Returns 'rows' and 'columns', its titles in display " +
-                      "order — or " +
-                      "'metrics' and 'columnsPerMetric' when the sheet pairs its columns, one metric holding a cell " +
-                      "per year — its " +
-                      "'rowRange' and 'colRange' (the 1-based numbers those titles start and end at, so a title's " +
-                      "number is its position within that range), 'rowCategory' and 'columnCategory' (what the rows " +
-                      "and columns represent, when the data says), its 'position', its 'metro' " +
-                      "(when every row on it belongs to one) or 'metros' (the metros on it, largest first, when it " +
-                      "holds more than one), and " +
-                      "'projections' (the strips the Profile tool has raised above this " +
-                      "sheet). This carries no cell values; call GetNumbers for the numbers."
+        Description = "Read the sheet's shape and placement: 'rows' and 'columns', the titles showing in " +
+                      "display order, with 'rowRange' and 'colRange' giving their 1-based positions (filtered " +
+                      "lines are left out); 'rowCategory' and 'columnCategory' when the data names them; its " +
+                      "'position'; its 'metro', or 'metros' largest first when it " +
+                      "holds several; and the 'projections' the Profile tool has raised. It carries no values; " +
+                      "call GetNumbers for those."
     };
 
     protected override void Run(Dictionary<string, object> args, Dictionary<string, object> result) {
@@ -30,7 +25,7 @@ public sealed class DescribeSheet : AgenticTool {
         int colMin = piece.colMin;
         int colMax = piece.colMax;
 
-        result["rows"] = Titles(data.RowOrder, data.RowTitles, rowMin, rowMax);
+        result["rows"] = Titles(data, false, rowMin, rowMax);
         if (rowMin == 0 && rowMax == mgr.RowCount - 1) NoteRefreshed(false);
         if (colMin == 0 && colMax == mgr.ColCount - 1) NoteRefreshed(true);
 
@@ -53,7 +48,7 @@ public sealed class DescribeSheet : AgenticTool {
                              "separated. Bar heights are comparable within a metric but not between metrics.";
         }
         else {
-            result["columns"] = Titles(data.ColumnOrder, data.ColumnTitles, colMin, colMax);
+            result["columns"] = Titles(data, true, colMin, colMax);
             result["colRange"] = new List<object> { colMin + 1, colMax + 1 };
         }
         if (!string.IsNullOrEmpty(data.RowAxisTitle)) result["rowCategory"] = data.RowAxisTitle;
@@ -101,12 +96,9 @@ public sealed class DescribeSheet : AgenticTool {
         return dataIndex >= 0 && dataIndex < titles.Count ? titles[dataIndex] : null;
     }
 
-    private static List<object> Titles(IReadOnlyList<int> order, IReadOnlyList<string> src, int min, int max) {
+    private static List<object> Titles(DataSource data, bool columns, int min, int max) {
         var titles = new List<object>();
-        for (int v = min; v <= max; v++) {
-            int idx = v >= 0 && v < order.Count ? order[v] : -1;
-            titles.Add(idx >= 0 && idx < src.Count ? src[idx] : "");
-        }
+        for (int v = min; v <= max; v++) titles.Add(data.TitleAt(columns, v) ?? "");
         return titles;
     }
 

@@ -159,13 +159,31 @@ MARKETS = [
 
 # The years breaches were disclosed in. clean.py refuses an export with a
 # breach outside them, so a year filter on this range never drops one.
-FIRST_YEAR = 2004
-LAST_YEAR = 2024
+FIRST_YEAR = 2005
+LAST_YEAR = 2023
 
 # How many breaches one /breaches answer lists at most. The assistant reads
 # them out, so this is a listening budget.
 BREACH_LIMIT = 10
 BREACH_LIMIT_MAXIMUM = 50
+
+# The amounts a lookup can filter, rank and measure breaches by, {name: column}:
+# the six figures a sheet draws, in dollars (stock price per share), and what
+# the breach itself lost and cost, which most breaches do not report.
+AMOUNTS = {
+    "revenue": "revenue_usd",
+    "net_income": "net_income_usd",
+    "assets": "assets_usd",
+    "book_value": "book_value_usd",
+    "market_cap": "market_cap_usd",
+    "stock_price": "stock_price_usd",
+    "records_lost": "records_lost",
+    "cost": "cost_usd",
+}
+
+# How many groups one /query answer lists at most, and by default.
+QUERY_LIMIT = 25
+QUERY_LIMIT_MAXIMUM = 100
 
 # The app shows the United States alone. Its regions are the export's own, in
 # the order the maps are swiped through: west to east, each region placed by

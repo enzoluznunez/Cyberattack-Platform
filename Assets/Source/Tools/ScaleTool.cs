@@ -20,6 +20,8 @@ public class ScaleTool : GrabTool
         return scale;
     }
 
+    protected override void PrepareSheet(CreateSheet sheet) => ScaleTransformerFor(sheet);
+
     private static TransformerUtils.ConstrainedAxis Pin(float value) => Range(value, value);
 
     private static TransformerUtils.ConstrainedAxis Range(float min, float max) =>

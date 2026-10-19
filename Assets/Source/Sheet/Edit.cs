@@ -13,15 +13,31 @@ public struct MoveRecord
     public Quaternion postRot;
     public Vector3 postScale;
     public float distance;
+
+    // Where the sheets' frame stood in the world when this edit was made: the
+    // poses above are stated against it. A sheet the Move tool has moved stays
+    // against this frame rather than following the panel.
+    public Vector3 anchorPos;
+    public Quaternion anchorRot;
+
+    // A move that ends where it began: no edit at all.
+    public bool IsNoChange => SamePose(prePos, preRot, preScale, postPos, postRot, postScale);
+
+    public static bool SamePose(Vector3 aPos, Quaternion aRot, Vector3 aScale,
+        Vector3 bPos, Quaternion bRot, Vector3 bScale) =>
+        (aPos - bPos).sqrMagnitude < 1e-8f && Quaternion.Angle(aRot, bRot) < 0.01f &&
+        (aScale - bScale).sqrMagnitude < 1e-8f;
 }
 
-// Always a strip: one whole row or column raised above the sheet.
+// Always a strip: one whole row or column raised above the sheet, or, with
+// 'lower', a raised one taken down again.
 public struct ProjectionRecord
 {
     public bool isColumn;
     public int dataRow;
     public int dataCol;
     public float lift;
+    public bool lower;
 }
 
 public class Edit
@@ -30,8 +46,14 @@ public class Edit
     public MoveRecord move;
     public ProjectionRecord projection;
 
+    public bool IsPose => kind == EditKind.Move || kind == EditKind.Rotate || kind == EditKind.Scale;
+
     public bool reorderIsColumn;
     public List<int> reorderPreOrder;
+    // The whole arrangement before, hidden lines included, when the reorder
+    // moved those too (a sort that ranks every line); null when it only
+    // rearranged the lines on the sheet.
+    public List<int> reorderPreFull;
     public int reorderFrom;
     public int reorderTarget;
     public int reorderLines;
@@ -121,8 +143,13 @@ public class EditList : List<Edit>
     public void PushSort(bool isColumn, IReadOnlyList<int> preOrder, int from, int target) =>
         Push(Reorder(isColumn, preOrder, from, target, 1));
 
-    public void PushReorder(bool isColumn, IReadOnlyList<int> preOrder, int linesMoved) =>
-        Push(Reorder(isColumn, preOrder, -1, -1, linesMoved));
+    public void PushReorder(bool isColumn, IReadOnlyList<int> preOrder, int linesMoved,
+        IReadOnlyList<int> preFull = null)
+    {
+        Edit e = Reorder(isColumn, preOrder, -1, -1, linesMoved);
+        if (preFull != null) e.reorderPreFull = new List<int>(preFull);
+        Push(e);
+    }
 
     private static Edit Reorder(bool isColumn, IReadOnlyList<int> preOrder, int from, int target, int lines) =>
         new Edit

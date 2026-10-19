@@ -25,7 +25,7 @@ python3.13 -m venv .venv
 
 `gs://cyberattack-platform-raw` holds both, verbatim:
 
-- `breach_events.csv` — one row per disclosed breach, 2004–2024
+- `breach_events.csv` — one row per disclosed breach, 2004–2024 (the complete ones kept run 2005–2023)
 - `company_fundamentals.csv` — one row per company per year, 2004–2023
 
 The bucket is private and versioned, so replacing a file keeps the old one.
@@ -54,7 +54,9 @@ One command, and nothing kept in between: every run starts from the exports.
   it was disclosed. Where the export leaves the ticker blank, `tickers.csv`
   gives the one looked up by hand, with its source, or none; a breach with
   none is left out of every table, and a blank ticker `tickers.csv` does not
-  list stops the rebuild. Attack types, information accessed, breached
+  list stops the rebuild. A breach missing any of the six figures a sheet
+  draws (revenue, net income, assets, book value, market cap, stock price) is
+  left out too, so every cell on every sheet holds a reported figure. Attack types, information accessed, breached
   subsidiaries and parent/subsidiary are real lists, dates are dates, and every
   breach carries the industry (`division`) of its company, the country, city
   and coordinates of its headquarters, the metro that city is in (US only:
@@ -105,21 +107,36 @@ checks every US place lands on its national and regional map.
 
 ## Serving the app
 
-The app ships no data. It lists one sheet per metro at startup, from the metros
-`/map` names, reads each from `/sheet`, and draws its pins from `/map`:
+The app ships no data. It lists a sheet for the whole country, one per region
+and one per metro at startup, from the regions and metros `/map` names, reads
+each from `/sheet`, and draws its pins from `/map`:
 
 | Endpoint | What it answers |
 |---|---|
 | `/health` | Whether the service is up, and how many rows each table holds. Open without a key at the gateway. |
 | `/sheet?metro=…` | One metro's sheet, as the CSV the app parses: a row per breach, titled by ticker and disclosure date, its six figures, and each figure's place among every US breach |
-| `/breaches` | Individual US breaches, newest first, for the assistant to read out |
-| `/map` | The regions, west to east, and every US city with a breach: its metro, its breach count and the colour its pin and bars share |
+| `/sheet?region=…` | One region's sheet (`US West`, …): the same rows for every breach in the region, metro by metro largest first, each in its metro's colour |
+| `/sheet` | The whole country's sheet: every region's rows west to east, each in its region's colour |
+| `/breaches` | Individual US breaches, newest first or by any amount, for the assistant to read out |
+| `/query` | Counts, totals, averages, medians and extremes over the breaches the filters keep, whole or grouped and ranked |
+| `/match` | Every breach the filters keep, by the label its sheet row carries, so the app can act on those rows |
+| `/fundamentals?ticker=…` | One company's assets, net income and share price year by year (or `company=` part of its name) |
+| `/map` | The regions, west to east, and every US city with a breach: its metro, its breach count, how many stand on its sheet (`charted`, every one since cleaning keeps only complete breaches), and the colour its pin and bars share |
 
-A sheet takes only its metro, since every bar is measured against the whole
-country. `/breaches` takes filters: `since`, `until`, `industry`, `attack`,
-`information`, `accessed`, `relationship`, `region`, `market`, `state` and
-`sec`. Most take several names separated by commas; repeat `industry` instead,
-since one industry's name holds commas.
+A sheet takes only its metro or its region, since every bar is measured
+against the whole country. `/breaches`, `/query` and `/match` take the same filters: `since`,
+`until`, `industry`, `attack`, `information`, `accessed`, `relationship`,
+`region`, `market`, `state`, `sec`, `metro`, `city`, `company`, `ticker`, and
+`<amount>_min` / `<amount>_max` for every amount in `metrics.AMOUNTS` (the six
+figures in dollars, `records_lost` and `cost`). Most names can be several,
+separated by commas; repeat `industry`, `metro` and `city` instead, since their
+names hold commas. A breach that does not report an amount fails a bound on it.
+
+`/query` adds `group` (industry, attack, state, metro, year, company and more;
+a breach counts in every group its list names), `measure` (`count`,
+`companies`, `sum`, `average`, `median`, `min`, `max`), `of` (the amount
+measured), `order` and `limit`. `/breaches` adds `sort` (`newest`, `oldest` or
+an amount) and `order`.
 
 Metro colours are worked out by the API from the `metro` column: each region's
 ten largest metros get one of `metrics.METRO_COLORS` and the rest are black;
@@ -253,7 +270,7 @@ Needs the sign-in above.
 
 - **Unit** — cleaning rules, the sheet CSV format, the one list, the generated files.
 - **Integration** — every endpoint through FastAPI's test client, against `cyber_test`.
-- **Regression** — `tests/test_regression.py` sends 141 requests and fails on
+- **Regression** — `tests/test_regression.py` sends 81 requests and fails on
   any answer that differs by a byte from a recording, one test per request.
   Record before a change with `python regression.py`; the recording holds real
   data, so it lives in the git-ignored `regression/`, and the tests skip

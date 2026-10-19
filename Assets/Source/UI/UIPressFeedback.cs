@@ -12,6 +12,10 @@ public class UIPressFeedback : MonoBehaviour
     private const float HapticAmplitude = 0.35f;
     private const float HapticSeconds = 0.04f;
 
+    // Two fingertips landing together, or a quick second poke, click once.
+    private const float MinGapSeconds = 0.06f;
+    private float _lastEmit = float.NegativeInfinity;
+
     private static UIPressFeedback _instance;
 
     private AudioSource _source;
@@ -23,13 +27,9 @@ public class UIPressFeedback : MonoBehaviour
         if (_instance != null) _instance.Emit();
     }
 
-    private static void Ensure()
-    {
-        if (_instance != null) return;
-        GameObject go = new GameObject("UIPressFeedback");
-        DontDestroyOnLoad(go);
-        _instance = go.AddComponent<UIPressFeedback>();
-    }
+    public static void Prepare() => Ensure();
+
+    private static void Ensure() => Spawn.Once(ref _instance);
 
     private void Awake()
     {
@@ -58,6 +58,10 @@ public class UIPressFeedback : MonoBehaviour
 
     private void Emit()
     {
+        float now = Time.unscaledTime;
+        if (now - _lastEmit < MinGapSeconds) return;
+        _lastEmit = now;
+
         if (_source != null && _click != null) _source.PlayOneShot(_click);
         OVRInput.SetControllerVibration(HapticFrequency, HapticAmplitude, OVRInput.Controller.Active);
         StopAllCoroutines();

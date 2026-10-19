@@ -10,8 +10,17 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
 
     private static string lastPagedLabel;
 
+    // The source split into lines, kept while the same text is paged through
+    // so each page does not split the whole file again.
+    private static string splitText;
+    private static string[] splitLines;
+
     [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => lastPagedLabel = null;
+    private static void ResetStatics() {
+        lastPagedLabel = null;
+        splitText = null;
+        splitLines = null;
+    }
 
     public static void Forget() => lastPagedLabel = null;
 
@@ -24,11 +33,11 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "DescribeDataset",
-        Description = "Read the open dataset's raw source text, as it was scanned. " +
-                      "Use it for what the grid does not carry: header lines, units, footnotes, and columns that " +
-                      "could not be read as numbers. For the numbers themselves use GetNumbers, which is far cheaper. " +
-                      "Returns 200 lines at a time, so read the start first and page on with 'fromLine' only if you " +
-                      "still need to; 'totalLines' says how many there are.",
+        Description = "Read the open sheet's source as the database sent it: '#' lines giving each row's metro, " +
+                      "city and colour, then a header and one line per breach, its six figures followed by their " +
+                      "six heights (each figure's place among every US breach, 0 to 1). Use it for a row's city, " +
+                      "which no other sheet tool reports; for figures use GetNumbers, which is far cheaper. " +
+                      "Returns 200 lines at a time; page on with 'fromLine', and 'totalLines' says how many there are.",
         Parameters = ParametersFor(typeof(Args))
     };
 
@@ -42,12 +51,16 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
             return;
         }
 
-        string[] lines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        if (!ReferenceEquals(raw, splitText)) {
+            splitLines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            splitText = raw;
+        }
+        string[] lines = splitLines;
         int total = lines.Length;
 
         int from = Math.Max(1, args.fromLine ?? 1);
 
-        string current = ActiveDatasetLabel();
+        string current = Scene.DatasetLabel;
         if (from > 1 && lastPagedLabel != null && !string.Equals(lastPagedLabel, current)) {
             Refuse(result, "continuation from a different dataset",
                 $"Your last read came from {lastPagedLabel}, but {current} is open now. " +

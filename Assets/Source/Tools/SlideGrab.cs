@@ -20,6 +20,10 @@ public static class SlideGrab
         slide.InjectOptionalConstraints(limits);
 
         Grabbable grabbable = go.AddComponent<Grabbable>();
+        // Its target is otherwise set only when it starts, which a grabbable
+        // made switched off (a Sort handle put away) has not done: a
+        // transformer readied before then finds no transform and throws.
+        grabbable.InjectOptionalTargetTransform(go.transform);
         grabbable.InjectOptionalRigidbody(body);
         grabbable.InjectOptionalThrowWhenUnselected(false);
         grabbable.InjectOptionalKinematicWhileSelected(true);

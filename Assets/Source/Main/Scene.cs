@@ -26,16 +26,17 @@ public static class Scene {
     public static string DatasetLabel {
         get {
             var d = Datasets;
-            if (d == null || d.ActiveIndex < 0 || d.ActiveIndex >= d.DatasetCount) return "dataset";
-            string label = d.Datasets[d.ActiveIndex].label;
-            return string.IsNullOrEmpty(label) ? "dataset" : label;
+            var active = d != null ? d.ActiveDataset : null;
+            return active != null ? active.Name : "dataset";
         }
     }
 
+    // The sheet on the table's data. With datasets managed, that is the open
+    // one or nothing: before the first sheet opens there is none, and the tools must not
+    // read or act on whichever dataset happened to be open last.
     public static DataSource Data {
         get {
-            var active = ManageDatasets.ActiveSource;
-            if (active != null) return active;
+            if (ManageDatasets.Instance != null) return ManageDatasets.ActiveSource;
             if (dataSource == null) {
                 var sheets = Sheets;
                 dataSource = sheets != null && sheets.dataSource != null

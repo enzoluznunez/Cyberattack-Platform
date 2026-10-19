@@ -28,13 +28,11 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "PlacePanel",
-        Description = "Place the tool panel in the room for the user, as if they grabbed its edge and moved it. " +
-                      "'move' slides it, 'rotate' turns it about the upright axis, and 'face' squares it to the " +
-                      "user without moving it. Only do this when the user asks for it. " +
-                      "It stays upright and within arm's reach, and must be open before it can be placed. " +
-                      "Check the latest '[tool]' or '[state]' message for the panel's state before calling: " +
-                      "if the user closed the panel, do not place it blind; reopen it with SetPanel first, or ask. " +
-                      "Placement is not an edit on the sheet's undo timeline, so Undo will not reverse it.",
+        Description = "Place the tool panel in the room for the user, as if they grabbed its edge and moved it; " +
+                      "the sheet and map stay where they are. 'move' slides it, 'rotate' turns it about the upright " +
+                      "axis, and 'face' squares it to the user without moving it. Only do this when the user asks. " +
+                      "It stays upright and within arm's reach, and must be open: if the latest message says the " +
+                      "user closed it, reopen it with SetPanel first, or ask. Undo does not reverse placement.",
         Parameters = ParametersFor(typeof(Args))
     };
 
@@ -55,20 +53,13 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
             return;
         }
 
-        Transform pt = panel.transform;
-        var mgr = Scene.Sheets;
-        if (mgr != null) mgr.CompleteTransformMotion(pt);
-        Vector3 prePos = pt.position;
-        Quaternion preRot = pt.rotation;
-
-        switch (args.action.Trim().ToLowerInvariant()) {
+        // The panel goes straight to its new place, at every assistant
+        // speed: panels never slide into place.
+        switch (args.action) {
             case "move": Move(panel, args, result); break;
             case "rotate": Rotate(panel, args, result); break;
             case "face": Face(panel, result); break;
-            default: result["error"] = $"Unknown action '{args.action}'."; return;
         }
-
-        if (mgr != null) mgr.GlideTransformFrom(pt, prePos, preRot);
     }
 
     private static void Move(PanelUI panel, Args args, Dictionary<string, object> result) {
@@ -92,15 +83,15 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
         if (limited)
             result["note"] = "The panel was kept within the user's reach and moved less than asked.";
 
-        StateChannel.Record("Panel", $"moved the tool panel {actual:0.00}m {direction}");
+        StateChannel.Record($"moved the tool panel {actual:0.00}m {direction}");
     }
 
     private static void Rotate(PanelUI panel, Args args, Dictionary<string, object> result) {
         string direction = args.direction?.Trim().ToLowerInvariant();
-        float sign;
-        if (direction == "right") sign = 1f;
-        else if (direction == "left") sign = -1f;
-        else { result["error"] = $"Unknown direction '{args.direction}'. Use left or right."; return; }
+        if (!TryTurnSign(direction, out float sign)) {
+            result["error"] = $"Unknown direction '{args.direction}'. Use left or right.";
+            return;
+        }
 
         float degrees = Mathf.Clamp(args.degrees ?? DefaultDegrees, MinDegrees, MaxDegrees);
 
@@ -109,7 +100,7 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
 
         result["rotated"] = direction;
         result["degrees"] = Math.Round(degrees, 1);
-        StateChannel.Record("Panel", $"turned the tool panel {degrees:0}° {direction}");
+        StateChannel.Record($"turned the tool panel {degrees:0}° {direction}");
     }
 
     private static void Face(PanelUI panel, Dictionary<string, object> result) {
@@ -122,7 +113,7 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
         }
 
         result["faced"] = true;
-        StateChannel.Record("Panel", "turned the tool panel to face the user");
+        StateChannel.Record("turned the tool panel to face the user");
     }
 
 }

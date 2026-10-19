@@ -30,7 +30,13 @@ public abstract class AgenticTool : Function {
 
     protected static void NoteRefreshed(bool columns) => refreshedAxes |= columns ? 2 : 1;
 
-    protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
+    protected override Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) =>
+        Perform(args, result => Run(args ?? new Dictionary<string, object>(), result));
+
+    // Runs 'act' on the main thread as the assistant's call, and reads back
+    // what it did.
+    protected async Task<Dictionary<string, object>> Perform(Dictionary<string, object> args,
+        Action<Dictionary<string, object>> act) {
         var result = new Dictionary<string, object>();
         var total = System.Diagnostics.Stopwatch.StartNew();
         long runMs = 0;
@@ -45,7 +51,7 @@ public abstract class AgenticTool : Function {
                 Scene.Sort?.CompleteOrderSequence();
                 editsBefore = ManageDatasets.ActiveEdits != null ? ManageDatasets.ActiveEdits.Count : 0;
                 refreshedAxes = 0;
-                Run(args ?? new Dictionary<string, object>(), result);
+                act(result);
             }
             catch (Exception e) {
                 result.Clear();
@@ -93,11 +99,13 @@ public abstract class AgenticTool : Function {
 
     protected static Schema ParametersFor(System.Type args) => ToolArguments.Schema(args);
 
+    // A tool's schema with the names a 'where' takes listed, from the contract.
+    protected static Schema WithNames(Schema schema) {
+        if (schema.Properties.TryGetValue("where", out Schema where)) BreachFilters.Named(where);
+        return schema;
+    }
+
     // There is one sheet, so there is nothing to pick: the bounds are its bounds.
-    // The one answer to "which sheet do tools act on". Both helpers below go
-    // through it, so a span and a piece cannot come back disagreeing. IsBuilt is
-    // _sheets.Count > 0 and Sheet is _sheets[0] or null, so this null test is
-    // the same question both of them used to ask separately.
     private static CreateSheet ResolvedSheet() {
         ManageSheets mgr = Scene.Sheets;
         return mgr != null ? mgr.Sheet : null;
@@ -126,7 +134,7 @@ public abstract class AgenticTool : Function {
         string what = DataSource.GroupNoun(data, columns);
         if (string.IsNullOrEmpty(token)) { result["error"] = $"Provide a {what} number or name."; return false; }
 
-        int size = data != null ? data.GroupSize(columns) : 1;
+        int size = GroupSize(columns);
         int blockMin = min / size;
         int blockMax = max / size;
         int span = blockMax - blockMin + 1;
@@ -134,12 +142,11 @@ public abstract class AgenticTool : Function {
         if (int.TryParse(token, out int number)) {
             if (StalePositions.IsDirty(columns)) {
                 StalePositions.Clear(columns);
-                var live = Scene.Data;
                 var current = new List<string>();
-                if (live != null) {
-                    int liveBlocks = live.GroupCount(columns);
+                if (data != null) {
+                    int liveBlocks = data.GroupCount(columns);
                     for (int b = blockMin; b <= blockMax && b < liveBlocks; b++)
-                        current.Add(DataSource.GroupLabelAt(live, columns, b));
+                        current.Add(DataSource.GroupLabelAt(data, columns, b));
                 }
                 result["error"] = $"The {what} positions have shifted: the user reordered the {what}s since you " +
                     $"last read them. They now run: {string.Join(", ", current)}. Name the {what} you mean, or " +
@@ -156,22 +163,18 @@ public abstract class AgenticTool : Function {
 
         if (data == null) { result["error"] = "No dataset is open."; return false; }
 
+        // An exact name first, then, for three letters or more, the start of one.
         int found = -1, hits = 0;
-        for (int b = blockMin; b <= blockMax; b++) {
-            string title = data.GroupTitleAt(columns, b) ?? "";
-            if (!string.Equals(title, token, StringComparison.OrdinalIgnoreCase)) continue;
-            found = b;
-            hits++;
-        }
-
-        if (hits == 0 && token.Length >= 3) {
+        void Match(Func<string, bool> matches) {
             for (int b = blockMin; b <= blockMax; b++) {
-                string title = data.GroupTitleAt(columns, b) ?? "";
-                if (!title.StartsWith(token, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!matches(data.GroupTitleAt(columns, b) ?? "")) continue;
                 found = b;
                 hits++;
             }
         }
+        Match(title => string.Equals(title, token, StringComparison.OrdinalIgnoreCase));
+        if (hits == 0 && token.Length >= 3)
+            Match(title => title.StartsWith(token, StringComparison.OrdinalIgnoreCase));
 
         if (hits == 1) { block = found; return true; }
         if (hits > 1) {
@@ -188,44 +191,22 @@ public abstract class AgenticTool : Function {
         return false;
     }
 
+    // How many lines one block holds: a metric's on a grouped axis, else one.
+    private static int GroupSize(bool columns) {
+        var data = Scene.Data;
+        return data != null ? data.GroupSize(columns) : 1;
+    }
+
     // The line span one block covers, clipped to the piece.
     protected static void BlockSpan(bool columns, int block, int min, int max, out int lo, out int hi) {
-        var data = Scene.Data;
-        int size = data != null ? data.GroupSize(columns) : 1;
+        int size = GroupSize(columns);
         lo = Math.Max(block * size, min);
         hi = Math.Min(block * size + size - 1, max);
     }
 
     protected static int BlockCountIn(bool columns, int min, int max) {
-        var data = Scene.Data;
-        int size = data != null ? data.GroupSize(columns) : 1;
+        int size = GroupSize(columns);
         return (max / size) - (min / size) + 1;
-    }
-
-    // Which cell of a block a spoken series name picks out, such as a year on a
-    // paired axis. Returns false when the dataset has no series to choose from.
-    protected static bool TryResolveSeries(string token, bool columns, Dictionary<string, object> result,
-        out int series) {
-        series = -1;
-        var data = Scene.Data;
-        if (data == null || !data.IsGrouped(columns)) {
-            result["error"] = "This dataset has one cell per line, so there is no year to choose.";
-            return false;
-        }
-
-        IReadOnlyList<string> names = data.SeriesTitles;
-        token = token?.Trim();
-        if (string.IsNullOrEmpty(token)) { series = -1; return true; }
-
-        for (int i = 0; i < names.Count; i++)
-            if (string.Equals(names[i], token, StringComparison.OrdinalIgnoreCase)) { series = i; return true; }
-
-        for (int i = 0; i < names.Count; i++)
-            if (names[i] != null && names[i].EndsWith(token, StringComparison.OrdinalIgnoreCase)) { series = i; return true; }
-
-        result["error"] = $"'{token}' is not one of this sheet's columns; it has {string.Join(" and ", names)}.";
-        result["series"] = new List<object>(names);
-        return false;
     }
 
     protected static bool TryResolveLines(IReadOnlyList<string> tokens, bool columns, int min, int max,
@@ -315,7 +296,7 @@ public abstract class AgenticTool : Function {
         UnityEngine.Transform cam = CameraRig.MainTransform;
         if (cam == null) return false;
 
-        UnityEngine.Vector3 forward = CameraRig.Flatten(cam.forward, UnityEngine.Vector3.forward);
+        UnityEngine.Vector3 forward = CameraRig.FlatForward;
         UnityEngine.Vector3 right = UnityEngine.Vector3.Cross(UnityEngine.Vector3.up, forward).normalized;
 
         switch (direction) {
@@ -329,6 +310,12 @@ public abstract class AgenticTool : Function {
             case "back-right": world = (-forward + right).normalized; return true;
         }
         return false;
+    }
+
+    // +1 for a turn to the right (clockwise seen from above), -1 to the left.
+    protected static bool TryTurnSign(string direction, out float sign) {
+        sign = direction == "right" ? 1f : direction == "left" ? -1f : 0f;
+        return sign != 0f;
     }
 
     protected static bool TryGet(Dictionary<string, object> args, string key, out object value) {
@@ -348,20 +335,6 @@ public abstract class AgenticTool : Function {
         return (decimal)Math.Round(v, 4);
     }
 
-    protected static bool TryParseTool(string s, out ToolType tool) {
-        tool = ToolType.None;
-        if (string.IsNullOrEmpty(s)) return false;
-        switch (s.Trim().ToLowerInvariant()) {
-            case "none": tool = ToolType.None; return true;
-            case "filter": tool = ToolType.Filter; return true;
-            case "move": case "grab": tool = ToolType.Move; return true;
-            case "rotate": tool = ToolType.Rotate; return true;
-            case "scale": tool = ToolType.Scale; return true;
-            case "sort": tool = ToolType.Sort; return true;
-            case "profile": tool = ToolType.Profile; return true;
-        }
-        return false;
-    }
 
     protected readonly struct PiecePose {
         public readonly UnityEngine.Vector3 pos;
@@ -392,13 +365,9 @@ public abstract class AgenticTool : Function {
         Dictionary<string, object> result, out bool columns) {
         columns = false;
 
-        if (!string.IsNullOrEmpty(axisArg)) {
-            string a = axisArg.Trim().ToLowerInvariant();
-            if (a != "columns" && a != "rows") {
-                result["error"] = $"'axis' must be 'columns' or 'rows', not '{axisArg}'.";
-                return false;
-            }
-            columns = a == "columns";
+        // Bound to 'columns' or 'rows' already (ToolArguments).
+        if (axisArg != null) {
+            columns = axisArg == "columns";
             result["axisFrom"] = "given";
             return true;
         }
@@ -411,6 +380,15 @@ public abstract class AgenticTool : Function {
         NeedChoice(result, "axis", new List<string> { "columns", "rows" },
             $"The {toolName} tool works on columns or rows and the name you gave does not say which. Ask the user which, then call this again with 'axis'.");
         return false;
+    }
+
+    // 'row' or 'rows', 'column' or 'columns', in any case.
+    protected static bool TryParseAxis(string axis, out bool columns) {
+        switch (axis?.Trim().ToLowerInvariant()) {
+            case "column": case "columns": columns = true; return true;
+            case "row": case "rows": columns = false; return true;
+            default: columns = false; return false;
+        }
     }
 
     protected static void Refuse(Dictionary<string, object> result, string unmet, string message) {
@@ -455,19 +433,16 @@ public abstract class AgenticTool : Function {
         return true;
     }
 
+    // EnsureToolSelected, for a tool the call then works through itself.
+    protected static bool EnsureToolSelected<T>(ToolType kind, T tool, Dictionary<string, object> result) where T : Tool {
+        if (!EnsureToolSelected(kind, result)) return false;
+        if (tool == null) { result["error"] = $"{kind} tool not found in scene."; return false; }
+        return true;
+    }
+
     protected static bool TryCellValue(DataSource data, int visRow, int visCol, out double value) {
         value = 0d;
-        if (data == null) return false;
-
-        IReadOnlyList<int> rowOrder = data.RowOrder;
-        IReadOnlyList<int> colOrder = data.ColumnOrder;
-        int dataRow = visRow >= 0 && visRow < rowOrder.Count ? rowOrder[visRow] : -1;
-        int dataCol = visCol >= 0 && visCol < colOrder.Count ? colOrder[visCol] : -1;
-
-        if (dataRow < 0 || dataCol < 0 || !data.HasValue(dataRow, dataCol)) return false;
-
-        value = data.GetValue(dataRow, dataCol);
-        return true;
+        return data != null && data.TryValueAt(visRow, visCol, out value);
     }
 
     protected static bool TryParseMeasure(string raw, string owner,
@@ -478,7 +453,7 @@ public abstract class AgenticTool : Function {
         return false;
     }
 
-    private struct MeasureAcc {
+    protected struct MeasureAcc {
         private double sum, best, worst;
         private int n;
 
@@ -511,27 +486,44 @@ public abstract class AgenticTool : Function {
         return acc.TryScore(measure, out score);
     }
 
-    protected static bool TryLineMeasure(DataSource data, bool isColumn, int line,
-        IReadOnlyList<int> cross, string measure, out double score) {
-
-        var acc = new MeasureAcc();
-        for (int k = 0; k < cross.Count; k++) {
-            int j = cross[k];
-            if (TryCellValue(data, isColumn ? j : line, isColumn ? line : j, out double v)) acc.Add(v);
-        }
-        return acc.TryScore(measure, out score);
+    // A map tool's change is only seen with the map panel up, so it opens it.
+    protected static void OpenMap(MapCarousel maps, Dictionary<string, object> result) {
+        if (maps.IsOpen) return;
+        maps.SetOpen(true);
+        result["opened"] = "the map panel was closed, so it was opened";
     }
-
-    protected static string ActiveDatasetLabel() => Scene.DatasetLabel;
 }
 
 public abstract class AgenticTool<TArgs> : AgenticTool where TArgs : class, new() {
 
     protected abstract void Run(TArgs args, Dictionary<string, object> result);
 
-    protected sealed override void Run(Dictionary<string, object> args, Dictionary<string, object> result) {
+    // What the arguments name that has to be fetched before the call can run,
+    // fetched off the main thread: a 'where' looked up in the database. Null
+    // to go on, or why the call cannot.
+    protected virtual Task<string> Prepare(TArgs args) => Task.FromResult<string>(null);
+
+    // Binds the arguments and prepares them here, off the main thread, and
+    // only then hops to it to run.
+    protected sealed override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
         var bound = ToolArguments.Bind(typeof(TArgs), args, out string error) as TArgs;
-        if (bound == null) { result["error"] = error; return; }
-        Run(bound, result);
+        if (bound != null) error = await Prepare(bound).ConfigureAwait(false);
+        return await Perform(args, result => {
+            if (error != null) result["error"] = error;
+            else Run(bound, result);
+        }).ConfigureAwait(false);
+    }
+
+    // Never reached: Execute binds the arguments and runs the typed Run.
+    protected sealed override void Run(Dictionary<string, object> args, Dictionary<string, object> result) =>
+        throw new NotSupportedException();
+
+    // Looks a 'where' up, for a tool that takes one; 'store' keeps the match
+    // on the arguments for Run.
+    protected static async Task<string> LookUp(BreachFilters where, Action<BreachMatch> store) {
+        if (where == null) return null;
+        (BreachMatch match, string error) = await BreachMatch.Look(where).ConfigureAwait(false);
+        if (match != null) store(match);
+        return error;
     }
 }

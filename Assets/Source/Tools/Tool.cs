@@ -5,7 +5,6 @@ public abstract class Tool : MonoBehaviour
     public ManageTools toolManager;
     public ManageSheets sheetManager;
     public ReadSheets readSheets;
-    public ToolPanelUI toolPanelUI;
 
     private bool _active;
 
@@ -13,7 +12,7 @@ public abstract class Tool : MonoBehaviour
 
     protected abstract ToolType Kind { get; }
 
-    protected void Report(string what) => StateChannel.Record(Kind.ToString(), what);
+    protected void Report(string what) => StateChannel.Record(what);
 
     protected virtual bool UsesSheetEvents => false;
 
@@ -34,11 +33,14 @@ public abstract class Tool : MonoBehaviour
 
     // Lights the line under the finger: one row, or on a grouped column axis the
     // whole metric the column belongs to.
-    protected void TintLine(ReadSheets.Reading reading, bool columns, float swell = Style.PreviewSwell)
+    protected void TintLine(ReadSheets.Reading reading, bool columns, float swell = Style.PreviewSwell) =>
+        TintLine(reading.sheet, columns, columns ? reading.visCol : reading.visRow, swell);
+
+    protected void TintLine(CreateSheet sheet, bool columns, int line, float swell = Style.PreviewSwell)
     {
-        int lo = reading.visRow, hi = reading.visRow;
-        if (columns) sheetManager.ColumnStripSpan(reading.sheet, reading.visCol, out lo, out hi);
-        sheetManager.SetLineTint(reading.sheet, columns ? 1 : 2, lo, hi, swell);
+        int lo = line, hi = line;
+        if (columns) sheetManager.ColumnStripSpan(line, out lo, out hi);
+        sheetManager.SetLineTint(sheet, columns, lo, hi, swell);
     }
 
     private bool _listening;
@@ -69,8 +71,6 @@ public abstract class Tool : MonoBehaviour
 
     protected virtual void OnToolDestroy() { }
 
-    protected virtual void BuildPanelContent() { }
-
     protected virtual void OnActiveChanged(bool active) { }
 
     protected virtual void ClearToolState() { }
@@ -79,14 +79,12 @@ public abstract class Tool : MonoBehaviour
 
     protected virtual void Start()
     {
-        if (toolManager == null) toolManager = FindAnyObjectByType<ManageTools>();
-        if (sheetManager == null) sheetManager = FindAnyObjectByType<ManageSheets>();
+        if (toolManager == null) toolManager = Scene.Tools;
+        if (sheetManager == null) sheetManager = Scene.Sheets;
         if (readSheets == null && sheetManager != null) readSheets = sheetManager.GetComponent<ReadSheets>();
         if (readSheets == null) readSheets = FindAnyObjectByType<ReadSheets>();
-        if (toolPanelUI == null) toolPanelUI = FindAnyObjectByType<ToolPanelUI>();
 
         OnToolStart();
-        BuildPanelContent();
 
         if (toolManager != null)
         {

@@ -1,257 +1,177 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Chooses what stands on the sheet, on either axis: which companies and which
-// metrics. A metric is one column group, so hiding one takes both of its years
-// off together, and a company is one row. The arrangement underneath is
-// untouched either way, so showing something again puts it back where the sort
-// left it.
+// Chooses what stands on the sheet, on either axis: which breaches and which
+// figures. A poke takes a line off the sheet and a poke where it stood brings
+// it back. Nothing moves when a line goes: every other line keeps its place,
+// and the line's place, its bars and its title with it, is simply empty until
+// it is poked again. Every breach on a sheet reports every figure, so an empty
+// place can only be a line filtered away, never one with nothing to show.
 //
-// The panel shows one axis at a time. Neither is open to begin with, which is
-// not the same as nothing being filtered: the filter stands whether or not the
-// list that sets it is on screen.
+// Whether a poke means a row or a column is told the way the Sort tool tells
+// it, by where along the bars' height the finger is: in the lower band it is
+// the row, in the upper band the column, and past either end of a line, at
+// any height, that line. Each line's volume is measured from its place on the
+// sheet, not from its bars, so an empty place answers as a full one does.
 public class FilterTool : Tool
 {
     protected override ToolType Kind => ToolType.Filter;
 
-    // A fingertip on a bar takes that bar's line off the sheet. Which line it is
-    // comes from the axis the panel has open, because one poke gives a point and
-    // not a direction: with the metrics open a poke takes the metric, with the
-    // companies open it takes the company.
-    protected override bool UsesSheetEvents => true;
+    // The Sort tool's bands, as shares of the bars' full height
+    // (SortLineProxy): rows below, columns above, a gap between.
+    private const float HalfBand = SortLineProxy.BandHeight * 0.5f;
+    private const float RowBandLow = SortLineProxy.RowBand - HalfBand, RowBandHigh = SortLineProxy.RowBand + HalfBand;
+    private const float ColumnBandLow = SortLineProxy.ColumnBand - HalfBand, ColumnBandHigh = SortLineProxy.ColumnBand + HalfBand;
 
-    public enum Axis { None, Company, Metric }
+    // A poke is a fingertip coming to rest on a line inside the sheet's
+    // volume: the line it has stayed on for this long is taken or brought
+    // back, then nothing more until the finger has left the volume. Passing
+    // through a band on the way to another, as a finger reaching a row from
+    // above passes the column band, is too quick to count.
+    private const float PokeDwell = 0.12f;
 
-    private Axis _open = Axis.None;
+    private struct Tip
+    {
+        public bool fired;
+        public bool rows;
+        public int slot;
+        public float since;
+    }
 
-    // One entry per metric: the data-space group it stands for, and the row that
-    // shows it. Kept together so the two can never fall out of step.
-    private readonly List<(int group, UIButton.Handle handle)> _metrics =
-        new List<(int, UIButton.Handle)>();
-
-    // The same for companies, by data-space row.
-    private readonly List<(int row, UIButton.Handle handle)> _companies =
-        new List<(int, UIButton.Handle)>();
-
-    private DataSource _watched;
-    private DataSource _builtFrom;
+    // The fingertips inside the sheet's volume, by index into Fingertips.All.
+    private readonly Dictionary<int, Tip> _inside = new Dictionary<int, Tip>();
 
     private static DataSource Data => Scene.Data;
-
-    protected override void OnToolStart()
-    {
-        if (ManageDatasets.Instance != null)
-            ManageDatasets.Instance.OnActiveDatasetChanged += OnDatasetChanged;
-    }
-
-    protected override void OnToolDestroy()
-    {
-        if (ManageDatasets.Instance != null)
-            ManageDatasets.Instance.OnActiveDatasetChanged -= OnDatasetChanged;
-        Watch(null);
-    }
-
-    protected override void BuildPanelContent() => Refresh();
-
-    protected override void OnActiveChanged(bool active)
-    {
-        if (active) Refresh();
-    }
 
     // Undo All resets every tool: the filter it clears is the whole of this
     // tool's state, so the sheet comes back whole.
     protected override void OnResetTool()
     {
         DataSource data = Data;
-        if (data == null) { Light(); return; }
+        if (data == null) return;
 
-        bool columns = data.ClearHiddenGroups();
-        bool rows = data.ClearHiddenRows();
+        bool columns = data.SetHiddenOn(false, null, out _);
+        bool rows = data.SetHiddenOn(true, null, out _);
 
-        string rowNouns = DataSource.Plural(DataSource.RowNoun(data));
-        string columnNouns = DataSource.Plural(DataSource.GroupNoun(data, true));
+        string rowNouns = DataSource.Plural(DataSource.FilterNoun(data, true));
+        string columnNouns = DataSource.Plural(DataSource.FilterNoun(data, false));
         if (columns && rows) Report($"put every one of the {rowNouns} and {columnNouns} back on the sheet");
         else if (columns) Report($"showed every one of the {columnNouns} again");
         else if (rows) Report($"showed every one of the {rowNouns} again");
-
-        Light();
     }
-
-    private void OnDatasetChanged(int index) => Refresh();
-
-    private void Watch(DataSource data)
-    {
-        if (_watched == data) return;
-
-        if (_watched != null)
-        {
-            _watched.OnDataLoaded -= Refresh;
-            _watched.OnOrderChanged -= Light;
-        }
-        _watched = data;
-        if (_watched != null)
-        {
-            _watched.OnDataLoaded += Refresh;
-            _watched.OnOrderChanged += Light;
-        }
-    }
-
-    // The rows follow the dataset; their squares follow the filter, which an undo
-    // or the assistant can change without going through this tool.
-    private void Refresh()
-    {
-        DataSource data = Data;
-        Watch(data);
-
-        // Two datasets can hold the same number of metrics under different names,
-        // so the lists are rebuilt for a new source even when the counts match.
-        // A build that produced nothing counts as no build at all: the panel was
-        // not ready, and a later Refresh has to try again rather than read the
-        // empty lists as up to date.
-        bool built = _axisRow != null;
-        if (built && data == _builtFrom && _openBuilt == _open) { Light(); return; }
-
-        _builtFrom = data;
-        _openBuilt = _open;
-        _metrics.Clear();
-        _companies.Clear();
-
-        if (toolPanelUI == null) { _axisRow = null; return; }
-
-        // The two axes read as one choice, so they sit side by side above
-        // whatever they open. Neither starts lit: the list is what a press is
-        // for, and an unopened list is not an unfiltered one.
-        _axisRow = toolPanelUI.AddToggleRow(Kind, AxisRowName,
-            (CompanyButton, "By Row", () => OnAxisClicked(Axis.Company)),
-            (MetricButton, "By Column", () => OnAxisClicked(Axis.Metric)));
-
-        BuildList(data);
-        LightAxis();
-        Light();
-
-        toolPanelUI.ContentChanged();
-    }
-
-    private void BuildList(DataSource data)
-    {
-        if (_open == Axis.None || data == null || !data.IsLoaded)
-        {
-            toolPanelUI.RemoveContent(Kind, ListName);
-            return;
-        }
-
-        ButtonList list = toolPanelUI.AddCheckList(Kind, ListHeight, ListName);
-        if (list == null) return;
-
-        if (_open == Axis.Metric)
-            foreach (int group in data.DataGroupsInOrder())
-                _metrics.Add((group, list.Add($"Metric_{group}",
-                    DataSource.GroupLabelOfData(data, group), () => OnLineClicked(false, group))));
-        else
-            foreach (int row in data.DataRowsInOrder())
-                _companies.Add((row, list.Add($"Company_{row}",
-                    DataSource.RowLabelOfData(data, row), () => OnLineClicked(true, row))));
-    }
-
-    // Pressing the open axis closes it again, which leaves the filter exactly as
-    // it was: the list is a way of setting the filter, not the filter itself.
-    private void OnAxisClicked(Axis axis)
-    {
-        _open = _open == axis ? Axis.None : axis;
-        ClearTint();
-        Refresh();
-        Report(_open == Axis.None
-            ? "closed the filter list"
-            : $"opened the list of {DataSource.Plural(_open == Axis.Company ? DataSource.RowNoun(Data) : DataSource.GroupNoun(Data, true))}");
-    }
-
-    // The line the finger is over, lit the way the Profile tool lights the line
-    // it is about to raise, so a poke says what it will take before it takes it.
-    protected override void OnSheetHover(ReadSheets.Reading reading)
-    {
-        if (!Active || sheetManager == null || _open == Axis.None || !reading.valid)
-        {
-            ClearTint();
-            return;
-        }
-
-        TintLine(reading, _open == Axis.Metric);
-    }
-
-    protected override void OnSheetCleared() => ClearTint();
 
     // Leaving the tool leaves no line lit behind it.
-    protected override void ClearToolState() => ClearTint();
-
-    protected override void OnSheetRelease(ReadSheets.Reading reading) => ClearTint();
-
-    protected override void OnSheetCommit(ReadSheets.Reading reading)
+    protected override void ClearToolState()
     {
         ClearTint();
-        if (!Active || !reading.valid) return;
+        _inside.Clear();
+    }
 
-        // Without an axis open a poke has no line to mean, so it says so once
-        // rather than guessing at the metric and taking the wrong thing off.
-        if (_open == Axis.None)
+    private void LateUpdate()
+    {
+        if (!Active) return;
+
+        DataSource data = Data;
+        CreateSheet sheet = sheetManager != null ? sheetManager.Sheet : null;
+        if (data == null || !data.IsLoaded || sheet == null || !sheet.Shown)
         {
-            Notices.Show(this, "Filter",
-                "Open By Row or By Column to choose what a poke takes off the sheet.");
+            ClearToolState();
             return;
         }
 
-        DataSource data = Data;
-        if (data == null || !data.IsLoaded) return;
+        IReadOnlyList<Fingertips.Source> tips = Fingertips.All;
+        bool lit = false;
+        float now = Time.unscaledTime;
+        for (int i = 0; i < tips.Count; i++)
+        {
+            bool inVolume = false, rows = false;
+            int slot = -1;
+            bool on = tips[i].Live && TryLineAt(sheet, tips[i].poke.Origin, out inVolume, out rows, out slot);
+            if (!inVolume) { _inside.Remove(i); continue; }
 
-        string refusal;
-        bool done = _open == Axis.Metric
-            ? Toggle(false, data.DataGroupOf(reading.dataCol), out refusal)
-            : Toggle(true, reading.dataRow, out refusal);
+            if (!_inside.TryGetValue(i, out Tip tip)) tip.slot = -1;
+            if (!on) { tip.slot = -1; _inside[i] = tip; continue; }
+            if (tip.slot != slot || tip.rows != rows) { tip.rows = rows; tip.slot = slot; tip.since = now; }
 
-        if (!done && refusal != null) Notices.Show(this, "Filter", refusal);
+            if (!tip.fired && now - tip.since >= PokeDwell)
+            {
+                tip.fired = true;
+                _inside[i] = tip;
+                Poke(data, sheet, rows, slot);
+                continue;
+            }
+            _inside[i] = tip;
+            if (tip.fired) continue;
+
+            // The line about to go is lit, the way the Profile tool lights the
+            // line it is about to raise; an empty place has nothing to light.
+            if (lit) continue;
+            int line = sheet.LineAtSlot(!rows, slot);
+            if (line < 0) continue;
+            TintLine(sheet, !rows, line);
+            lit = true;
+        }
+        if (!lit) ClearTint();
     }
 
-    private void LightAxis()
+    // The line a point is on, by its slot on the sheet, and whether it is a
+    // row; false off any line. 'inVolume' says whether the point is within
+    // the sheet's volume at all, gaps between the bands included.
+    private bool TryLineAt(CreateSheet sheet, Vector3 world, out bool inVolume, out bool rows, out int slot)
     {
-        if (_axisRow == null) return;
-        UIButton.SetSelected(_axisRow.At(0), _open == Axis.Company);
-        UIButton.SetSelected(_axisRow.At(1), _open == Axis.Metric);
+        inVolume = false;
+        rows = false;
+        slot = -1;
+        Vector3 p = sheet.transform.InverseTransformPoint(world);
+        float height = sheetManager.Height;
+        if (p.y < 0f || p.y > height) return false;
+
+        // Past either end of the rows (left or right) is a row; past either
+        // end of the columns (near or far) is a column; within the sheet, the
+        // band says which.
+        bool pastRowEnds = Outside(sheet, true, p.x, out bool inRowReach);
+        bool pastColumnEnds = Outside(sheet, false, p.z, out bool inColumnReach);
+        if (!inRowReach || !inColumnReach) return false;
+        inVolume = true;
+        if (pastRowEnds && pastColumnEnds) return false;
+
+        float share = p.y / Mathf.Max(height, 1e-6f);
+        if (pastRowEnds) rows = true;
+        else if (pastColumnEnds) rows = false;
+        else if (share >= RowBandLow && share <= RowBandHigh) rows = true;
+        else if (share >= ColumnBandLow && share <= ColumnBandHigh) rows = false;
+        else return false;
+
+        // A row is found along the sheet's depth, a column along its width.
+        bool columns = !rows;
+        float coord = columns ? p.x : p.z;
+        slot = Mathf.RoundToInt(sheet.SlotFraction(columns, coord));
+        return slot >= sheet.FirstSlot(columns) && slot <= sheet.LastSlot(columns);
     }
 
-    private const float ListHeight = 130f;
-    private const string AxisRowName = "AxisRow";
-    private const string ListName = "FilterList";
-    private const string CompanyButton = "ByCompany";
-    private const string MetricButton = "ByMetric";
-
-    private ButtonList _axisRow;
-    private Axis _openBuilt = Axis.None;
-
-    // A square is filled while the thing it names is on the sheet, so the list
-    // reads as what the sheet is showing rather than what has been taken off it.
-    private void Light()
+    // Whether a coordinate along one axis lies past the sheet's ends there,
+    // and whether it is still within reach of them: a line's handle past its
+    // end is one line's pitch long, as the Sort tool's grips are.
+    private static bool Outside(CreateSheet sheet, bool columns, float coord, out bool inReach)
     {
-        DataSource data = Data;
-
-        foreach ((int group, UIButton.Handle handle) in _metrics)
-            UIButton.SetChecked(handle, data == null || !data.IsDataGroupHidden(group));
-
-        foreach ((int row, UIButton.Handle handle) in _companies)
-            UIButton.SetChecked(handle, data == null || !data.IsRowHidden(row));
+        float half = sheet.PitchOn(columns) * 0.5f;
+        float low = sheet.SlotCoord(columns, sheet.FirstSlot(columns)) - half;
+        float high = sheet.SlotCoord(columns, sheet.LastSlot(columns)) + half;
+        float reach = sheet.BlockPitch(!columns);
+        bool outside = coord < low || coord > high;
+        inReach = coord >= low - reach && coord <= high + reach;
+        return outside;
     }
 
-    // A company is one row and a metric one column group; past that the two
-    // axes filter the same way, so everything below takes the axis as 'rows'.
-    private static List<int> InOrder(DataSource data, bool rows) =>
-        rows ? data.DataRowsInOrder() : data.DataGroupsInOrder();
-
-    private static List<int> HiddenOf(DataSource data, bool rows) =>
-        rows ? data.HiddenRowsInOrder() : data.HiddenGroupsInOrder();
-
-    private static bool IsHidden(DataSource data, bool rows, int id) =>
-        rows ? data.IsRowHidden(id) : data.IsDataGroupHidden(id);
-
-    private void OnLineClicked(bool rows, int id)
+    // Takes the line at a slot off the sheet, or brings it back.
+    private void Poke(DataSource data, CreateSheet sheet, bool rows, int slot)
     {
+        ClearTint();
+        List<int> order = data.FullOrder(!rows);
+        if (slot < 0 || slot >= order.Count) return;
+        int id = rows ? order[slot] : data.DataGroupOf(order[slot]);
+        // The poke landed, taken or refused, so it clicks as a button does.
+        UIPressFeedback.Play();
         if (!Toggle(rows, id, out string refusal) && refusal != null)
             Notices.Show(this, "Filter", refusal);
     }
@@ -263,8 +183,8 @@ public class FilterTool : Tool
         DataSource data = Data;
         if (data == null || !data.IsLoaded) { refusal = "No dataset is open."; return false; }
 
-        List<int> hidden = HiddenOf(data, rows);
-        if (IsHidden(data, rows, id)) hidden.Remove(id);
+        List<int> hidden = data.HiddenInOrder(rows);
+        if (data.IsHidden(rows, id)) hidden.Remove(id);
         else hidden.Add(id);
 
         return Apply(rows, hidden, out refusal);
@@ -279,16 +199,12 @@ public class FilterTool : Tool
         DataSource data = Data;
         if (data == null || !data.IsLoaded) { refusal = "No dataset is open."; return false; }
 
-        List<int> before = HiddenOf(data, rows);
-        bool changed = rows
-            ? data.SetHiddenRows(hidden, out refusal)
-            : data.SetHiddenGroups(hidden, out refusal);
-        if (!changed) return false;
+        List<int> before = data.HiddenInOrder(rows);
+        if (!data.SetHiddenOn(rows, hidden, out refusal)) return false;
 
-        List<int> after = HiddenOf(data, rows);
+        List<int> after = data.HiddenInOrder(rows);
         ManageDatasets.ActiveEdits.PushFilter(before, after, rows);
 
-        Light();
         Report(Describe(data, before, after, rows));
         return true;
     }
@@ -298,12 +214,14 @@ public class FilterTool : Tool
         var gone = new List<string>();
         var back = new List<string>();
 
+        var wasHidden = new HashSet<int>(before);
+        var isHidden = new HashSet<int>(after);
         for (int i = 0; i < after.Count; i++)
-            if (!before.Contains(after[i])) gone.Add(Label(data, after[i], rows));
+            if (!wasHidden.Contains(after[i])) gone.Add(DataSource.FilterLabel(data, rows, after[i]));
         for (int i = 0; i < before.Count; i++)
-            if (!after.Contains(before[i])) back.Add(Label(data, before[i], rows));
+            if (!isHidden.Contains(before[i])) back.Add(DataSource.FilterLabel(data, rows, before[i]));
 
-        string noun = rows ? DataSource.RowNoun(data) : DataSource.GroupNoun(data, true);
+        string noun = DataSource.FilterNoun(data, rows);
         var parts = new List<string>(2);
         if (gone.Count > 0) parts.Add($"took {Summarize(gone, noun)} off the sheet");
         if (back.Count > 0) parts.Add($"put {Summarize(back, noun)} back on the sheet");
@@ -316,9 +234,6 @@ public class FilterTool : Tool
         int total = rows ? data.RowCount : data.DataGroupCount;
         return $"{what}, leaving {showing} of {total} showing";
     }
-
-    private static string Label(DataSource data, int index, bool rows) =>
-        rows ? DataSource.RowLabelOfData(data, index) : DataSource.GroupLabelOfData(data, index);
 
     private static string Summarize(List<string> names, string noun)
     {
@@ -339,32 +254,38 @@ public class FilterTool : Tool
         if (data == null || !data.IsLoaded || string.IsNullOrWhiteSpace(query)) return false;
 
         string wanted = query.Trim();
-        List<int> all = InOrder(data, rows);
+        List<int> all = data.FilterLinesInOrder(rows);
 
         for (int i = 0; i < all.Count; i++)
-            if (string.Equals(Label(data, all[i], rows), wanted, System.StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(DataSource.FilterLabel(data, rows, all[i]), wanted, System.StringComparison.OrdinalIgnoreCase))
             {
                 id = all[i];
                 return true;
             }
 
+        // A bare number is a place on the sheet, never part of a name: '3'
+        // means the third one showing, not whichever title has a 3 in it.
+        if (int.TryParse(wanted, out int position))
+        {
+            if (position < 1) return false;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (data.IsHidden(rows, all[i])) continue;
+                if (--position == 0) { id = all[i]; return true; }
+            }
+            return false;
+        }
+
         int only = -1, hits = 0;
         for (int i = 0; i < all.Count; i++)
         {
-            if (Label(data, all[i], rows).IndexOf(wanted, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+            if (DataSource.FilterLabel(data, rows, all[i]).IndexOf(wanted, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
             only = all[i];
             hits++;
         }
-        if (hits == 1) { id = only; return true; }
-        if (hits > 1) return false;
-
-        if (!int.TryParse(wanted, out int position) || position < 1) return false;
-        for (int i = 0; i < all.Count; i++)
-        {
-            if (IsHidden(data, rows, all[i])) continue;
-            if (--position == 0) { id = all[i]; return true; }
-        }
-        return false;
+        if (hits != 1) return false;
+        id = only;
+        return true;
     }
 
     public List<string> Names(bool rows)
@@ -373,7 +294,7 @@ public class FilterTool : Tool
         var names = new List<string>();
         if (data == null || !data.IsLoaded) return names;
 
-        foreach (int id in InOrder(data, rows)) names.Add(Label(data, id, rows));
+        foreach (int id in data.FilterLinesInOrder(rows)) names.Add(DataSource.FilterLabel(data, rows, id));
         return names;
     }
 }

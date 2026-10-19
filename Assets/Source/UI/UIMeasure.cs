@@ -11,7 +11,7 @@ public static class UIMeasure
     private static bool TryRebuild(RectTransform layoutRoot, RectTransform target)
     {
         if (layoutRoot == null || target == null) return false;
-        if (!target.gameObject.activeInHierarchy) return false;
+        if (!UILayout.PartShown(target.gameObject)) return false;
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(layoutRoot);
         SettleText(target);
@@ -25,19 +25,6 @@ public static class UIMeasure
         for (int i = 0; i < Texts.Count; i++)
             if (Texts[i] != null) Texts[i].ForceMeshUpdate();
         Texts.Clear();
-    }
-
-    public static bool TryTextWidth(TMP_Text label, out float width)
-    {
-        width = 0f;
-        if (label == null || !label.gameObject.activeInHierarchy) return false;
-
-        string text = label.text;
-        if (string.IsNullOrEmpty(text)) return true;
-
-        label.ForceMeshUpdate();
-        width = label.GetPreferredValues(text, 0f, 0f).x;
-        return true;
     }
 
     public static bool TryPreferredHeight(RectTransform layoutRoot, RectTransform target, out float height)
@@ -64,7 +51,7 @@ public static class UIMeasure
 
         for (int i = 0; i < targets.Length; i++)
         {
-            if (targets[i] == null || !targets[i].gameObject.activeInHierarchy) continue;
+            if (targets[i] == null || !UILayout.PartShown(targets[i].gameObject)) continue;
 
             targets[i].GetWorldCorners(Corners);
             for (int c = 0; c < 4; c++)

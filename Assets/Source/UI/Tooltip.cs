@@ -15,16 +15,6 @@ public class Tooltip : MonoBehaviour
     private const float ContentTop = Style.SmallPadding + TitleHeight + Style.SmallPadding;
     private const float ContentBottom = Style.SmallPadding;
     private const float Borders = Style.SmallBorder * 2f;
-    private const string Dash = "-";
-
-    private static readonly string[] StatNames =
-        { "Average", "Count", "Minimum", "Maximum", "Sum" };
-
-    public struct SelectionStats
-    {
-        public string title;
-        public SheetStats.Summary stats;
-    }
 
     private Canvas _canvas;
     private RectTransform _canvasRect;
@@ -32,15 +22,6 @@ public class Tooltip : MonoBehaviour
     private GameObject _hintGroup;
     private TextMeshProUGUI _titleLabel;
     private TextMeshProUGUI _bodyLabel;
-
-    private GameObject _statsGroup;
-    private RectTransform _statsRect;
-    private TextMeshProUGUI _statsTitle;
-    private readonly TextMeshProUGUI[] _statCells = new TextMeshProUGUI[StatNames.Length];
-
-    private bool _statsPending;
-    private SelectionStats _pendingStats;
-    private Func<Vector3> _pendingAnchor;
 
     private void Awake()
     {
@@ -69,7 +50,9 @@ public class Tooltip : MonoBehaviour
 
         ApplyFonts();
 
-        if (_canvas != null) _canvas.gameObject.SetActive(false);
+        // Hidden, not switched off, as the panels are: showing a notice then
+        // rebuilds no text or layout.
+        if (_canvas != null) _canvas.enabled = false;
     }
 
     private void ApplyFonts()
@@ -78,9 +61,25 @@ public class Tooltip : MonoBehaviour
         Style.ApplyTitle(_titleLabel);
     }
 
-    private Prewarm.CanvasWarmState _prewarmState;
+    // Whether a notice is up, and whether Prewarm is drawing the hidden canvas,
+    // unseen, so its text and layout are built at startup.
+    private bool _shown;
+    private bool _warming;
+    private CanvasGroup _warmGroup;
 
-    public void PrewarmCanvas(bool on) => Prewarm.WarmCanvas(ref _prewarmState, _canvas, on);
+    public void PrewarmCanvas(bool on)
+    {
+        if (_canvas == null || on == _warming) return;
+        _warming = on;
+        if (_warmGroup == null) _warmGroup = UILayout.Ensure<CanvasGroup>(_canvas.gameObject);
+        _warmGroup.alpha = on && !_shown ? 0f : 1f;
+        ApplyShown();
+    }
+
+    private void ApplyShown()
+    {
+        if (_canvas != null) _canvas.enabled = _shown || _warming;
+    }
 
     private static void EnableWrap(TextMeshProUGUI label)
     {
@@ -93,7 +92,6 @@ public class Tooltip : MonoBehaviour
     {
         StopSettle();
 
-        if (_statsGroup != null) _statsGroup.SetActive(false);
         if (_hintGroup != null) _hintGroup.SetActive(true);
 
         if (_titleLabel != null) _titleLabel.text = title;
@@ -108,14 +106,16 @@ public class Tooltip : MonoBehaviour
         SetPanelHeight(HeightFor(body));
 
         if (!isActiveAndEnabled) return;
-        _settle = StartCoroutine(SettleNoticeHeight(body));
+        _settle = StartCoroutine(SettleHeight(_hintGroup, () => HeightFor(body)));
     }
 
-    private IEnumerator SettleNoticeHeight(string body)
+    // Re-measures the panel over the next few frames, while text and layout
+    // settle, for as long as 'group' is the one showing.
+    private IEnumerator SettleHeight(GameObject group, Func<float> height)
     {
         yield return UILayout.Converge(
-            () => _hintGroup != null && _hintGroup.activeInHierarchy,
-            () => SetPanelHeight(HeightFor(body)),
+            () => _shown && group != null && group.activeInHierarchy,
+            () => SetPanelHeight(height()),
             () => _canvasRect != null ? _canvasRect.sizeDelta.y : -1f);
 
         _settle = null;
@@ -137,149 +137,11 @@ public class Tooltip : MonoBehaviour
         return cam.position + CameraRig.FlatForward * NoticeDistanceFromCamera;
     }
 
-    public void ShowStats(Func<Vector3> anchor, SelectionStats selection)
-    {
-        if (anchor == null) return;
-
-        StopSettle();
-        EnsureStatsGroup();
-        if (_statsGroup == null) return;
-
-        if (_hintGroup != null) _hintGroup.SetActive(false);
-        _statsGroup.SetActive(true);
-
-        if (_statsTitle != null)
-            _statsTitle.text = string.IsNullOrEmpty(selection.title) ? Dash : selection.title;
-
-        FillStats(_statCells, selection.stats);
-
-        _statsPending = true;
-        _pendingStats = selection;
-        _pendingAnchor = anchor;
-
-        Present(anchor());
-        SetPanelHeight(StatsHeight());
-
-        if (!isActiveAndEnabled) return;
-        _settle = StartCoroutine(SettleStatsHeight());
-    }
-
-    private IEnumerator SettleStatsHeight()
-    {
-        yield return UILayout.Converge(
-            () => _statsGroup != null && _statsGroup.activeInHierarchy,
-            () => SetPanelHeight(StatsHeight()),
-            () => _canvasRect != null ? _canvasRect.sizeDelta.y : -1f);
-
-        _settle = null;
-    }
-
-    public void HideStats()
-    {
-        _statsPending = false;
-        if (_statsGroup == null || !_statsGroup.activeSelf) return;
-        Hide();
-    }
-
     public void DismissNotice()
     {
-        if (_statsPending && _pendingAnchor != null) ShowStats(_pendingAnchor, _pendingStats);
-        else Hide();
+        _shown = false;
+        ApplyShown();
     }
-
-    private static void FillStats(TextMeshProUGUI[] cells, SheetStats.Summary summary)
-    {
-        if (cells == null) return;
-
-        bool empty = !summary.valid;
-        SetCell(cells, 0, empty ? Dash : Formatter.Compact(summary.mean));
-        SetCell(cells, 1, empty ? Dash : Formatter.Count(summary.count));
-        SetCell(cells, 2, empty ? Dash : Formatter.Compact(summary.min));
-        SetCell(cells, 3, empty ? Dash : Formatter.Compact(summary.max));
-        SetCell(cells, 4, empty ? Dash : Formatter.Compact(summary.sum));
-    }
-
-    private static void SetCell(TextMeshProUGUI[] cells, int index, string text)
-    {
-        if (index < cells.Length && cells[index] != null) cells[index].text = text;
-    }
-
-    private float StatsHeight()
-    {
-        if (_statsRect == null) return Borders + ContentTop + ContentBottom;
-
-        if (!UIMeasure.TryPreferredHeight(_canvasRect, _statsRect, out float content))
-            content = _statsRect.rect.height;
-
-        return Borders + Style.SmallPadding + content + ContentBottom;
-    }
-
-    private void EnsureStatsGroup()
-    {
-        if (_statsGroup != null) return;
-
-        Transform parent = _hintGroup != null ? _hintGroup.transform.parent : _canvasRect;
-        if (parent == null) return;
-
-        _statsGroup = new GameObject("StatsGroup", typeof(RectTransform));
-        _statsGroup.transform.SetParent(parent, false);
-
-        _statsRect = _statsGroup.GetComponent<RectTransform>();
-        _statsRect.anchorMin = new Vector2(0f, 1f);
-        _statsRect.anchorMax = new Vector2(1f, 1f);
-        _statsRect.pivot = new Vector2(0.5f, 1f);
-        _statsRect.sizeDelta = new Vector2(-Style.MediumPadding * 2f, _statsRect.sizeDelta.y);
-        _statsRect.anchoredPosition = new Vector2(0f, -Style.SmallPadding);
-
-        VerticalLayoutGroup layout = _statsGroup.AddComponent<VerticalLayoutGroup>();
-        layout.spacing = Style.SmallPadding;
-        layout.childControlWidth = true;
-        layout.childControlHeight = true;
-        layout.childForceExpandWidth = true;
-        layout.childForceExpandHeight = false;
-
-        ContentSizeFitter fitter = _statsGroup.AddComponent<ContentSizeFitter>();
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        _statsTitle = AddLine(_statsGroup.transform, "Title", TextAlignmentOptions.Center, true);
-
-        for (int i = 0; i < StatNames.Length; i++)
-            _statCells[i] = AddRow(_statsGroup.transform, StatNames[i], StatNames[i]);
-
-        _statsGroup.SetActive(false);
-    }
-
-    private static TextMeshProUGUI AddRow(Transform parent, string name, string labelText)
-    {
-        GameObject row = new GameObject(name, typeof(RectTransform));
-        row.transform.SetParent(parent, false);
-
-        HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-        layout.spacing = Style.SmallPadding;
-        layout.childControlWidth = true;
-        layout.childControlHeight = true;
-        layout.childForceExpandWidth = false;
-        layout.childForceExpandHeight = false;
-
-        TextMeshProUGUI label = AddLine(row.transform, "Label", TextAlignmentOptions.Left, true);
-        label.text = labelText;
-        LayoutElement stretch = label.gameObject.AddComponent<LayoutElement>();
-        stretch.flexibleWidth = 1f;
-
-        return AddCell(row.transform, "Value", false);
-    }
-
-    private static TextMeshProUGUI AddCell(Transform parent, string name, bool bold)
-    {
-        TextMeshProUGUI label = AddLine(parent, name, TextAlignmentOptions.Right, bold);
-        LayoutElement width = label.gameObject.AddComponent<LayoutElement>();
-        width.preferredWidth = Style.ValueColumn;
-        width.flexibleWidth = 0f;
-        return label;
-    }
-
-    private static TextMeshProUGUI AddLine(Transform parent, string name, TextAlignmentOptions alignment, bool bold = false) =>
-        UILabel.Make(parent, name, Style.Black, alignment, TextOverflowModes.Ellipsis, bold: bold);
 
     private float HeightFor(string body)
     {
@@ -297,13 +159,8 @@ public class Tooltip : MonoBehaviour
             _canvasRect.sizeDelta = new Vector2(_canvasRect.sizeDelta.x, height);
     }
 
-    public bool IsVisible => _canvas != null && _canvas.gameObject.activeInHierarchy;
+    public bool IsVisible => _canvas != null && _shown;
 
-    public void Hide()
-    {
-        if (_canvas != null && _canvas.gameObject.activeSelf)
-            _canvas.gameObject.SetActive(false);
-    }
 
     private static void NormalizeTitleHeight(RectTransform rt)
     {
@@ -320,8 +177,7 @@ public class Tooltip : MonoBehaviour
 
     private void FaceViewer()
     {
-        if (CameraRig.TryFaceViewer(transform.position, 0f, true, CameraRig.DefaultMaxPitch,
-                out Quaternion rotation))
+        if (CameraRig.TryFaceViewer(transform.position, out Quaternion rotation))
             transform.rotation = rotation;
     }
 
@@ -333,8 +189,9 @@ public class Tooltip : MonoBehaviour
     private void Present(Vector3 worldHitPoint)
     {
         UpdatePosition(worldHitPoint);
-        if (_canvas != null && !_canvas.gameObject.activeSelf)
-            _canvas.gameObject.SetActive(true);
+        _shown = true;
+        if (_warmGroup != null) _warmGroup.alpha = 1f;
+        ApplyShown();
     }
 
     private T FindComponent<T>(string name) where T : Component

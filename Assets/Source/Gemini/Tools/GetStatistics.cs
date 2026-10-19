@@ -6,7 +6,7 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
     public class Args {
         [Doc("A row: its name, or its 1-based position. Returns stats for that whole row."), Optional]
         public string row;
-        [Doc("A metric: its name, or its 1-based position. Returns stats for it, one set per year when the sheet pairs its columns."), Optional]
+        [Doc("A column: its name, or its 1-based position. Returns stats for that whole column."), Optional]
         public string column;
         [Doc("'rows' or 'columns': returns stats for every line on that axis at once."), Optional]
         public string axis;
@@ -14,17 +14,10 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "GetStatistics",
-        Description = "Read a row's or column's statistics: count, minimum, maximum, average and sum, the same " +
-                      "numbers the user's Profile tooltip shows them, plus 'minAt' and 'maxAt', naming the line " +
-                      "on the other axis where each extreme sits. " +
-                      "Give 'row' or 'column' for one line, or " +
-                      "'axis' ('rows' or 'columns') for every line on that axis in one call. " +
-                      "When the sheet pairs its columns each year is summarised separately, and a row comes back " +
-                      "with one summary per metric, because metrics are in different units and do not combine. " +
-                      "Names and 1-based " +
-                      "positions run across the whole dataset in display order. Use this for totals, averages and " +
-                      "highest/lowest questions instead of reading raw cells and computing; GetNumbers stays the " +
-                      "source for individual cell values.",
+        Description = "Read a line's count, minimum, maximum, average and sum, with 'minAt' and 'maxAt' naming where each extreme sits. Give 'row' or " +
+                      "'column' for one line, or 'axis' ('rows' or 'columns') for every line showing on it. Lines " +
+                      "take a name or a 1-based position among those showing. Use this for totals, averages and " +
+                      "extremes down a column; a row mixes units, so its sum and average mean nothing.",
         Parameters = ParametersFor(typeof(Args))
     };
 
@@ -47,9 +40,7 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
         int colMax = mgr.ColCount - 1;
 
         if (hasAxis) {
-            string axis = args.axis.Trim().ToLowerInvariant();
-            bool columns = axis == "columns" || axis == "column";
-            if (!columns && axis != "rows" && axis != "row") {
+            if (!TryParseAxis(args.axis, out bool columns)) {
                 result["error"] = "'axis' must be 'rows' or 'columns'.";
                 return;
             }
@@ -105,8 +96,7 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
         var metrics = new List<object>();
         int blocks = data.GroupCount(true);
         for (int b = 0; b < blocks; b++) {
-            data.GroupSpan(true, b, out int lo, out int hi);
-            if (hi > colMax) hi = colMax;
+            BlockSpan(true, b, 0, colMax, out int lo, out int hi);
             var one = new Dictionary<string, object> { { "metric", DataSource.GroupLabelAt(data, true, b) } };
             Fill(one, SheetStats.Over(data, visRow, visRow, lo, hi), data, false, visRow);
             metrics.Add(one);

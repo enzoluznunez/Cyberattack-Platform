@@ -16,14 +16,12 @@ public class ManageTools : MonoBehaviour
 
     private void Start()
     {
-        if (sheetManager == null) sheetManager = FindAnyObjectByType<ManageSheets>();
+        if (sheetManager == null) sheetManager = Scene.Sheets;
     }
-
-    private static bool UserDriven => StateChannel.UserDriven;
 
     public void SelectTool(ToolType tool)
     {
-        if (UserDriven) AgentTurn.UserTookControl("tool changed");
+        if (StateChannel.UserDriven) AgentTurn.UserTookControl();
         ToolType next = SelectedTool == tool ? ToolType.None : tool;
         if (next == SelectedTool) return;
 
@@ -34,7 +32,7 @@ public class ManageTools : MonoBehaviour
 
     public void DeselectTool()
     {
-        if (UserDriven) AgentTurn.UserTookControl("tool deselected");
+        if (StateChannel.UserDriven) AgentTurn.UserTookControl();
         if (SelectedTool == ToolType.None) return;
 
         SelectedTool = ToolType.None;
@@ -70,6 +68,7 @@ public class ManageTools : MonoBehaviour
         if (sheetManager != null) sheetManager.SyncProjectionToStack();
     }
 
+    // Every tool but None records edits of the kind with its own name.
     private static bool TryEditKindOf(ToolType tool, out EditKind kind) =>
         Enum.TryParse(tool.ToString(), out kind);
 
@@ -85,7 +84,8 @@ public class ManageTools : MonoBehaviour
         if (outcome != ManageSheets.UndoResult.Unreachable)
         {
             ManageDatasets.ActiveEdits.Pop();
-            sheetManager.SyncProjectionToStack();
+            // A strip the assistant's undo puts back up rises at its speed.
+            sheetManager.SyncProjectionToStack(StateChannel.InAgentCall);
         }
         return outcome;
     }
@@ -118,12 +118,9 @@ public class ManageTools : MonoBehaviour
             case ManageSheets.UndoResult.Applied:
                 for (int i = 1; i < inGroup; i++)
                     if (UndoTop(out _) == ManageSheets.UndoResult.Unreachable) break;
-                if (UserDriven)
-                {
-                    if (sortRows) StalePositions.MarkDirty(false);
-                    if (sortColumns) StalePositions.MarkDirty(true);
-                }
-                StateChannel.Record("Undo", inGroup > 1
+                if (sortRows) StalePositions.MarkDirty(false);
+                if (sortColumns) StalePositions.MarkDirty(true);
+                StateChannel.Record(inGroup > 1
                     ? $"undid the {kindName} edit ({inGroup} steps, one action)"
                     : $"undid the {kindName} edit");
                 return true;
@@ -149,16 +146,18 @@ public class ManageTools : MonoBehaviour
         for (int i = 0; i < had && ManageDatasets.ActiveEdits.Peek() != null; i++)
             if (UndoTop(out _) == ManageSheets.UndoResult.Unreachable) break;
 
+        // Every tool resets; the edits all go at once below rather than a
+        // kind at a time.
         foreach (ToolType tool in System.Enum.GetValues(typeof(ToolType)))
-            if (tool != ToolType.None) ResetTool(tool);
+            if (tool != ToolType.None) OnToolReset?.Invoke(tool);
 
         ManageDatasets.ActiveEdits.Clear();
         if (sheetManager != null) sheetManager.SyncProjectionToStack();
-        if (hadSort && UserDriven)
+        if (hadSort)
         {
             StalePositions.MarkDirty(false);
             StalePositions.MarkDirty(true);
         }
-        if (had > 0) StateChannel.Record("Undo", $"undid all {had} edits");
+        if (had > 0) StateChannel.Record($"undid all {had} edits");
     }
 }

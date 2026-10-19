@@ -67,3 +67,41 @@ def test_the_regions_cells_cut_the_plane_without_overlapping(drawn):
     for i, a in enumerate(cells):
         for b in cells[i + 1:]:
             assert a.intersection(b).area < 0.01 * min(a.area, b.area)
+
+
+def triangles_of(v, t):
+    return shapely.unary_union([Polygon([(v[2 * i], v[2 * i + 1]) for i in t[k:k + 3]])
+                                for k in range(0, len(t), 3)])
+
+
+def test_the_region_colours_cover_the_national_land_exactly(drawn):
+    """No white land left between the colours, and no colour past the coast."""
+    nation = by_name(drawn)["United States"]
+    country = triangles_of(nation["vertices"], nation["triangles"])
+    colours = [triangles_of(f["vertices"], f["triangles"]) for f in nation["fills"]]
+    assert [f["region"] for f in nation["fills"]] == US_REGIONS
+    assert shapely.unary_union(colours).symmetric_difference(country).area < 1.0
+    for i, a in enumerate(colours):
+        for b in colours[i + 1:]:
+            assert a.intersection(b).area < 1.0
+
+
+def test_each_regions_cell_mesh_is_its_cell(drawn):
+    for m in drawn["maps"][1:]:
+        rings = [Polygon(list(zip(r[0::2], r[1::2]))) for r in m["cell"]]
+        cell = shapely.make_valid(shapely.unary_union(rings))
+        drawn_cell = triangles_of(m["cellMesh"]["vertices"], m["cellMesh"]["triangles"])
+        assert drawn_cell.symmetric_difference(cell).area < 1e-3 * cell.area, m["name"]
+
+
+def test_no_lake_is_left_a_speck(drawn):
+    for m in drawn["maps"]:
+        west, south, east, north = m["bounds"]
+        detail = max(east - west, north - south) * maps.DETAIL
+        rings = [Polygon(list(zip(r[0::2], r[1::2]))) for r in m["outlines"]]
+        for i, ring in enumerate(rings):
+            # A lake is a ring inside another; islands are kept by visible().
+            if not any(j != i and other.contains(ring.representative_point()) and other.area > ring.area
+                       for j, other in enumerate(rings)):
+                continue
+            assert ring.area >= maps.SPECK_MM2 * detail ** 2 * 0.99, (m["name"], ring.area)

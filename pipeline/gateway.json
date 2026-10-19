@@ -40,6 +40,21 @@
         ]
       }
     },
+    "/fundamentals": {
+      "get": {
+        "operationId": "fundamentals",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health",
@@ -53,6 +68,36 @@
     "/map": {
       "get": {
         "operationId": "us_map",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/match": {
+      "get": {
+        "operationId": "match",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/query": {
+      "get": {
+        "operationId": "answer",
         "responses": {
           "200": {
             "description": "OK"

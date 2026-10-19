@@ -19,11 +19,13 @@ public class ToolPanelUI : PanelUI
     // below it come and go; the maps stand beside it.
     public RectTransform PrimaryRect => _primaryRect;
 
-    // The panel and the maps at its right open as one, centred where the user
-    // looks, so the panel itself opens left of centre. Without a map drawn
-    // beside it, it opens centred.
-    protected override float XOffsetFromCamera =>
-        MapCarousel.Instance != null && MapCarousel.Instance.Ready ? -MapCarousel.Instance.SideWidth * 0.5f : 0f;
+    // The panel opens where the user looks, centred, or, when the map panel
+    // is open and in reach, left of it (MapCarousel.PlacePanelBeside), as
+    // the map opens right of this panel when this one is there. Either way
+    // it is put there at once: neither panel slides or fades into place. It
+    // is open from the moment it is asked to be, so anything that opens it
+    // can use it at once. The map panel and the sheet are neither moved nor
+    // hidden by it.
 
     private OptionsCard _toolCard;
     private OptionsCard _assistantCard;
@@ -65,17 +67,17 @@ public class ToolPanelUI : PanelUI
         switch (tool)
         {
             case ToolType.Move:
-                return "Slides the sheet through the room, so you can stand where you want and bring the numbers to you. Grab it anywhere with one hand and carry it there.";
+                return "Moves the sheet anywhere in the room.";
             case ToolType.Rotate:
-                return "Turns the sheet on the spot, so you can read it from another side without walking around it. Grab it with both hands and twist to the angle you want.";
+                return "Turns the sheet to face any direction.";
             case ToolType.Scale:
-                return "Resizes the sheet, from a tabletop model up to a wall you stand inside. Grab it with both hands, then move them apart to enlarge it or together to shrink it.";
+                return "Makes the sheet larger or smaller.";
             case ToolType.Profile:
-                return "Lifts one row or column clear of the sheet and reports its count, range, average and total. Press a bar, then sweep your finger along the line you want raised.";
+                return "Raises rows or columns above the sheet.";
             case ToolType.Sort:
-                return "Reorders the rows or the columns, so the ones you are comparing sit side by side. Pinch a line beside its label, or anywhere along it, and slide it into place.";
+                return "Reorders the rows and columns of the sheet.";
             case ToolType.Filter:
-                return "Chooses what stands on the sheet, narrowing it to what you asked for. Open By Row or By Column, then poke a bar to take that line off the sheet, or tap a name in the list; a filled square means it is showing, and tapping it again brings it back.";
+                return "Hides or shows rows and columns on the sheet.";
             default:
                 return string.Empty;
         }
@@ -119,8 +121,7 @@ public class ToolPanelUI : PanelUI
 
         OnToolChanged(toolManager != null ? toolManager.SelectedTool : ToolType.None);
 
-        if (_canvas != null)
-            _canvas.gameObject.SetActive(false);
+        if (_canvas != null) StartHidden();
     }
 
     private static OptionsCard AdoptCard(GameObject root)
@@ -131,7 +132,7 @@ public class ToolPanelUI : PanelUI
         if (rect == null) return null;
 
         rect.sizeDelta = new Vector2(rect.sizeDelta.x, Style.Subpanel.y);
-        root.SetActive(false);
+        UILayout.ShowPart(root, false);
 
         return new OptionsCard
         {
@@ -186,6 +187,9 @@ public class ToolPanelUI : PanelUI
 
     private void Start()
     {
+        // Laid out now, while the panel is shut, not on first open.
+        ResolveLayoutNow();
+
         if (ManageDatasets.Instance != null)
         {
             ManageDatasets.Instance.OnActiveDatasetChanged += OnActiveDatasetChanged;
@@ -289,13 +293,10 @@ public class ToolPanelUI : PanelUI
         if (grid == null) return;
         _toolGrid = grid;
 
-        grid.padding = new RectOffset(
-            (int)Style.PanelInset, (int)Style.PanelInset,
-            (int)Style.SmallPadding, (int)Style.SmallPadding);
+        grid.padding = PanePadding();
         grid.spacing = new Vector2(Style.SmallPadding, Style.SmallPadding);
 
-        LayoutElement le = grid.GetComponent<LayoutElement>();
-        if (le == null) le = grid.gameObject.AddComponent<LayoutElement>();
+        LayoutElement le = UILayout.Ensure<LayoutElement>(grid.gameObject);
         le.minHeight = 0f;
         le.preferredHeight = 0f;
         le.flexibleHeight = 1f;
@@ -377,8 +378,7 @@ public class ToolPanelUI : PanelUI
         // not. Opting out of the layout leaves it to FitTiles to place, from the
         // same cell size and spacing the grid gave the tools.
         RectTransform rect = _assistantButton.Root.GetComponent<RectTransform>();
-        LayoutElement le = _assistantButton.Root.GetComponent<LayoutElement>();
-        if (le == null) le = _assistantButton.Root.AddComponent<LayoutElement>();
+        LayoutElement le = UILayout.Ensure<LayoutElement>(_assistantButton.Root);
         le.ignoreLayout = true;
 
         rect.anchorMin = new Vector2(0f, 1f);
@@ -521,11 +521,8 @@ public class ToolPanelUI : PanelUI
         content.transform.SetParent(contentArea, false);
 
         RectTransform rect = content.AddComponent<RectTransform>();
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
+        UILayout.Stretch(rect);
 
         VerticalLayoutGroup layout = content.AddComponent<VerticalLayoutGroup>();
         ApplyPaneLayout(layout);
@@ -535,7 +532,7 @@ public class ToolPanelUI : PanelUI
         layout.childForceExpandHeight = false;
 
         AddHeader(content, "Assistant");
-        AddDescription(content, "Works the tools for you by voice: ask for a sheet, a sort or a filter and it carries the request out. Pick how fast its actions play out on screen.");
+        AddDescription(content, "Carries out your spoken requests using the same tools.");
 
         var buttons = new (string, string, UnityEngine.Events.UnityAction)[AssistantSpeedLabels.Length];
         for (int i = 0; i < AssistantSpeedLabels.Length; i++)
@@ -543,10 +540,10 @@ public class ToolPanelUI : PanelUI
             int captured = i;
             buttons[i] = ("AssistantSpeed_" + i, AssistantSpeedLabels[i], () => OnAssistantSpeedClicked(captured));
         }
-        _assistantSpeedRow = AddToggleRowIn(content, "AssistantSpeedRow", true, buttons);
-        _assistantSpeedRow?.SetSelected(0);
+        _assistantSpeedRow = AddToggleRow(content, "AssistantSpeedRow", buttons);
+        _assistantSpeedRow.SetSelected(0);
 
-        content.SetActive(false);
+        UILayout.ShowPart(content, false);
         return content;
     }
 
@@ -614,8 +611,7 @@ public class ToolPanelUI : PanelUI
 
             UIButton.Adopt(undoAllBtn.gameObject);
 
-            LayoutElement undoAllLE = undoAllBtn.GetComponent<LayoutElement>();
-            if (undoAllLE == null) undoAllLE = undoAllBtn.gameObject.AddComponent<LayoutElement>();
+            LayoutElement undoAllLE = UILayout.Ensure<LayoutElement>(undoAllBtn.gameObject);
             undoAllLE.minHeight = Style.Button.y;
             undoAllLE.preferredHeight = Style.Button.y;
             undoAllLE.preferredWidth = Style.TitleBarButtonWidth;
@@ -663,35 +659,9 @@ public class ToolPanelUI : PanelUI
             ApplyToolButtonVisual(_toolButtons[i], _toolButtons[i].Tool == selected);
 
         foreach (KeyValuePair<ToolType, GameObject> pair in _toolContents)
-            pair.Value.SetActive(pair.Key == selected);
+            UILayout.ShowPart(pair.Value, pair.Key == selected);
 
         RefreshOptionCards();
-    }
-
-    private readonly List<GameObject> _prewarmActivated = new List<GameObject>();
-
-    public void PrewarmContent(bool on)
-    {
-        if (on)
-        {
-            _prewarmActivated.Clear();
-            foreach (KeyValuePair<ToolType, GameObject> pair in _toolContents) WarmActivate(pair.Value);
-            WarmActivate(_assistantContent);
-            WarmActivate(_toolCard?.Root);
-            WarmActivate(_assistantCard?.Root);
-            return;
-        }
-
-        for (int i = 0; i < _prewarmActivated.Count; i++)
-            if (_prewarmActivated[i] != null) _prewarmActivated[i].SetActive(false);
-        _prewarmActivated.Clear();
-    }
-
-    private void WarmActivate(GameObject go)
-    {
-        if (go == null || go.activeSelf) return;
-        go.SetActive(true);
-        _prewarmActivated.Add(go);
     }
 
     private void RefreshOptionCards()
@@ -699,7 +669,7 @@ public class ToolPanelUI : PanelUI
         ToolType selected = toolManager != null ? toolManager.SelectedTool : ToolType.None;
         bool assistantPane = AssistantPaneWanted();
 
-        if (_assistantContent != null) _assistantContent.SetActive(assistantPane);
+        UILayout.ShowPart(_assistantContent, assistantPane);
 
         SetCardOpen(_toolCard, HasOptions(selected));
         SetCardOpen(_assistantCard, assistantPane);
@@ -712,7 +682,7 @@ public class ToolPanelUI : PanelUI
     {
         if (card == null || card.Root == null) return;
 
-        if (card.Root.activeSelf != open) card.Root.SetActive(open);
+        if (UILayout.PartShown(card.Root) != open) UILayout.ShowPart(card.Root, open);
 
         bool listed = _stack.Contains(card);
         if (open && !listed) OpenCard(card);
@@ -845,6 +815,7 @@ public class ToolPanelUI : PanelUI
     {
         if (_canvas == null) return;
         ShowCanvas();
+        if (MapCarousel.Instance != null) MapCarousel.Instance.PlacePanelBeside(this);
         QueueFitTiles();
         PanelGuard.ClearToolPanel();
         StateChannel.RecordState("toolPanel", "the tool panel is open, so the tool buttons are on screen");
@@ -878,103 +849,21 @@ public class ToolPanelUI : PanelUI
     private GameObject GetToolContent(ToolType tool) =>
         _toolContents.TryGetValue(tool, out GameObject go) ? go : null;
 
-    // A row of buttons a tool can ask for: one press each, sized to share the
-    // width. 'belowHeader' puts it above the description, which is where the
-    // assistant's own speed row belongs; a tool's row goes last, under whatever
-    // it has already added.
-    public ButtonList AddToggleRow(ToolType tool, string rowName,
+    // A row of equal-width buttons, one press each, set just under the header.
+    private static ButtonList AddToggleRow(GameObject content, string rowName,
         params (string name, string label, UnityEngine.Events.UnityAction onClick)[] buttons)
     {
-        GameObject content = GetToolContent(tool);
-        if (content == null) return null;
-
-        ReplaceNamed(content.transform, rowName);
-        return AddToggleRowIn(content, rowName, false, buttons);
-    }
-
-    // Destroy is deferred to the end of the frame, so whatever is being replaced
-    // is renamed out of the way first: until it is actually gone it would still
-    // answer to the name the replacement is about to take.
-    private void ReplaceNamed(Transform parent, string name)
-    {
-        Transform existing = parent.Find(name);
-        if (existing == null) return;
-
-        existing.name = name + "_Old";
-        Destroy(existing.gameObject);
-    }
-
-    private ButtonList AddToggleRowIn(GameObject content, string rowName, bool belowHeader,
-        params (string name, string label, UnityEngine.Events.UnityAction onClick)[] buttons)
-    {
-        if (content == null) return null;
-
         GameObject row = new GameObject(rowName);
         row.transform.SetParent(content.transform, false);
         RectTransform rowRect = row.AddComponent<RectTransform>();
 
         UILayout.FixedHeight(row, Style.Button.y);
+        InsertBelowHeader(content, row.transform);
 
-        ButtonList list = new ButtonList(rowRect, new ButtonList.Options
-        {
-            axis = ButtonList.Axis.Horizontal,
-            sizing = ButtonList.Sizing.Equal
-        });
-
-        if (belowHeader) InsertBelowHeader(content, row.transform);
-        else row.transform.SetAsLastSibling();
-
+        ButtonList list = new ButtonList(rowRect);
         for (int i = 0; i < buttons.Length; i++)
             list.Add(buttons[i].name, buttons[i].label, buttons[i].onClick);
-
-        list.SetSelected(-1);
         return list;
-    }
-
-    // A scrollable column of check rows: the label on the left, a square on the
-    // right that is filled while the thing is on the sheet. Unlike a toggle row
-    // any number can be checked, so the caller keeps the handles and sets the
-    // squares itself.
-    public ButtonList AddCheckList(ToolType tool, float height, string name = "CheckList")
-    {
-        GameObject content = GetToolContent(tool);
-        if (content == null) return null;
-
-        ReplaceNamed(content.transform, name);
-
-        GameObject host = new GameObject(name);
-        host.transform.SetParent(content.transform, false);
-        RectTransform rect = host.AddComponent<RectTransform>();
-
-        UILayout.FixedHeight(host, height);
-
-        ButtonList list = new ButtonList(rect, new ButtonList.Options
-        {
-            axis = ButtonList.Axis.Vertical,
-            sizing = ButtonList.Sizing.Measured,
-            alignment = TextAnchor.UpperLeft,
-            itemHeight = Style.Subbutton.y,
-            backed = true,
-            scrollable = true,
-            checkable = true
-        });
-
-        host.transform.SetAsLastSibling();
-        return list;
-    }
-
-    // A tool whose pane grew or shrank without the tool changing: the card is
-    // measured again so it closes up behind a list that was taken away.
-    public void ContentChanged() => QueueOptionsResize();
-
-    // Takes a tool's named block off its pane, for a list that is closed rather
-    // than rebuilt: the Filter tool shows one axis at a time, and the axis that
-    // is not open leaves no empty band behind it.
-    public void RemoveContent(ToolType tool, string name)
-    {
-        GameObject content = GetToolContent(tool);
-        if (content == null) return;
-        ReplaceNamed(content.transform, name);
     }
 
     private static void SizeHeader(GameObject content)

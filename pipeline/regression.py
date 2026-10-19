@@ -30,6 +30,10 @@ def requests():
     # one-breach metro.
     for metro in ("New York, NY", "Boston, MA", "San Jose, CA", "Dallas, TX", "Abilene, TX"):
         paths.append(f"/sheet?metro={metro}")
+    # Every region's sheet, and the whole country's.
+    for region in US_REGIONS:
+        paths.append(f"/sheet?region={region}")
+    paths.append("/sheet")
 
     for company in ("walmart", "sam's club", "target", "equifax", "%%", "zz-no-such-company"):
         paths.append(f"/breaches?company={company}")
@@ -50,8 +54,9 @@ def requests():
     # Rejections: the assistant reads these out loud, so their wording is part
     # of the contract too.
     paths += [
-        "/sheet",
         "/sheet?metro=Atlantis, ZZ",
+        "/sheet?region=Atlantis",
+        "/sheet?metro=Boston, MA&region=US West",
         "/sheet?metro=Boston, MA&since=2020",
         "/breaches?attack=Hacking",
         "/breaches?industry=Atlantis",

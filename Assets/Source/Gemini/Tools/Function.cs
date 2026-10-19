@@ -13,8 +13,6 @@ public abstract class Function {
     public string Name { get; private set; }
     protected abstract Task<Dictionary<string, object>> Execute(Dictionary<string, object> args);
 
-    public virtual bool IsAvailable() => true;
-
     public static async Task Run(AsyncSession session, FunctionCall call) {
         Dictionary<string, object> result;
         if (!registry.TryGetValue(call.Name, out var tool)) {
@@ -164,4 +162,16 @@ public abstract class Function {
         }
         Debug.Log($"[Function] registered {registry.Count} tools");
     }
+}
+
+// A tool that asks the breach database: its arguments are bound first, and a
+// call whose arguments do not fit fails without asking.
+public abstract class DatabaseTool<TArgs> : Function where TArgs : class {
+
+    protected abstract Task<Dictionary<string, object>> Query(TArgs args);
+
+    protected sealed override Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) =>
+        ToolArguments.Bind(typeof(TArgs), args, out string error) is TArgs bound
+            ? Query(bound)
+            : Task.FromResult(CyberApi.Fail(error));
 }

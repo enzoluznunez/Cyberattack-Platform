@@ -5,58 +5,6 @@ using UnityEngine.UI;
 
 public class Prewarm : MonoBehaviour
 {
-    public struct CanvasWarmState
-    {
-        internal CanvasGroup group;
-        internal bool added;
-        internal float alpha;
-        internal bool interactable;
-        internal bool blocksRaycasts;
-        internal bool active;
-    }
-
-    public static void WarmCanvas(ref CanvasWarmState state, Canvas canvas, bool on)
-    {
-        if (canvas == null) return;
-
-        if (on)
-        {
-            if (state.active || canvas.gameObject.activeSelf) return;
-
-            state.group = canvas.GetComponent<CanvasGroup>();
-            state.added = state.group == null;
-            if (state.added) state.group = canvas.gameObject.AddComponent<CanvasGroup>();
-
-            state.alpha = state.group.alpha;
-            state.interactable = state.group.interactable;
-            state.blocksRaycasts = state.group.blocksRaycasts;
-
-            state.group.alpha = 0f;
-            state.group.interactable = false;
-            state.group.blocksRaycasts = false;
-
-            canvas.gameObject.SetActive(true);
-            state.active = true;
-            return;
-        }
-
-        if (!state.active) return;
-        state.active = false;
-        canvas.gameObject.SetActive(false);
-
-        if (state.group != null)
-        {
-            if (state.added) Destroy(state.group);
-            else
-            {
-                state.group.alpha = state.alpha;
-                state.group.interactable = state.interactable;
-                state.group.blocksRaycasts = state.blocksRaycasts;
-            }
-        }
-        state.group = null;
-    }
-
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
@@ -74,20 +22,17 @@ public class Prewarm : MonoBehaviour
         ToolPanelUI tool = Scene.ToolPanel;
         Tooltip tooltip = FindAnyObjectByType<Tooltip>(FindObjectsInactive.Include);
 
-        if (tool != null)
-        {
-            tool.PrewarmCanvas(true);
-            tool.PrewarmContent(true);
-        }
+        if (tool != null) tool.PrewarmCanvas(true);
         if (tooltip != null) tooltip.PrewarmCanvas(true);
+        // The click a poke plays, its clip made now rather than on the first poke.
+        UIPressFeedback.Prepare();
 
+        // Two frames: one to lay the nested layout groups out, one to draw
+        // what that settled on.
+        yield return null;
         yield return null;
 
-        if (tool != null)
-        {
-            tool.PrewarmContent(false);
-            tool.PrewarmCanvas(false);
-        }
+        if (tool != null) tool.PrewarmCanvas(false);
         if (tooltip != null) tooltip.PrewarmCanvas(false);
         if (rig != null) Destroy(rig);
 
@@ -120,15 +65,35 @@ public class Prewarm : MonoBehaviour
         AddLabel(canvasGo.transform, Style.BodyFont);
         AddLabel(canvasGo.transform, Style.TitleFont);
 
-        var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        Destroy(quad.GetComponent<Collider>());
-        quad.transform.SetParent(root.transform, false);
-        quad.transform.localScale = Vector3.one * 0.002f;
-        Material sheet = Resources.Load<Material>("Materials/SheetMaterial");
-        if (sheet != null) quad.GetComponent<MeshRenderer>().sharedMaterial = sheet;
-        else quad.SetActive(false);
+        // The bars, the maps and the sheet's titles are warmed by drawing
+        // the real ones once the loading phase has built them (GraphicsWarm):
+        // a quad in their materials warmed nothing they use, its mesh layout
+        // not being theirs. These world titles stay for the glyphs below.
+        foreach (TMP_FontAsset font in new[] { Style.BodyFont, Style.TitleFont })
+        {
+            if (font != null) font.TryAddCharacters(CommonGlyphs, out _);
+            var label = new GameObject("WarmWorldLabel").AddComponent<TextMeshPro>();
+            label.transform.SetParent(root.transform, false);
+            label.transform.localScale = Vector3.one * 0.001f;
+            label.text = "Warm";
+            if (font != null) label.font = font;
+        }
 
         return root;
+    }
+
+    // Every glyph a title is likely to use, added to the fonts at startup so
+    // no sheet or panel adds them mid-session: printable ASCII, Latin-1's
+    // letters and signs, and typographic punctuation.
+    private static readonly string CommonGlyphs = BuildCommonGlyphs();
+
+    private static string BuildCommonGlyphs()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (char c = ' '; c <= '~'; c++) sb.Append(c);
+        for (char c = '\u00A1'; c <= '\u00FF'; c++) sb.Append(c);
+        sb.Append("\u2018\u2019\u201C\u201D\u2013\u2014\u2026\u2022\u20AC\u2122");
+        return sb.ToString();
     }
 
     private static void AddImage(Transform parent, Material material)

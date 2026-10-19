@@ -1,9 +1,7 @@
 using System.Collections.Generic;
 using Google.GenAI.Types;
 
-// How fast the assistant's own actions play out on screen. This was once the way
-// to arm any tool's option, but the only tool that had one was Color, and colour
-// is now a property of the data rather than something to choose.
+// How fast the assistant's own actions play out on screen.
 public sealed class SetToolOption : AgenticTool {
 
     public override FunctionDeclaration Declaration {

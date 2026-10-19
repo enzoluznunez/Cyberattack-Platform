@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 public static class SheetStats
 {
     public struct Summary
@@ -21,24 +19,13 @@ public static class SheetStats
         Summary summary = new Summary();
         if (data == null) return summary;
 
-        IReadOnlyList<int> rowOrder = data.RowOrder;
-        IReadOnlyList<int> colOrder = data.ColumnOrder;
-        if (rowOrder == null || colOrder == null) return summary;
-
         double sum = 0.0;
 
         for (int visRow = rowMin; visRow <= rowMax; visRow++)
         {
-            if (visRow < 0 || visRow >= rowOrder.Count) continue;
-            int dataRow = rowOrder[visRow];
-
             for (int visCol = colMin; visCol <= colMax; visCol++)
             {
-                if (visCol < 0 || visCol >= colOrder.Count) continue;
-                int dataCol = colOrder[visCol];
-                if (!data.HasValue(dataRow, dataCol)) continue;
-
-                double value = data.GetValue(dataRow, dataCol);
+                if (!data.TryValueAt(visRow, visCol, out double value)) continue;
                 if (summary.count == 0 || value < summary.min)
                 {
                     summary.min = value;

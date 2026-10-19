@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 using Oculus.Interaction;
 using Oculus.Interaction.Input;
 
@@ -42,10 +40,12 @@ public class Watch : MonoBehaviour
 
     private IHand _ihand;
     private UIButton.Handle _toolBtn;
+    private UIButton.Handle _mapBtn;
 
     private Canvas _canvas;
     private Transform _canvasTransform;
     private bool _toolPanelOpen;
+    private bool _mapPanelOpen;
 
     private bool _raisedActive;
     private GeminiStatus _raisedStatus;
@@ -74,15 +74,31 @@ public class Watch : MonoBehaviour
         }
 
         BindButtons();
-        UIButton.SetSelected(_toolBtn, false);
 
         if (_canvas != null)
-            _canvas.gameObject.SetActive(false);
+        {
+            _pokes = _canvas.GetComponentsInChildren<PokeInteractable>(true);
+            ShowCanvas(false);
+        }
     }
 
+    // Two buttons, one above the other, each opening and closing its own
+    // panel: Map Panel, made from the scene's Tool Panel button, then Tool
+    // Panel. Both are in the Undo All button's style, as wide and twice as
+    // tall so a fingertip finds them easily, floating apart with nothing
+    // behind them.
     private void BindButtons()
     {
-        _toolBtn = BindPanelButton("Tool Panel_Btn", OnToolClicked);
+        Transform tool = FindTransform.FindDeep(transform, "Tool Panel_Btn");
+        if (tool != null && FindTransform.FindDeep(transform, "Map Panel_Btn") == null)
+        {
+            GameObject map = Instantiate(tool.gameObject, tool.parent, false);
+            map.name = "Map Panel_Btn";
+            map.transform.SetSiblingIndex(tool.GetSiblingIndex());
+        }
+
+        _mapBtn = BindPanelButton("Map Panel_Btn", "Map Panel", OnMapClicked);
+        _toolBtn = BindPanelButton("Tool Panel_Btn", "Tool Panel", OnToolClicked);
         HideUnboundButtons();
         SizeToButtons();
     }
@@ -95,11 +111,12 @@ public class Watch : MonoBehaviour
         RectTransform group = FindTransform.FindDeep(transform, "Buttons") as RectTransform;
         if (group == null) return;
 
-        GameObject bound = _toolBtn != null ? _toolBtn.Root : null;
+        GameObject tool = _toolBtn != null ? _toolBtn.Root : null;
+        GameObject map = _mapBtn != null ? _mapBtn.Root : null;
         for (int i = 0; i < group.childCount; i++)
         {
             GameObject child = group.GetChild(i).gameObject;
-            if (child != bound && child.activeSelf) child.SetActive(false);
+            if (child != tool && child != map && child.activeSelf) child.SetActive(false);
         }
     }
 
@@ -110,7 +127,7 @@ public class Watch : MonoBehaviour
         if (vlg == null) return;
 
         int margin = (int)Style.SmallPadding;
-        vlg.spacing = Style.SmallPadding;
+        vlg.spacing = ButtonGap;
         vlg.padding = new RectOffset(margin, margin, margin, margin);
         vlg.childAlignment = TextAnchor.MiddleCenter;
 
@@ -120,27 +137,30 @@ public class Watch : MonoBehaviour
             GameObject child = group.GetChild(i).gameObject;
             if (!child.activeSelf || child.GetComponent<LayoutElement>() == null) continue;
 
-            UILayout.FixedSize(child, Style.WatchButton);
+            UILayout.FixedSize(child, ButtonSize);
             count++;
         }
         if (count == 0) return;
 
         Vector2 size = new Vector2(
-            Style.WatchButton.x + vlg.padding.left + vlg.padding.right,
-            count * Style.WatchButton.y + (count - 1) * vlg.spacing
+            ButtonSize.x + vlg.padding.left + vlg.padding.right,
+            count * ButtonSize.y + (count - 1) * vlg.spacing
                 + vlg.padding.top + vlg.padding.bottom);
 
         RectTransform canvasRect = _canvas != null ? _canvas.transform as RectTransform : null;
         if (canvasRect != null) canvasRect.sizeDelta = size;
 
-        group.anchorMin = Vector2.zero;
-        group.anchorMax = Vector2.one;
         group.pivot = new Vector2(0.5f, 0.5f);
-        group.offsetMin = Vector2.zero;
-        group.offsetMax = Vector2.zero;
+        UILayout.Stretch(group);
     }
 
-    private UIButton.Handle BindPanelButton(string name, UnityEngine.Events.UnityAction onClick)
+    // The Undo All button's width and twice its height, and the space between
+    // the two, in the canvas's units.
+    private static readonly Vector2 ButtonSize = new Vector2(Style.TitleBarButtonWidth, Style.Button.y * 2f);
+    private const float ButtonGap = 10f;
+
+
+    private UIButton.Handle BindPanelButton(string name, string label, UnityEngine.Events.UnityAction onClick)
     {
         Transform t = FindTransform.FindDeep(transform, name);
         if (t == null)
@@ -149,9 +169,12 @@ public class Watch : MonoBehaviour
             return null;
         }
 
-        UIButton.Handle h = UIButton.Adopt(t.gameObject,
-            radius: Style.WatchButtonDiameter * 0.5f);
-        if (h.Text != null) h.Text.gameObject.SetActive(false);
+        UIButton.Handle h = UIButton.Adopt(t.gameObject);
+        if (h.Text != null)
+        {
+            h.Text.gameObject.SetActive(true);
+            h.Text.text = label;
+        }
         h.Button.onClick.AddListener(onClick);
         UIButton.SetSelected(h, false);
         return h;
@@ -160,6 +183,11 @@ public class Watch : MonoBehaviour
     private void OnToolClicked()
     {
         if (toolPanelUI != null) toolPanelUI.TogglePanel();
+    }
+
+    private void OnMapClicked()
+    {
+        if (MapCarousel.Instance != null) MapCarousel.Instance.Toggle();
     }
 
 
@@ -171,7 +199,7 @@ public class Watch : MonoBehaviour
     {
         if (geminiClient == null) return;
         if (geminiClient.Active == active) return;
-        if (!active && cause != AssistantCause.Agent) AgentTurn.UserTookControl("assistant off");
+        if (!active && cause != AssistantCause.Agent) AgentTurn.UserTookControl();
         if (!active) Notices.HideNotice();
         geminiClient.SetActive(active);
         ReportActivation(active, cause);
@@ -201,14 +229,14 @@ public class Watch : MonoBehaviour
 
     private void SyncPanelButtonStates()
     {
-        SyncPanelButton(toolPanelUI, _toolBtn, ref _toolPanelOpen);
+        if (toolPanelUI != null) SyncPanelButton(toolPanelUI.IsVisible, _toolBtn, ref _toolPanelOpen);
+        MapCarousel map = MapCarousel.Instance;
+        if (map != null) SyncPanelButton(map.IsOpen, _mapBtn, ref _mapPanelOpen);
     }
 
-    private static void SyncPanelButton(PanelUI panel, UIButton.Handle button, ref bool wasOpen)
+    // A button shows as selected while its panel is open.
+    private static void SyncPanelButton(bool open, UIButton.Handle button, ref bool wasOpen)
     {
-        if (panel == null) return;
-
-        bool open = panel.IsVisible;
         if (open == wasOpen) return;
 
         wasOpen = open;
@@ -274,8 +302,9 @@ public class Watch : MonoBehaviour
                 : "The assistant ran out of room to hold the conversation and stopped. To start over, open the Tool Panel and select the assistant.");
     }
 
-    private bool Engaged =>
-        _toolBtn != null && _toolBtn.Highlight != null && _toolBtn.Highlight.IsEngaged;
+    private bool Engaged => IsEngaged(_toolBtn) || IsEngaged(_mapBtn);
+
+    private static bool IsEngaged(UIButton.Handle h) => h != null && h.Highlight != null && h.Highlight.IsEngaged;
 
     private void LateUpdate()
     {
@@ -368,7 +397,7 @@ public class Watch : MonoBehaviour
 
         if (Engaged) return;
 
-        float t = 1f - Mathf.Exp(-CalibrationRate * Time.unscaledDeltaTime);
+        float t = Style.Damp(CalibrationRate, Time.unscaledDeltaTime);
         _anchorOffset = Vector3.Lerp(_anchorOffset, offset, t);
         _anchorRotation = Quaternion.Slerp(_anchorRotation, twist, t);
     }
@@ -409,12 +438,18 @@ public class Watch : MonoBehaviour
         return true;
     }
 
+    // Hidden while the hand is away, not switched off, so the buttons are
+    // never rebuilt as the hand comes and goes: they stop drawing and taking
+    // fingertips.
     private void SetVisible(bool visible)
     {
-        if (_canvas == null) return;
-        if (_canvas.gameObject.activeSelf != visible)
-            _canvas.gameObject.SetActive(visible);
+        if (_canvas == null || _canvas.enabled == visible) return;
+        ShowCanvas(visible);
     }
+
+    private void ShowCanvas(bool visible) => UILayout.ShowCanvas(_canvas, _pokes, visible);
+
+    private PokeInteractable[] _pokes = new PokeInteractable[0];
 
     public void NotifyIntent()
     {

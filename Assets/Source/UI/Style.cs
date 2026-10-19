@@ -1,3 +1,5 @@
+using System;
+using System.Collections;
 using TMPro;
 using UnityEngine;
 
@@ -61,14 +63,39 @@ public static class Style
     public const float WorldScale = 0.001f;
     public const float WorldTextScale = WorldScale * 10f;
 
+    // How far along a timed motion is, for its share of time 't': fast at
+    // first and slowing into place. Every timed motion uses it, the sheet's,
+    // its lines' and strips' and the map's alike, so all of them move the
+    // same way.
+    public static float EaseOut(float t)
+    {
+        t = Mathf.Clamp01(t);
+        return 1f - (1f - t) * (1f - t) * (1f - t);
+    }
+
+    // A timed motion over 'seconds': from the next frame on, hands 'apply'
+    // how far along it is (EaseOut), ending at 1.
+    public static IEnumerator Tween(float seconds, Action<float> apply)
+    {
+        float t = 0f;
+        while (t < seconds)
+        {
+            yield return null;
+            t += Time.deltaTime;
+            apply(EaseOut(t / seconds));
+        }
+    }
+
+    // How much of the way to close toward a target this frame, closing at
+    // 'rate' per second however long the frame was.
+    public static float Damp(float rate, float dt) => 1f - Mathf.Exp(-rate * dt);
+
     public const float SmallPadding = 6f;
     public const float MediumPadding = 12f;
     public const float ButtonTextPad = 10f;
     public const float PanelInset = MediumPadding;
 
-    public const float ScrollSensitivity = 24f;
     public const float HeaderHeight = 30f;
-    public const float ValueColumn = 90f;
 
     public const float OutRadius = 8f;
     public const float ChipRadius = 4f;
@@ -91,10 +118,6 @@ public static class Style
 
     public static readonly Vector2 Subbutton = new Vector2(40f, 20f);
     public static readonly Vector2 Button = new Vector2(50f, 25f);
-    // The watch carries one button, drawn as a circle: a square tile with a
-    // corner radius of half its side.
-    public const float WatchButtonDiameter = 64f;
-    public static readonly Vector2 WatchButton = new Vector2(WatchButtonDiameter, WatchButtonDiameter);
     public const float TitleBarButtonWidth = 80f;
 
     public const int SortPanels = 0;

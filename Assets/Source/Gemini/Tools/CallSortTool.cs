@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Google.GenAI.Types;
 using UnityEngine;
 
@@ -16,8 +17,15 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         [Doc("Where that one should end up, 1-based (1 = first)."), Limits(1, 1000), Optional]
         public int? to;
         [Doc("Order by the numbers instead of by name: the tool reads the values itself and ranks the lines. " +
-             "Use this for requests like 'sort the months by total sales' rather than reading the values first."), Optional]
+             "Use this for requests like 'sort by market cap' rather than reading the values first."), Optional]
         public By by;
+        [Doc("Bring every row whose breach matches these conditions to the front, keeping their order, looked " +
+             "up in the breach database: anything a breach is and bounds on any amount, in dollars. Rows only; " +
+             "give no other way of ordering with it."), Optional]
+        public BreachFilters where;
+
+        // The breaches 'where' named, looked up before the call runs.
+        internal BreachMatch matched;
     }
 
     public class By {
@@ -36,26 +44,30 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "CallSortTool",
-        Description = "Reorder the rows or columns. Pass 'axis' when the names you give do not already say which. " +
-                      "Use 'order' whenever more than one line moves: give the sequence you want, applied in one step as " +
-                      "one undo entry. Calendar order is one call, not twelve. 'from' and 'to' are for nudging a single " +
-                      "line. " +
-                      "Pass 'by' to rank by the numbers instead: the tool reads them itself, so 'sort the months " +
-                      "by total sales' is one call and needs no separate read. 'by' takes 'measure' to rank each " +
-                      "line by its own numbers, or 'line' to rank by a single row or column, so 'sort the months " +
-                      "by one item's sales' is one call too. " +
-                      "Positions run across the whole dataset. Undo reverses the whole reorder.",
-        Parameters = ParametersFor(typeof(Args))
+        Description = "Reorder the rows or columns, as one undo entry. Pass 'axis' when the names do not say " +
+                      "which. Use 'order' whenever more than one line moves; 'from' and 'to' nudge a single line. " +
+                      "Pass 'by' to rank by the numbers, which the tool reads itself: 'line' ranks by one row or " +
+                      "column ('sort the breaches by market cap'), 'measure' by each line's own sum, average, max " +
+                      "or min, which mixes the columns' units, so prefer 'line'. Positions count the lines showing. Ranking by numbers ranks filtered lines too, so " +
+                      "their empty places move to where they rank; 'order' and 'from' leave empty places where " +
+                      "they are.",
+        Parameters = WithNames(ParametersFor(typeof(Args)))
     };
 
-    protected override void Run(Args args, Dictionary<string, object> result) {
-        if (!EnsureToolSelected(ToolType.Sort, result)) return;
+    protected override Task<string> Prepare(Args args) => LookUp(args.where, m => args.matched = m);
 
+    protected override void Run(Args args, Dictionary<string, object> result) {
         var sort = Scene.Sort;
-        if (sort == null) { result["error"] = "Sort tool not found in scene."; return; }
+        if (!EnsureToolSelected(ToolType.Sort, sort, result)) return;
+
+        if (args.where != null && (args.order != null || args.by != null || args.from != null || args.to.HasValue)) {
+            result["error"] = "'where' orders the rows itself; send it without 'order', 'by', 'from' or 'to'.";
+            return;
+        }
 
         string hint = args.order != null && args.order.Length > 0 ? args.order[0] : args.from;
-        if (!ResolveAxis("sort", args.axis, hint, result, out bool isColumn)) return;
+        bool isColumn = false;
+        if (args.where == null && !ResolveAxis("sort", args.axis, hint, result, out isColumn)) return;
         string axis = isColumn ? "columns" : "rows";
 
         var data = Scene.Data;
@@ -66,14 +78,15 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         if (count == 0) { result["error"] = $"The sheet has no {axis} to move."; return; }
 
         result["direction"] = axis;
-        string dataset = ActiveDatasetLabel();
+        string dataset = Scene.DatasetLabel;
         if (dataset != null) result["dataset"] = dataset;
 
         bool wantsOrder = args.order != null && args.order.Length > 0;
         bool wantsMove = !string.IsNullOrEmpty(args.from) || args.to.HasValue;
         bool wantsBy = args.by != null;
+        bool wantsWhere = args.where != null;
 
-        int ways = (wantsOrder ? 1 : 0) + (wantsMove ? 1 : 0) + (wantsBy ? 1 : 0);
+        int ways = (wantsOrder ? 1 : 0) + (wantsMove ? 1 : 0) + (wantsBy ? 1 : 0) + (wantsWhere ? 1 : 0);
         if (ways > 1) {
             result["error"] = "Give one of 'order', 'by', or 'from' with 'to'; not more than one.";
             return;
@@ -93,11 +106,17 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
             EchoOrder(data, isColumn, isColumn ? data.ColumnOrder : data.RowOrder, result);
             return;
         }
+        int stamped = lastSortRound[axisSlot];
         lastSortRound[axisSlot] = round;
 
-        if (wantsOrder) RunOrder(args, sort, data, isColumn, axis, lineCount, result);
-        else if (wantsBy) RunBy(args, sort, data, isColumn, axis, count, result);
+        if (wantsWhere) RunWhere(args, sort, data, result);
+        else if (wantsOrder) RunOrder(args, sort, data, isColumn, axis, lineCount, result);
+        else if (wantsBy) RunBy(args, sort, data, isColumn, axis, result);
         else RunMove(args, sort, data, isColumn, axis, count, result);
+
+        // A call that failed reordered nothing, so it leaves the round's one
+        // reorder for the corrected call.
+        if (result.ContainsKey("error")) lastSortRound[axisSlot] = stamped;
     }
 
     private static readonly int[] lastSortRound = { -1, -1 };
@@ -129,10 +148,30 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         Commit(sort, data, isColumn, axis, live, target, result);
     }
 
-    private static void Commit(SortTool sort, DataSource data, bool isColumn, string axis,
-        IReadOnlyList<int> live, List<int> target, Dictionary<string, object> result) {
+    // The matching rows on the sheet first, in the order they stand, then the rest.
+    private static void RunWhere(Args args, SortTool sort, DataSource data, Dictionary<string, object> result) {
+        List<int> matching = args.matched.RowsOn(data, result);
 
-        if (!sort.SetOrder(isColumn, target)) {
+        IReadOnlyList<int> live = data.RowOrder;
+        var match = new HashSet<int>(matching);
+        var target = new List<int>(live.Count);
+        foreach (int row in live) if (match.Contains(row)) target.Add(row);
+        int first = target.Count;
+        if (first == 0) {
+            result["note"] = "No row showing on this sheet matches, so nothing moved.";
+            return;
+        }
+        foreach (int row in live) if (!match.Contains(row)) target.Add(row);
+
+        result["broughtToFront"] = first;
+        Commit(sort, data, false, "rows", live, target, result);
+    }
+
+    private static void Commit(SortTool sort, DataSource data, bool isColumn, string axis,
+        IReadOnlyList<int> live, List<int> target, Dictionary<string, object> result,
+        IReadOnlyList<int> full = null) {
+
+        if (!sort.SetOrder(isColumn, target, full)) {
             result["note"] = $"The {axis} are already in that order.";
             EchoOrder(data, isColumn, live, result);
             return;
@@ -141,12 +180,15 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         result["reordered"] = sort.LastReorderedLines;
         EchoOrder(data, isColumn, target, result);
         result["undoable"] = true;
-        if (sort.SequenceRunning)
+        if (sort.LastReorderedLines == 0)
+            result["note"] = $"The {axis} on the sheet were already in this order, so nothing on it moved; " +
+                             "only filtered-off ones were reordered, and they come back in their new places.";
+        else if (sort.SequenceRunning)
             result["note"] = "The sheet is still animating to this order; it is committed before your next tool call runs.";
     }
 
     private static void RunBy(Args args, SortTool sort, DataSource data, bool isColumn,
-        string axis, int count, Dictionary<string, object> result) {
+        string axis, Dictionary<string, object> result) {
 
         bool hasMeasure = !string.IsNullOrWhiteSpace(args.by.measure);
         bool hasLine = !string.IsNullOrWhiteSpace(args.by.line);
@@ -188,41 +230,71 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         string crossMeasure = measure ?? "sum";
 
         IReadOnlyList<int> live = isColumn ? data.ColumnOrder : data.RowOrder;
-        var ranked = new List<KeyValuePair<double, int>>(count);
-        var unranked = new List<int>();
+        var visible = new HashSet<int>(live);
 
-        for (int i = 0; i < count && i < live.Count; i++) {
-            double score;
-            bool has = hasLine
-                ? (crossLo == crossHi
-                    ? TryCellValue(data, isColumn ? crossLo : i, isColumn ? i : crossLo, out score)
-                    : TryLineMeasure(data, isColumn, i, crossLo, crossHi, crossMeasure, out score))
-                : TryLineMeasure(data, isColumn, i, 0, across - 1, measure, out score);
-            if (has) ranked.Add(new KeyValuePair<double, int>(score, live[i]));
-            else unranked.Add(live[i]);
+        // Every line is ranked, the filtered ones too, so a line filtered off
+        // the sheet comes back where the sort puts it rather than where it was.
+        // A line is scored from its cells on the lines of the other axis that
+        // are on the sheet, whether or not it is on the sheet itself.
+        int lo = hasLine ? crossLo : 0, hi = hasLine ? crossHi : across - 1;
+        string scoreBy = hasLine ? (crossLo == crossHi ? "sum" : crossMeasure) : measure;
+        var ranked = new List<KeyValuePair<double, int>>();
+        var unranked = new List<int>();
+        foreach (int line in data.FullOrder(isColumn)) {
+            if (TryDataScore(data, isColumn, line, lo, hi, scoreBy, out double score))
+                ranked.Add(new KeyValuePair<double, int>(score, line));
+            else unranked.Add(line);
         }
 
-        if (ranked.Count == 0) { result["error"] = $"None of the {axis} had numbers to rank."; return; }
+        if (!ranked.Exists(r => visible.Contains(r.Value))) {
+            result["error"] = $"None of the {axis} had numbers to rank.";
+            return;
+        }
 
-        ranked.Sort((a, b) => biggestFirst ? b.Key.CompareTo(a.Key) : a.Key.CompareTo(b.Key));
+        // Stable, so equal scores keep the order they had.
+        var was = new Dictionary<int, int>(ranked.Count);
+        for (int i = 0; i < ranked.Count; i++) was[ranked[i].Value] = i;
+        ranked.Sort((a, b) => {
+            int by = biggestFirst ? b.Key.CompareTo(a.Key) : a.Key.CompareTo(b.Key);
+            return by != 0 ? by : was[a.Value].CompareTo(was[b.Value]);
+        });
 
+        var full = new List<int>(ranked.Count + unranked.Count);
         var target = new List<int>(live.Count);
-        var scores = new List<object>(ranked.Count);
+        var scores = new List<object>();
         foreach (var r in ranked) {
+            full.Add(r.Value);
+            if (!visible.Contains(r.Value)) continue;
             target.Add(r.Value);
             scores.Add(System.Math.Round(r.Key, 2));
         }
-        target.AddRange(unranked);
+        full.AddRange(unranked);
+        foreach (int line in unranked) if (visible.Contains(line)) target.Add(line);
+        int unrankedShown = target.Count - scores.Count;
 
         result["rankedBy"] = hasLine
             ? DataSource.GroupLabelAt(data, !isColumn, data.GroupOf(!isColumn, crossLo))
               + (crossLo == crossHi ? "" : $" ({crossMeasure} of its columns)")
             : measure;
         result["first"] = biggestFirst ? "biggest" : "smallest";
-        if (ranked.Count <= MaxEchoedLines) result["scores"] = scores;
-        if (unranked.Count > 0) result["unranked"] = unranked.Count;
+        if (scores.Count <= MaxEchoedLines) result["scores"] = scores;
+        if (unrankedShown > 0) result["unranked"] = unrankedShown;
 
-        Commit(sort, data, isColumn, axis, live, target, result);
+        Commit(sort, data, isColumn, axis, live, target, result, full);
+    }
+
+    // A line's score by its place in the data, from its cells on the other
+    // axis's lines lo..hi as they stand on the sheet: the score a line on the
+    // sheet would get, given to a filtered one too.
+    private static bool TryDataScore(DataSource data, bool isColumn, int line, int lo, int hi,
+        string measure, out double score) {
+        IReadOnlyList<int> cross = isColumn ? data.RowOrder : data.ColumnOrder;
+        var acc = new MeasureAcc();
+        for (int j = System.Math.Max(lo, 0); j <= hi && j < cross.Count; j++) {
+            int r = isColumn ? cross[j] : line, c = isColumn ? line : cross[j];
+            if (data.HasValue(r, c)) acc.Add(data.GetValue(r, c));
+        }
+        return acc.TryScore(measure, out score);
     }
 
 
@@ -256,9 +328,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         }
 
         if (clampNote != null) result["note"] = clampNote;
-        List<int> moved = pre.GetRange(fromPos * size, size);
-        pre.RemoveRange(fromPos * size, size);
-        pre.InsertRange(toPos * size, moved);
+        DataSource.MoveGroupWithin(pre, fromPos, toPos, size);
         EchoOrder(data, isColumn, pre, result);
         result["undoable"] = true;
     }

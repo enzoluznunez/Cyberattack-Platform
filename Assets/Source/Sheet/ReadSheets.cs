@@ -15,7 +15,6 @@ public class ReadSheets : MonoBehaviour
         public Vector3 point;
         public Vector3 tip;
         public Vector3 wrist;
-        public Vector3 normal;
     }
 
     public event Action<Reading> OnHover;
@@ -37,11 +36,7 @@ public class ReadSheets : MonoBehaviour
         if (touchInput && GetComponent<SheetTouch>() == null) gameObject.AddComponent<SheetTouch>();
     }
 
-    public void Hover(Reading reading)
-    {
-        if (!Listening) return;
-        OnHover?.Invoke(reading);
-    }
+    public void Hover(Reading reading) => OnHover?.Invoke(reading);
 
     public void Select(Reading reading)
     {
@@ -87,7 +82,6 @@ public class ReadSheets : MonoBehaviour
         Reading reading = Describe(hit.cube, hit.point);
         reading.tip = tip;
         reading.wrist = wrist;
-        reading.normal = hit.normal;
         return reading;
     }
 }

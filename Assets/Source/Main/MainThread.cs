@@ -9,12 +9,7 @@ public class MainThread : MonoBehaviour {
     private static readonly ConcurrentQueue<Action> queue = new ConcurrentQueue<Action>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-    private static void Bootstrap() {
-        if (instance != null) return;
-        var go = new GameObject("MainThread");
-        instance = go.AddComponent<MainThread>();
-        DontDestroyOnLoad(go);
-    }
+    private static void Bootstrap() => Spawn.Once(ref instance);
 
     public static Task Run(Action action) {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

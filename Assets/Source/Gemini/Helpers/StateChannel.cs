@@ -16,9 +16,7 @@ public static class StateChannel
         }
     }
 
-    public static bool Suppressed { get; set; }
-
-    public static bool UserDriven => !InAgentCall && !Suppressed;
+    public static bool UserDriven => !InAgentCall;
 
     private static readonly List<string> _agentBatch = new List<string>();
     private static readonly List<string> _userQueue = new List<string>();
@@ -26,7 +24,7 @@ public static class StateChannel
     private static readonly List<string> _stateOrder = new List<string>();
     private static bool _snapshotWanted;
 
-    public static void Record(string source, string what)
+    public static void Record(string what)
     {
         if (string.IsNullOrEmpty(what)) return;
 
@@ -36,7 +34,6 @@ public static class StateChannel
             return;
         }
 
-        if (Suppressed) return;
 
         _userQueue.Add(what);
         while (_userQueue.Count > MaxUserQueue) _userQueue.RemoveAt(0);
@@ -61,7 +58,7 @@ public static class StateChannel
     public static void RecordState(string key, string what)
     {
         SetState(key, what);
-        Record(key, what);
+        Record(what);
     }
 
     public static void ClearPending()
@@ -71,8 +68,6 @@ public static class StateChannel
         _agentDepth = 0;
         _snapshotWanted = false;
         StalePositions.ClearAll();
-        PanelGuard.ClearToolPanel();
-        DescribeDataset.Forget();
     }
 
     public static void RequestSnapshot()

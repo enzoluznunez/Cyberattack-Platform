@@ -1,17 +1,18 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
-using UnityEngine.Networking;
+using System.Threading.Tasks;
 
-// Lists one sheet per metro at startup, from the metros /map names: each
+// Lists the sheets at startup, from the regions and metros /map names: one for
+// the whole United States, one per region, and one per metro, leaving out a
+// metro none of whose breaches reports a figure, as it has no rows. Each
 // becomes a listed dataset whose payload is the /sheet URL that draws it. A
 // listed sheet is the database as it stood when the app started rather than
-// an export of how it once stood. Nothing is opened, since the app starts on
-// the national map, which shows no sheet; each region's largest metro, the
-// sheet a region's map opens on, is read behind it, so sliding to a region
-// never waits on the network. Another metro is read when its pin is poked.
+// an export of how it once stood. Nothing is opened here; the map opens the
+// national sheet once it is drawn. The national sheet and each region's, the
+// sheets a map opens on, are read behind it, so sliding to a map never waits
+// on the network; every metro's is read after them, before the app is used.
 public class ViewCatalog : MonoBehaviour
 {
     public ManageDatasets manageDatasets;
@@ -28,93 +29,102 @@ public class ViewCatalog : MonoBehaviour
     // database (the map) knows when it can.
     public static bool Configured { get; private set; }
 
+    // Whether the sheets are listed and queued to be read, or never will be
+    // (no map to list them from), so the loading phase knows what it waits on.
+    public static bool Settled { get; private set; }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => Configured = false;
+    private static void ResetStatics()
+    {
+        Configured = false;
+        Settled = false;
+    }
 
     private void Start()
     {
         if (manageDatasets == null) manageDatasets = GetComponent<ManageDatasets>();
-        if (manageDatasets == null) manageDatasets = FindAnyObjectByType<ManageDatasets>();
-
-        if (manageDatasets == null)
-        {
-            Debug.LogError("[ViewCatalog] No ManageDatasets in the scene; no sheet will be listed.");
-            return;
-        }
+        if (manageDatasets == null) manageDatasets = Scene.Datasets;
 
         StartCoroutine(Bootstrap());
     }
 
     private IEnumerator Bootstrap()
     {
-        yield return ReadLine(apiUrlFile, configured => CyberApi.BaseUrl = configured);
+        // Both read at once; neither waits on the other.
+        Task<string> url = ReadLine(apiUrlFile);
+        Task<string> key = ReadLine(apiKeyFile);
+        yield return new WaitUntil(() => url.IsCompleted && key.IsCompleted);
+
+        if (!string.IsNullOrEmpty(url.Result)) CyberApi.BaseUrl = url.Result;
         Debug.Log($"[ViewCatalog] Breach database at {CyberApi.BaseUrl}.");
 
-        yield return ReadLine(apiKeyFile, key => CyberApi.ApiKey = key);
+        if (!string.IsNullOrEmpty(key.Result)) CyberApi.ApiKey = key.Result;
         if (string.IsNullOrEmpty(CyberApi.ApiKey))
             Debug.LogWarning($"[ViewCatalog] No '{apiKeyFile}' in StreamingAssets; requests carry no " +
                              "API key, which only a server on this machine will accept.");
 
+        // The map asks the database too, so the address and key are read even
+        // with nowhere to list the sheets.
         Configured = true;
 
-        System.Threading.Tasks.Task<BreachMap.Answer> map = BreachMap.Fetch();
+        if (manageDatasets == null)
+        {
+            Debug.LogError("[ViewCatalog] No ManageDatasets in the scene; no sheet will be listed.");
+            Settled = true;
+            yield break;
+        }
+
+        Task<BreachMap.Answer> map = BreachMap.Fetch();
         while (!map.IsCompleted) yield return null;
-        if (map.Status != System.Threading.Tasks.TaskStatus.RanToCompletion)
+        if (map.Status != TaskStatus.RanToCompletion)
         {
             // The map says so in its own notice.
             Debug.LogWarning($"[ViewCatalog] No metros to list: {map.Exception?.GetBaseException().Message}");
+            Settled = true;
             yield break;
         }
         ListMetros(map.Result);
+        Settled = true;
     }
 
     // Where the database is and how to be let in are configuration, not data:
     // one line each in StreamingAssets, so a build is pointed and keyed without
     // editing a source file. A file that is absent or empty leaves the default.
-    private IEnumerator ReadLine(string fileName, Action<string> apply)
-    {
-        if (string.IsNullOrEmpty(fileName)) yield break;
-
-        string path = Path.Combine(Application.streamingAssetsPath, fileName);
-        string url = path.Contains("://") ? path : "file://" + path;
-
-        using (UnityWebRequest www = UnityWebRequest.Get(url))
-        {
-            yield return www.SendWebRequest();
-
-            if (www.result != UnityWebRequest.Result.Success) yield break;
-
-            string line = www.downloadHandler.text.Trim();
-            if (line.Length > 0) apply(line);
-        }
-    }
+    private static Task<string> ReadLine(string fileName) =>
+        string.IsNullOrEmpty(fileName) ? Task.FromResult<string>(null) : CyberApi.ReadStreamingLine(fileName);
 
     private void ListMetros(BreachMap.Answer map)
     {
+        const string Rows = "a row each: its revenue, net income, assets, book value, market cap and stock " +
+                            "price, each bar as tall as its place among every US breach.";
+
+        var entries = new List<(string, string, string)>();
+        entries.Add((UsSheetUrl(), National,
+            $"Every breach at a company headquartered in the United States, every region together, {Rows}"));
+        foreach (BreachMap.Region region in map.regions)
+            entries.Add((RegionSheetUrl(region.region), Title(region.region),
+                $"Every breach at a company headquartered in the {Title(region.region)} region, metro by " +
+                $"metro, {Rows}"));
+
         List<BreachMap.Metro> metros = map.Metros();
-        var entries = new List<(string, string, string)>(metros.Count);
         foreach (BreachMap.Metro metro in metros)
         {
+            if (metro.charted == 0) continue;
             entries.Add((SheetUrl(metro.name), metro.name,
-                $"Every breach at a company headquartered in the {metro.name} metro ({Title(metro.region)}), " +
-                "a row each: its revenue, net income, assets, book value, market cap and stock price, each " +
-                "bar as tall as its place among every US breach."));
+                $"Every breach at a company headquartered in the {metro.name} metro ({Title(metro.region)}), {Rows}"));
         }
         manageDatasets.AddCatalogEntries(entries);
-        Debug.Log($"[ViewCatalog] Listed {entries.Count} metros; reading each region's largest behind it.");
+        Debug.Log($"[ViewCatalog] Listed {entries.Count} sheets; reading them all before the map opens.");
 
-        var read = new HashSet<string>();
-        foreach (BreachMap.Metro metro in metros)
-            if (read.Add(metro.region)) manageDatasets.Preload(manageDatasets.IndexOf(SheetUrl(metro.name)));
+        // The US sheet, the regions', then every metro's, all while the app is
+        // loading (LoadingPhase), so poking a pin never waits on the network
+        // or a parse.
+        foreach (var entry in entries)
+            manageDatasets.Preload(manageDatasets.IndexOf(entry.Item1));
     }
 
-    // The largest metro of a region, whose sheet its map opens on, or null.
-    public static string LargestMetro(BreachMap.Answer map, string region)
-    {
-        foreach (BreachMap.Metro metro in map.Metros())
-            if (metro.region == region) return metro.name;
-        return null;
-    }
+    // What the national sheet and map are called.
+    public const string National = "United States";
 
     // 'US West' -> 'West', as the map and the rail name it.
     public static string Title(string region) =>
@@ -122,5 +132,12 @@ public class ViewCatalog : MonoBehaviour
 
     // The request that draws one metro's sheet.
     public static string SheetUrl(string metro) =>
-        CyberApi.BaseUrl.TrimEnd('/') + "/sheet?metro=" + Uri.EscapeDataString(metro);
+        CyberApi.Url("/sheet?metro=" + Uri.EscapeDataString(metro));
+
+    // The request that draws one region's sheet ('US West').
+    public static string RegionSheetUrl(string region) =>
+        CyberApi.Url("/sheet?region=" + Uri.EscapeDataString(region));
+
+    // The request that draws the whole country's sheet.
+    public static string UsSheetUrl() => CyberApi.Url("/sheet");
 }

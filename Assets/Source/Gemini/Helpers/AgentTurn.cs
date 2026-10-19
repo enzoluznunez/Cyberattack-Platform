@@ -25,10 +25,11 @@ public static class AgentTurn
         return Mathf.Max(0, edits.Count - BaselineOf(edits));
     }
 
-    public static void UserTookControl(string reason)
+    public static void UserTookControl()
     {
         ManageSheets sheets = Scene.Sheets;
         if (sheets != null) sheets.Interrupt();
+        if (MapCarousel.Instance != null) MapCarousel.Instance.CompleteAgentMotion();
 
         SortTool sort = Scene.Sort;
         if (sort != null && sort.HaltOrderSequence() && sheets != null) sheets.AmendReorderRecord();
@@ -41,8 +42,7 @@ public static class AgentTurn
         int stamped = ManageDatasets.ActiveEdits.StampGroup(BaselineOf(ManageDatasets.ActiveEdits));
         if (stamped <= 0) return;
 
-        StateChannel.Record("Assistant",
-            $"the user stopped you after {stamped} of your changes had been applied");
+        StateChannel.Record($"the user stopped you after {stamped} of your changes had been applied");
 
         if (sheets != null)
             Notices.Show(sheets, "Assistant Stopped", stamped == 1

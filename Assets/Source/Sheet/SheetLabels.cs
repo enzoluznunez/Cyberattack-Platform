@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.TextCore;
 
 public struct SheetLabelStyle
 {
@@ -43,12 +42,17 @@ public class SheetLabels
     // against the bars instead of running into one another at the small end.
     private const float ReferenceCellSize = 0.1f;
 
+    // How much larger than that fixed scale the titles are drawn, at the
+    // sheet's default size.
+    private const float TitleSize = 1.2f;
+
     private float _textScale = 1f;
     private readonly Side _cols = new Side();
     private readonly Side _rows = new Side();
     private Transform _root;
     private int _used;
     private bool _placed;
+    private bool _shown = true;
 
     private float _lowZ;
     private float _highZ;
@@ -58,9 +62,75 @@ public class SheetLabels
 
     public SheetLabels(Transform owner) => _owner = owner;
 
+    // While the sheet is hidden its titles are placed at once but written a
+    // few a frame (Pump): writing one remakes its text mesh, and a whole
+    // sheet's worth at once is a stall. Flush writes the rest, as the sheet
+    // is shown.
+    public bool Defer { get; set; }
+
+    private readonly List<(TextMeshPro label, string text)> _unwritten = new List<(TextMeshPro, string)>();
+    private int _written;
+
+    private static readonly Unity.Profiling.ProfilerMarker RebuildMarker =
+        new Unity.Profiling.ProfilerMarker("SheetLabels.Rebuild");
+    private static readonly Unity.Profiling.ProfilerMarker PumpMarker =
+        new Unity.Profiling.ProfilerMarker("SheetLabels.Pump");
+
+    public void Pump(double budgetMs)
+    {
+        if (_written >= _unwritten.Count) return;
+        using var marker = PumpMarker.Auto();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (_written < _unwritten.Count && clock.Elapsed.TotalMilliseconds < budgetMs)
+        {
+            (TextMeshPro label, string text) = _unwritten[_written++];
+            if (label == null) continue;
+            label.text = text;
+            label.ForceMeshUpdate();
+        }
+    }
+
+    // Makes titles, hidden, up to 'count', within 'budgetMs' this frame.
+    // True once there are that many.
+    public bool Reserve(int count, double budgetMs)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (_pool.Count < count)
+        {
+            if (clock.Elapsed.TotalMilliseconds >= budgetMs) return false;
+            TextMeshPro label = Acquire(_pool.Count);
+            if (label == null) return true;
+            label.renderer.enabled = false;
+        }
+        return true;
+    }
+
+    public void Flush()
+    {
+        while (_written < _unwritten.Count)
+        {
+            (TextMeshPro label, string text) = _unwritten[_written++];
+            if (label != null) label.text = text;
+        }
+        _unwritten.Clear();
+        _written = 0;
+    }
+
+    // Hidden, the titles stop turning to the viewer; shown again, they snap
+    // to whichever edges face the viewer by then. They stop drawing rather
+    // than switching off, so showing them again costs nothing.
+    public void SetShown(bool on)
+    {
+        if (_shown == on) return;
+        _shown = on;
+        if (on) _placed = false;
+        for (int i = 0; i < _used && i < _pool.Count; i++)
+            if (_pool[i] != null) _pool[i].renderer.enabled = on;
+    }
+
     public void FaceViewer(float dt)
     {
-        if (_used == 0 || _owner == null) return;
+        if (_used == 0 || _owner == null || !_shown) return;
 
         Transform cam = CameraRig.MainTransform;
         if (cam == null) return;
@@ -210,6 +280,33 @@ public class SheetLabels
         return "'" + t.Substring(2);
     }
 
+    // Adds every glyph a dataset's titles use to the body font now, when it
+    // is read, rather than mid-switch when its sheet is first built. A metric's
+    // name is a run of its columns' titles, so those are covered too.
+    public static void WarmGlyphs(DataSource data)
+    {
+        TMP_FontAsset font = Style.BodyFont;
+        if (font == null || data == null) return;
+        // A static font holds what it was baked with and takes nothing more.
+        if (font.atlasPopulationMode != AtlasPopulationMode.Dynamic) return;
+
+        var seen = new HashSet<char>();
+        var missing = new System.Text.StringBuilder();
+        void Collect(IReadOnlyList<string> titles)
+        {
+            for (int i = 0; i < titles.Count; i++)
+            {
+                string t = titles[i];
+                if (t == null) continue;
+                foreach (char c in t)
+                    if (seen.Add(c) && !font.characterLookupTable.ContainsKey(c)) missing.Append(c);
+            }
+        }
+        Collect(data.RowTitles);
+        Collect(data.ColumnTitles);
+        if (missing.Length > 0) font.TryAddCharacters(missing.ToString(), out _);
+    }
+
     // How long a title runs, in the sheet's metres, at the size titles are
     // drawn on a sheet of this cell size: its glyphs' advances in the body
     // font, as TextMeshPro sets them. The sheet spaces its rows by the longest.
@@ -219,9 +316,11 @@ public class SheetLabels
 
         TMP_FontAsset font = Style.BodyFont;
         float units;
+        // Read only: the glyphs were added when the dataset was read
+        // (WarmGlyphs), and asking a static font to add any logs a warning,
+        // with its stack trace in a development build, for every title.
         if (font != null && font.faceInfo.pointSize > 0f)
         {
-            font.TryAddCharacters(text, out _);
             float advance = 0f;
             foreach (char c in text)
                 advance += font.characterLookupTable.TryGetValue(c, out TMP_Character glyph)
@@ -232,20 +331,26 @@ public class SheetLabels
         }
         else units = text.Length * Style.Body * 0.06f;
 
-        return units * Style.WorldTextScale * (cellSize > 0f ? cellSize / ReferenceCellSize : 1f);
+        return units * Style.WorldTextScale * TextScaleFor(cellSize);
     }
 
-    public void Rebuild(DataSource data, int rowMin, int rowMax, int colMin, int colMax,
-        float cellSize, float rowPitch, float groupGap, float cubeSide, float baseY, SheetLabelStyle style)
+    // How large titles are drawn on cells 'cellSize' across.
+    private static float TextScaleFor(float cellSize) =>
+        TitleSize * (cellSize > 0f ? cellSize / ReferenceCellSize : 1f);
+
+    public void Rebuild(CreateSheet owner, DataSource data, int rowMin, int rowMax, int colMin, int colMax,
+        float cellSize, float cubeSide, float baseY, SheetLabelStyle style)
     {
+        using var marker = RebuildMarker.Auto();
         _used = 0;
+        _unwritten.Clear();
+        _written = 0;
         _colLabel.Clear();
         _rowLabel.Clear();
         _colGroup.Clear();
         _colGroupSize = data != null ? data.ColumnGroupSize : 1;
-        if (_colGroupSize <= 1) groupGap = 0f;
         _colGroupOut = cellSize * 0.85f;
-        _textScale = cellSize > 0f ? cellSize / ReferenceCellSize : 1f;
+        _textScale = TextScaleFor(cellSize);
 
         _cols.fade = 1f;
         _cols.flipping = false;
@@ -254,19 +359,21 @@ public class SheetLabels
 
         if (data != null && style.show && cellSize > 0f)
         {
-            float centerX = CreateSheet.Center(colMin, colMax, cellSize, _colGroupSize, groupGap);
-            float centerZ = CreateSheet.Center(rowMin, rowMax, rowPitch, 1, 0f);
             float half = cubeSide * 0.5f;
             float y = baseY;
 
-            float ColX(int vc) => CreateSheet.Raw(vc, cellSize, _colGroupSize, groupGap) - centerX;
-            float RowZ(int vr) => CreateSheet.Raw(vr, rowPitch, 1, 0f) - centerZ;
+            // Each title stands at its line's place on the sheet, which a
+            // hidden line keeps empty; the edges the titles run along are
+            // the sheet's own, every slot included, so hiding an end line
+            // moves none of them.
+            float ColX(int vc) => owner.LineCoord(true, vc);
+            float RowZ(int vr) => owner.LineCoord(false, vr);
 
             _margin = cellSize;
-            _lowZ = RowZ(rowMin) - half - style.gap;
-            _highZ = RowZ(rowMax) + half + style.gap;
-            _lowX = ColX(colMin) - half - style.gap;
-            _highX = ColX(colMax) + half + style.gap;
+            _lowZ = owner.SlotCoord(false, owner.FirstSlot(false)) - half - style.gap;
+            _highZ = owner.SlotCoord(false, owner.LastSlot(false)) + half + style.gap;
+            _lowX = owner.SlotCoord(true, owner.FirstSlot(true)) - half - style.gap;
+            _highX = owner.SlotCoord(true, owner.LastSlot(true)) + half + style.gap;
 
             IReadOnlyList<int> colOrder = data.ColumnOrder;
             IReadOnlyList<string> colTitles = data.ColumnTitles;
@@ -317,7 +424,7 @@ public class SheetLabels
         }
 
         for (int i = _used; i < _pool.Count; i++)
-            if (_pool[i] != null) _pool[i].gameObject.SetActive(false);
+            if (_pool[i] != null) _pool[i].renderer.enabled = false;
     }
 
     private TextMeshPro Place(string text, Vector3 localPosition, Color color, Quaternion facing,
@@ -328,7 +435,8 @@ public class SheetLabels
         TextMeshPro label = Acquire(_used++);
         if (label == null) return null;
 
-        label.text = text;
+        if (Defer) _unwritten.Add((label, text));
+        else label.text = text;
         label.color = color;
 
         Transform t = label.transform;
@@ -336,7 +444,7 @@ public class SheetLabels
         t.localRotation = facing;
         t.localScale = Vector3.one * (Style.WorldTextScale * scale * _textScale);
 
-        label.gameObject.SetActive(true);
+        label.renderer.enabled = _shown;
         return label;
     }
 

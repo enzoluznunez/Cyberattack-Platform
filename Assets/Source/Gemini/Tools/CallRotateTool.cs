@@ -34,14 +34,14 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
     protected override void Run(Args args, Dictionary<string, object> result) {
         if (!EnsureToolSelected(ToolType.Rotate, result)) return;
 
-        string mode = string.IsNullOrWhiteSpace(args.mode) ? "by" : args.mode.Trim().ToLowerInvariant();
+        string mode = args.mode ?? "by";
 
         if (!TryResolveSheet(result, "rotate", out var mgr, out var sheet)) return;
 
         Apply(mgr, sheet, mode, args, result);
     }
 
-    private static bool Apply(ManageSheets mgr, CreateSheet sheet, string mode, Args args, Dictionary<string, object> step) {
+    private static void Apply(ManageSheets mgr, CreateSheet sheet, string mode, Args args, Dictionary<string, object> step) {
         switch (mode) {
             case "by": By(mgr, sheet, args, step); break;
             case "face": Face(mgr, sheet, step); break;
@@ -49,17 +49,12 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
                 ApplyPieceTransform(mgr, sheet, t => t.localRotation = Quaternion.identity);
                 step["rotated"] = "reset";
                 break;
-            default: step["error"] = $"Unknown mode '{mode}'. Use 'by', 'face', or 'reset'."; return false;
         }
-        return !IsRefusal(step);
     }
 
     private static void By(ManageSheets mgr, CreateSheet sheet, Args args, Dictionary<string, object> result) {
         string direction = args.direction?.Trim().ToLowerInvariant();
-        float sign;
-        if (direction == "right") sign = 1f;
-        else if (direction == "left") sign = -1f;
-        else {
+        if (!TryTurnSign(direction, out float sign)) {
             NeedChoice(result, "direction", new List<string> { "left", "right" },
                 "Which way should it turn, left or right? Mode 'face' or 'reset' needs no direction.");
             return;

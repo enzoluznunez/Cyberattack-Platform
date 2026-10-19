@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public static class Notices
@@ -10,12 +9,9 @@ public static class Notices
     private static int _generation;
     private static Tooltip _tooltip;
 
-    public static void EditsDropped(MonoBehaviour host, string message) =>
-        Show(host, "Edits Cleared", message);
-
     public static void Show(MonoBehaviour host, string title, string message)
     {
-        StateChannel.Record("Notice", message);
+        StateChannel.Record(message);
 
         if (Time.frameCount == _lastToastFrame) return;
         _lastToastFrame = Time.frameCount;

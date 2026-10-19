@@ -27,9 +27,18 @@ public static class Fingertips
     {
         get
         {
-            if (Time.unscaledTime >= _nextScan) Rescan();
+            if (Time.unscaledTime >= _nextScan && !BothFound()) Rescan();
             return _all;
         }
+    }
+
+    // Both hands' pokes found and still there: nothing more to look for.
+    private static bool BothFound()
+    {
+        if (_all.Count < 2) return false;
+        for (int i = 0; i < _all.Count; i++)
+            if (_all[i].poke == null) return false;
+        return true;
     }
 
     private static void Rescan()

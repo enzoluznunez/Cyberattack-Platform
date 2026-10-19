@@ -39,8 +39,22 @@ public sealed class MapAtlas
         // a pin reaching over the region's border is cut along this. Null on
         // the national map, where nothing is cut.
         public float[] cell;
+        // The same share of the plane as triangles, so a pin can be cut to
+        // it exactly, a triangle at a time. Empty on the national map.
+        public float[] cellVertices = Array.Empty<float>();
+        public int[] cellTriangles = Array.Empty<int>();
+        // On the national map, each region's land as the national land was
+        // joined from it, so the colours cover it exactly; none on a region's.
+        public Fill[] fills = Array.Empty<Fill>();
 
         public bool IsNational => region == null;
+    }
+
+    public sealed class Fill
+    {
+        public string region;
+        public float[] vertices;
+        public int[] triangles;
     }
 
     private static double _radiusKm = 6371.0088;
@@ -141,6 +155,23 @@ public sealed class MapAtlas
             };
             if (m.TryGetProperty("cell", out JsonElement cell) && cell.GetArrayLength() > 0)
                 area.cell = Floats(cell[0]);
+            if (m.TryGetProperty("cellMesh", out JsonElement cellMesh))
+            {
+                area.cellVertices = Floats(cellMesh.GetProperty("vertices"));
+                area.cellTriangles = Ints(cellMesh.GetProperty("triangles"));
+            }
+            if (m.TryGetProperty("fills", out JsonElement fills))
+            {
+                var found = new List<Fill>();
+                foreach (JsonElement f in fills.EnumerateArray())
+                    found.Add(new Fill
+                    {
+                        region = f.GetProperty("region").GetString(),
+                        vertices = Floats(f.GetProperty("vertices")),
+                        triangles = Ints(f.GetProperty("triangles"))
+                    });
+                area.fills = found.ToArray();
+            }
             atlas._areas.Add(area);
         }
 
