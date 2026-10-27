@@ -1,6 +1,6 @@
 # Cyberattack Platform
 
-https://github.com/user-attachments/assets/9ea6dd42-2233-498c-93cc-3f85cd7af29a
+https://github.com/user-attachments/assets/e2af4385-7724-4000-9c37-f820ee0e225b
 
 A mixed-reality data visualization for Meta Quest 3, built in Unity, for exploring
 cyberattacks on publicly traded US companies. In passthrough, a map of the United States
