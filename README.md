@@ -9,9 +9,6 @@ the country, its six regions and their metros on the map; the sheet beside it sh
 place's breaches. You reshape the sheet with your hands, and a voice assistant can drive
 the same tools and look up individual breaches when asked.
 
-<!-- TODO: add screenshot or GIF of the map and sheet in passthrough -->
-<!-- ![The map panel and its sheet in passthrough](docs/screenshot.png) -->
-
 **Status:** complete (v1.0). [![Pipeline tests](https://github.com/enzoluznunez/Cyberattack-Platform/actions/workflows/pipeline-tests.yml/badge.svg)](https://github.com/enzoluznunez/Cyberattack-Platform/actions/workflows/pipeline-tests.yml)
 
 ## Features
