@@ -67,12 +67,14 @@ sysinfo.txt
 # Mono auto generated files
 mono_crash.*
 
-# Builds
+# Builds and signing keys
 *.apk
 *.aab
 *.unitypackage
 *.unitypackage.meta
 *.app
+*.keystore
+*.jks
 
 # Crashlytics generated file
 crashlytics-build.properties
@@ -118,8 +120,7 @@ InitTestScene*.unity*
 .DS_Store
 ProjectSettings/AI.Assistant/
 
-# Build intermediates and local captures
-[Oo]bj/
+# Local profiler captures
 /ProfilerCaptures/
 
 # Plastic SCM leftovers (project uses git)
@@ -133,7 +134,7 @@ ProjectSettings/AI.Assistant/
 /pipeline/.venv/
 __pycache__/
 .pytest_cache/
-/pipeline/.coverage
+.coverage
 # Project settings and keys; .env.example shows the shape
 /pipeline/.env
 # Local copies of the raw CSVs; the originals live in gs://cyberattack-platform-raw
