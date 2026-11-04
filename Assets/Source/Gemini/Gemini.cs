@@ -212,7 +212,7 @@ public static class Gemini {
             actionSignal = new SemaphoreSlim(0);
             if (micGranted) {
                 Voip.init();
-                Voip.turret += sendTick;
+                Voip.FrameCaptured += sendTick;
             }
         }
         catch (Exception e) {
@@ -270,7 +270,7 @@ public static class Gemini {
             sessionCts = null;
             sessionTask = null;
             bool hadMic = micGranted;
-            if (hadMic) Voip.turret -= sendTick;
+            if (hadMic) Voip.FrameCaptured -= sendTick;
             runAudio(() => {
                 if (hadMic) Voip.destroy();
                 Speaker.destroy();

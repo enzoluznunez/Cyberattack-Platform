@@ -1,5 +1,5 @@
 {
-    "name": "Study.Runtime",
+    "name": "CyberattackPlatform",
     "rootNamespace": "",
     "references": [
         "Oculus.VR",
