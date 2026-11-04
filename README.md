@@ -9,11 +9,53 @@ the country, its six regions and their metros on the map; the sheet beside it sh
 place's breaches. You reshape the sheet with your hands, and a voice assistant can drive
 the same tools and look up individual breaches when asked.
 
+<!-- TODO: add screenshot or GIF of the map and sheet in passthrough -->
+<!-- ![The map panel and its sheet in passthrough](docs/screenshot.png) -->
+
+**Status:** complete (v1.0). [![Pipeline tests](https://github.com/enzoluznunez/Cyberattack-Platform/actions/workflows/pipeline-tests.yml/badge.svg)](https://github.com/enzoluznunez/Cyberattack-Platform/actions/workflows/pipeline-tests.yml)
+
+## Features
+
+- A map of the United States, its six regions and their metros, with pins sized by breach count
+- A 3D bar chart (the sheet) of each place's breaches across six company financial figures
+- Hand-tracked tools to move, rotate, scale, profile, sort and filter the sheet, with undo
+- A Gemini voice assistant that can drive the same tools and answer questions about the data
+- A Google Cloud data API, tested and deployed automatically on every push
+
+## Tech stack
+
+| Part | Built with |
+|---|---|
+| Headset app | Unity 6 (6000.4.0f1), C#, URP, Meta XR Core SDK, Interaction SDK, MR Utility Kit, OpenXR |
+| Voice assistant | Gemini Live API (`gemini-3.1-flash-live-preview`) through the Google Gen AI .NET SDK |
+| Data API | Python 3.13, FastAPI, BigQuery, Docker on Cloud Run, behind API Gateway |
+| Data pipeline | pandas, Cloud Storage, BigQuery |
+| CI/CD | Cloud Build (full suite and deploy), GitHub Actions (offline tests) |
+
+## Architecture
+
+```
+Meta Quest 3 app ──(Google Cloud API key)──> API Gateway ──> Cloud Run (FastAPI) ──> BigQuery
+       │                                                                          ▲
+       └──(Gemini API key)──> Gemini Live API          Cloud Storage exports ──rebuild.py
+```
+
+| Path | What it holds |
+|---|---|
+| `Assets/Source/` | The app's C# code: map, sheet, tools, UI, data access and the assistant |
+| `Assets/Scenes/File Reader.unity` | The app's one scene |
+| `pipeline/` | Data cleaning, the API, its tests and deploy scripts (see `pipeline/README.md`) |
+| `cloudbuild.yaml` | Cloud Build: tests every push, deploys `main` |
+| `.github/workflows/` | GitHub Actions: the tests that need no Google Cloud access |
+
+## Contents
+
 - [What you will see](#what-you-will-see)
 - [Using the app](#using-the-app)
 - [Setting up a build](#setting-up-a-build)
 - [Changing the breach database API](#changing-the-breach-database-api)
 - [FAQ](#faq)
+- [License](#license)
 
 ## What you will see
 
@@ -211,6 +253,9 @@ Google Cloud console under **Cloud Build → History** (region `us-east1`).
 `pipeline/README.md` covers what the pipeline may and may not touch, and the changes that
 still go through `deploy.sh` by hand.
 
+GitHub Actions also runs the pipeline tests that need no Google Cloud access on every
+push and pull request, so their result shows on GitHub.
+
 ## FAQ
 
 ### Getting started
@@ -336,3 +381,7 @@ monthly budget alert in case it ever does not.
 **Does the app store anything about me?**
 No. It reads breach data, and sends your speech to the assistant only while the assistant
 is on.
+
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE).

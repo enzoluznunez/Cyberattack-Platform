@@ -4,7 +4,7 @@ using UnityEngine.Events;
 
 public static class Voip {
 
-    public static UnityAction<byte[]> turret;
+    public static UnityAction<byte[]> FrameCaptured;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 
@@ -17,7 +17,7 @@ public static class Voip {
 
     [MonoPInvokeCallback(typeof(fnPtr))]
     private static void callbackDef(byte[] data, int numFrames) {
-        turret?.Invoke(data);
+        FrameCaptured?.Invoke(data);
     }
 
     private static fnPtr callback = callbackDef;
