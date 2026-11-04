@@ -1,0 +1,40 @@
+# The pipeline tests that need no Google Cloud access: the generated C# contract,
+# the gateway config, the map outlines, metros, metrics and the sheet CSVs.
+# The full suite, which rebuilds a BigQuery test dataset, runs in Cloud Build
+# (cloudbuild.yaml) on every push, and that pipeline also deploys main.
+name: Pipeline tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pipeline/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run offline tests
+        run: >
+          python -m pytest -q
+          tests/test_codegen.py
+          tests/test_gateway.py
+          tests/test_maps.py
+          tests/test_metrics.py
+          tests/test_metros.py
+          tests/test_sheetcsv.py
