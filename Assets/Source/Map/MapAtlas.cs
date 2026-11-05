@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using UnityEngine;
 
-// The United States and its six regions, as pipeline/maps.py drew them into
+// The United States and its six regions, as backend/maps.py drew them into
 // Resources/Maps/us.json: flat, in the national map's kilometres. Every map
 // shares one projection, so a city is at one place on all of them, and a
 // region's map is the national map cut along its borders. The app ships the
@@ -104,7 +104,7 @@ public sealed class MapAtlas
     }
 
     // Lambert azimuthal equal-area on the sphere, in kilometres east and north
-    // of (lon0, lat0): pipeline/maps.py's project(), which drew the outlines.
+    // of (lon0, lat0): backend/maps.py's project(), which drew the outlines.
     public static Vector2 Project(double lon, double lat, double lon0, double lat0)
     {
         const double rad = Math.PI / 180.0;
@@ -123,7 +123,7 @@ public sealed class MapAtlas
         TextAsset asset = Resources.Load<TextAsset>(ResourcePath);
         if (asset == null)
         {
-            Debug.LogError($"[MapAtlas] No outlines at Resources/{ResourcePath}; run pipeline/maps.py.");
+            Debug.LogError($"[MapAtlas] No outlines at Resources/{ResourcePath}; run backend/maps.py.");
             return null;
         }
         byte[] bytes = asset.bytes;

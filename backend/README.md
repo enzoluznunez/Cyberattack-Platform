@@ -1,4 +1,4 @@
-# pipeline
+# backend
 
 Turns the two raw exports into the tables the app draws from, and serves them.
 
@@ -36,7 +36,7 @@ gcloud storage cp breach_events.csv gs://cyberattack-platform-raw/
 python rebuild.py
 ```
 
-Local copies can sit in `pipeline/data/`, which git ignores.
+Local copies can sit in `backend/data/`, which git ignores.
 
 ## Rebuilding the data
 
