@@ -6,7 +6,7 @@ using UnityEngine;
 [RequireComponent(typeof(BoxCollider), typeof(Rigidbody))]
 public class SortLineProxy : MonoBehaviour
 {
-    public CreateSheet sheet;
+    public SheetPiece sheet;
     public bool columns;
     public int block;
 
@@ -53,7 +53,7 @@ public class SortLineProxy : MonoBehaviour
     // Stands the handle on a block of a sheet's lines, sliding along that
     // axis from the first block's place to the last. False, leaving it put
     // away, when there is no such block.
-    public bool Place(CreateSheet owner, bool columns, int block, float height)
+    public bool Place(SheetPiece owner, bool columns, int block, float height)
     {
         if (owner == null) return false;
 

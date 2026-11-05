@@ -36,7 +36,7 @@ public abstract class Tool : MonoBehaviour
     protected void TintLine(ReadSheets.Reading reading, bool columns, float swell = Style.PreviewSwell) =>
         TintLine(reading.sheet, columns, columns ? reading.visCol : reading.visRow, swell);
 
-    protected void TintLine(CreateSheet sheet, bool columns, int line, float swell = Style.PreviewSwell)
+    protected void TintLine(SheetPiece sheet, bool columns, int line, float swell = Style.PreviewSwell)
     {
         int lo = line, hi = line;
         if (columns) sheetManager.ColumnStripSpan(line, out lo, out hi);

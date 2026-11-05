@@ -14,7 +14,7 @@ public abstract class GrabTool : Tool
 
     // What this tool's grab adds to a sheet, added while the app loads
     // (ManageSheets.PrepareRoom) rather than the first time the tool is used.
-    protected virtual void PrepareSheet(CreateSheet sheet) { }
+    protected virtual void PrepareSheet(SheetPiece sheet) { }
 
     protected override void OnToolStart()
     {
@@ -49,7 +49,7 @@ public abstract class GrabTool : Tool
         sheetManager.SetGrabbable(false);
     }
 
-    private void OnSheetMoveCommitted(CreateSheet sheet, Vector3 prePos, Quaternion preRot, Vector3 preScale)
+    private void OnSheetMoveCommitted(SheetPiece sheet, Vector3 prePos, Quaternion preRot, Vector3 preScale)
     {
         if (!Active || sheet == null || toolManager == null || sheetManager == null) return;
 

@@ -106,7 +106,7 @@ public abstract class AgenticTool : Function {
     }
 
     // There is one sheet, so there is nothing to pick: the bounds are its bounds.
-    private static CreateSheet ResolvedSheet() {
+    private static SheetPiece ResolvedSheet() {
         ManageSheets mgr = Scene.Sheets;
         return mgr != null ? mgr.Sheet : null;
     }
@@ -115,7 +115,7 @@ public abstract class AgenticTool : Function {
         out int rowMin, out int rowMax, out int colMin, out int colMax) {
         rowMin = rowMax = colMin = colMax = 0;
 
-        CreateSheet sheet = ResolvedSheet();
+        SheetPiece sheet = ResolvedSheet();
         if (sheet == null) { result["error"] = "No sheet in scene."; return false; }
 
         rowMin = sheet.rowMin; rowMax = sheet.rowMax; colMin = sheet.colMin; colMax = sheet.colMax;
@@ -344,14 +344,14 @@ public abstract class AgenticTool : Function {
     }
 
     protected static bool TryResolveSheet(Dictionary<string, object> result,
-        string verb, out ManageSheets mgr, out CreateSheet sheet) {
+        string verb, out ManageSheets mgr, out SheetPiece sheet) {
         mgr = Scene.Sheets;
         sheet = ResolvedSheet();
         if (sheet == null) { result["error"] = $"The sheet is not ready to {verb}; is a sheet shown?"; return false; }
         return true;
     }
 
-    protected static PiecePose ApplyPieceTransform(ManageSheets mgr, CreateSheet sheet, Action<UnityEngine.Transform> mutate) {
+    protected static PiecePose ApplyPieceTransform(ManageSheets mgr, SheetPiece sheet, Action<UnityEngine.Transform> mutate) {
         mgr.CompletePieceMotion(sheet);
         UnityEngine.Transform t = sheet.transform;
         var pre = new PiecePose(t);

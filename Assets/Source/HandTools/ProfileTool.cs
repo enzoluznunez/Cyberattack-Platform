@@ -109,7 +109,7 @@ public class ProfileTool : Tool
     {
         if (!Active || sheetManager == null) return false;
 
-        CreateCube cube = sheetManager.CubeAt(visRow, visCol);
+        SheetBar cube = sheetManager.CubeAt(visRow, visCol);
         if (cube == null) return false;
 
         if (sheetManager.IsProjected(Record(columns, cube.dataRow, cube.dataCol))) return true;

@@ -57,6 +57,6 @@ public sealed class CallScaleTool : AgenticTool<CallScaleTool.Args> {
         result["scale"] = System.Math.Round(after, 3);
         if (Mathf.Abs(after - before * mult) > 1e-3f)
             result["note"] = "The sheet reached its size limit and changed less than asked.";
-        result["titlesShown"] = after >= CreateSheet.DefaultScale - 1e-3f;
+        result["titlesShown"] = after >= SheetPiece.DefaultScale - 1e-3f;
     }
 }

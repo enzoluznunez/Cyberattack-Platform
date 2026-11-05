@@ -18,7 +18,7 @@ public class SheetTouch : MonoBehaviour
     private ReadSheets _hub;
 
     private PokeInteractor _driver;
-    private CreateCube _cube;
+    private SheetBar _cube;
     private bool _selected;
 
     private void Awake() => _hub = GetComponent<ReadSheets>();
@@ -127,7 +127,7 @@ public class SheetTouch : MonoBehaviour
         if (_driver == null && _cube == null && !_selected) return;
 
         bool wasSelected = _selected;
-        CreateCube cube = _cube;
+        SheetBar cube = _cube;
 
         _driver = null;
         _cube = null;
