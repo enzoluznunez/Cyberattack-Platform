@@ -51,14 +51,14 @@ flowchart LR
     Data -->|"HTTPS<br/>(Google Cloud API key)"| Gateway["API Gateway"]
     Gateway --> API["FastAPI on Cloud Run"]
     API --> BigQuery[("BigQuery")]
-    Storage[("Exports in Cloud Storage")] -->|"backend/rebuild.py<br/>clean → publish"| BigQuery
+    Storage[("Exports in Cloud Storage")] -->|"Backend/rebuild.py<br/>clean → publish"| BigQuery
 ```
 
 | Path | What it holds |
 |---|---|
 | `Assets/Source/` | The app's C# code: map, sheet, hand tools, UI, data access and the assistant |
 | `Assets/Scenes/Main.unity` | The app's one scene |
-| `backend/` | Data cleaning, the API, its tests and deploy scripts (see `backend/README.md`) |
+| `Backend/` | Data cleaning, the API, its tests and deploy scripts (see `Backend/README.md`) |
 | `cloudbuild.yaml` | Cloud Build: tests every push, deploys `main` |
 | `.github/workflows/` | GitHub Actions: the tests that need no Google Cloud access |
 
@@ -225,7 +225,7 @@ The app already knows the gateway's address; it only needs the key.
 To point the Editor at an API running on your own computer instead, put its address on
 one line in `Assets/StreamingAssets/cloud.url` (also git-ignored), such as
 `http://127.0.0.1:8000`. A headset build refuses plain `http://`, so this is for the
-Editor. `backend/README.md` covers running and deploying the API and rebuilding the data.
+Editor. `Backend/README.md` covers running and deploying the API and rebuilding the data.
 
 ### Add your Gemini API key
 
@@ -253,7 +253,7 @@ build failed.
 
 ## Changing the breach database API
 
-The API under `backend/` ships itself. Cloud Build watches this repository and runs
+The API under `Backend/` ships itself. Cloud Build watches this repository and runs
 `cloudbuild.yaml` on every push:
 
 ```
@@ -264,7 +264,7 @@ merge to main:       run the tests --> build the Docker image --> deploy to Clou
 A failing test stops the build, so nothing untested reaches the headsets, and the live
 version is always tagged with the commit it came from. Builds and their logs are in the
 Google Cloud console under **Cloud Build → History** (region `us-east1`).
-`backend/README.md` covers what the CI pipeline may and may not touch, and the changes that
+`Backend/README.md` covers what the CI pipeline may and may not touch, and the changes that
 still go through `deploy.sh` by hand.
 
 GitHub Actions also runs the backend tests that need no Google Cloud access on every
@@ -281,7 +281,7 @@ sheet shows the figures.
 
 **Where does the data come from?**
 Two exports: one of disclosed breaches and one of company fundamentals. They are cleaned
-into a database on Google Cloud (see `backend/README.md`). Only breaches at companies
+into a database on Google Cloud (see `Backend/README.md`). Only breaches at companies
 trading under a ticker, with all six figures reported, are kept, so every bar on every
 sheet is a real reported figure. The breaches kept run from 2005 to 2023.
 

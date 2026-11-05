@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: Backend
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: backend/requirements-dev.txt
+          cache-dependency-path: Backend/requirements-dev.txt
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt

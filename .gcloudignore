@@ -5,11 +5,11 @@
 # Triggers check out the repository themselves and ignore this file.
 /*
 !/cloudbuild.yaml
-!/backend/
-/backend/.venv/
-/backend/data/
-/backend/regression/
-/backend/.env
+!/Backend/
+/Backend/.venv/
+/Backend/data/
+/Backend/regression/
+/Backend/.env
 **/__pycache__/
 !/Assets/
 /Assets/*
