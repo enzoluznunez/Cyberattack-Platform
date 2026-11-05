@@ -4,14 +4,14 @@ using System.Text.Json;
 using UnityEngine;
 
 // The United States and its six regions, as Backend/maps.py drew them into
-// Resources/Maps/us.json: flat, in the national map's kilometres. Every map
+// Resources/Maps/US.json: flat, in the national map's kilometres. Every map
 // shares one projection, so a city is at one place on all of them, and a
 // region's map is the national map cut along its borders. The app ships the
 // outlines rather than asking for them, since they never change with the
 // data; the pins on them come from the API.
 public sealed class MapAtlas
 {
-    public const string ResourcePath = "Maps/us";
+    public const string ResourcePath = "Maps/US";
 
     // One projection centre, and the box of longitudes and latitudes it covers,
     // moved into place by its scale and offset: the lower 48 and the Alaska,
