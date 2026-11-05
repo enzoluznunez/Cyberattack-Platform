@@ -9,7 +9,7 @@ the country, its six regions and their metros on the map; the sheet beside it sh
 place's breaches. You reshape the sheet with your hands, and a voice assistant can drive
 the same tools and look up individual breaches when asked.
 
-**Status:** complete (v1.0). [![Pipeline tests](https://github.com/enzoluznunez/Cyberattack-Platform/actions/workflows/pipeline-tests.yml/badge.svg)](https://github.com/enzoluznunez/Cyberattack-Platform/actions/workflows/pipeline-tests.yml)
+**Status:** complete (v1.0).
 
 ## Features
 
@@ -31,10 +31,27 @@ the same tools and look up individual breaches when asked.
 
 ## Architecture
 
-```
-Meta Quest 3 app ──(Google Cloud API key)──> API Gateway ──> Cloud Run (FastAPI) ──> BigQuery
-       │                                                                          ▲
-       └──(Gemini API key)──> Gemini Live API          Cloud Storage exports ──rebuild.py
+```mermaid
+flowchart LR
+    subgraph Headset["Meta Quest 3 (Unity app)"]
+        Hands["Hand tools<br/>Move · Rotate · Scale · Profile · Sort · Filter"]
+        Assistant["Voice assistant"]
+        Map["Map panel"]
+        Sheet["Sheet"]
+        Data["Data access"]
+        Hands --> Sheet
+        Assistant --> Sheet
+        Assistant --> Map
+        Map --> Sheet
+        Map --> Data
+        Sheet --> Data
+        Assistant --> Data
+    end
+    Assistant <-->|"audio + tool calls<br/>(Gemini API key)"| Gemini["Gemini Live API"]
+    Data -->|"HTTPS<br/>(Google Cloud API key)"| Gateway["API Gateway"]
+    Gateway --> API["FastAPI on Cloud Run"]
+    API --> BigQuery[("BigQuery")]
+    Storage[("Exports in Cloud Storage")] -->|"pipeline/rebuild.py<br/>clean → publish"| BigQuery
 ```
 
 | Path | What it holds |
