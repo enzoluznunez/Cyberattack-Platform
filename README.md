@@ -56,7 +56,7 @@ flowchart LR
 
 | Path | What it holds |
 |---|---|
-| `Assets/Source/` | The app's C# code: map, sheet, tools, UI, data access and the assistant |
+| `Assets/Source/` | The app's C# code: map, sheet, hand tools, UI, data access and the assistant |
 | `Assets/Scenes/Main.unity` | The app's one scene |
 | `pipeline/` | Data cleaning, the API, its tests and deploy scripts (see `pipeline/README.md`) |
 | `cloudbuild.yaml` | Cloud Build: tests every push, deploys `main` |
