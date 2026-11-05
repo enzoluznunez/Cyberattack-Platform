@@ -57,7 +57,7 @@ flowchart LR
 | Path | What it holds |
 |---|---|
 | `Assets/Source/` | The app's C# code: map, sheet, tools, UI, data access and the assistant |
-| `Assets/Scenes/File Reader.unity` | The app's one scene |
+| `Assets/Scenes/Main.unity` | The app's one scene |
 | `pipeline/` | Data cleaning, the API, its tests and deploy scripts (see `pipeline/README.md`) |
 | `cloudbuild.yaml` | Cloud Build: tests every push, deploys `main` |
 | `.github/workflows/` | GitHub Actions: the tests that need no Google Cloud access |
@@ -203,7 +203,7 @@ shifts so the layout is in front of you again, at the height it first opened at.
 1. Clone the repository, or download the ZIP and unpack it.
 2. In Unity Hub choose **Add → Add project from disk**, select the folder, and open it
    with 6000.4.0f1.
-3. Open `Assets/Scenes/File Reader.unity`.
+3. Open `Assets/Scenes/Main.unity`.
 
 ### Connect to the breach database
 

@@ -25,5 +25,5 @@
 !/Assets/Resources/Maps/
 !/Assets/Scenes/
 /Assets/Scenes/*
-!/Assets/Scenes/File Reader.unity
+!/Assets/Scenes/Main.unity
 **/.pytest_cache/
