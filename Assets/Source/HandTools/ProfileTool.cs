@@ -22,19 +22,19 @@ public class ProfileTool : Tool
         if (!active) ClearTint();
     }
 
-    private static bool Usable(ReadSheets.Reading reading) =>
+    private static bool Usable(SheetFingerInput.Reading reading) =>
         reading.valid && reading.cube != null && reading.sheet != null;
 
-    private void Tint(ReadSheets.Reading reading, float swell) => TintLine(reading, _intent.Columns, swell);
+    private void Tint(SheetFingerInput.Reading reading, float swell) => TintLine(reading, _intent.Columns, swell);
 
-    private void FeedReach(ReadSheets.Reading reading)
+    private void FeedReach(SheetFingerInput.Reading reading)
     {
         if (reading.tip == Vector3.zero) return;
         if (AxisIntent.ReachScores(reading.sheet, reading.wrist, reading.tip, out float forColumns, out float forRows))
             _intent.Feed(forColumns, forRows);
     }
 
-    private void FeedSweep(ReadSheets.Reading reading)
+    private void FeedSweep(SheetFingerInput.Reading reading)
     {
         if (reading.tip == Vector3.zero) return;
 
@@ -47,7 +47,7 @@ public class ProfileTool : Tool
         _intent.Latch();
     }
 
-    protected override void OnSheetHover(ReadSheets.Reading reading)
+    protected override void OnSheetHover(SheetFingerInput.Reading reading)
     {
         if (!Active || sheetManager == null || !Usable(reading))
         {
@@ -67,7 +67,7 @@ public class ProfileTool : Tool
         Tint(reading, _pressed ? Style.PreviewSwell + Style.EngageSwell : Style.PreviewSwell);
     }
 
-    protected override void OnSheetSelect(ReadSheets.Reading reading)
+    protected override void OnSheetSelect(SheetFingerInput.Reading reading)
     {
         if (!Active || sheetManager == null || !Usable(reading)) return;
 
@@ -79,7 +79,7 @@ public class ProfileTool : Tool
         if (_intent.Decided) Tint(reading, Style.PreviewSwell + Style.EngageSwell);
     }
 
-    protected override void OnSheetRelease(ReadSheets.Reading reading)
+    protected override void OnSheetRelease(SheetFingerInput.Reading reading)
     {
         ClearTint();
         _pressed = false;
@@ -93,7 +93,7 @@ public class ProfileTool : Tool
         _intent.Reset();
     }
 
-    protected override void OnSheetCommit(ReadSheets.Reading reading)
+    protected override void OnSheetCommit(SheetFingerInput.Reading reading)
     {
         ClearTint();
         if (!Active || sheetManager == null || !Usable(reading) || !_intent.Decided) return;

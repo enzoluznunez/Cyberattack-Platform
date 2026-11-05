@@ -3,7 +3,7 @@ using UnityEngine;
 using Oculus.Interaction;
 using Oculus.Interaction.Input;
 
-[RequireComponent(typeof(ReadSheets))]
+[RequireComponent(typeof(SheetFingerInput))]
 public class SheetTouch : MonoBehaviour
 {
     [Tooltip("How far past the fingertip a bar starts responding, in metres.")]
@@ -15,13 +15,13 @@ public class SheetTouch : MonoBehaviour
     [Tooltip("Furthest a fingertip can credibly be from the head, in metres. Guards against parked interactors.")]
     public float maxReachFromHead = 1.2f;
 
-    private ReadSheets _hub;
+    private SheetFingerInput _hub;
 
     private PokeInteractor _driver;
     private SheetBar _cube;
     private bool _selected;
 
-    private void Awake() => _hub = GetComponent<ReadSheets>();
+    private void Awake() => _hub = GetComponent<SheetFingerInput>();
 
     private void OnDisable() => Drop();
 
@@ -80,7 +80,7 @@ public class SheetTouch : MonoBehaviour
 
         _cube = hit.cube;
         _selected = false;
-        _hub.Hover(ReadSheets.Describe(hit, tip, WristOf(source, tip)));
+        _hub.Hover(SheetFingerInput.Describe(hit, tip, WristOf(source, tip)));
         return true;
     }
 
@@ -95,7 +95,7 @@ public class SheetTouch : MonoBehaviour
 
         if (!SheetRaycast.NearestCube(tip, reach, out SheetRaycast.Hit hit)) return false;
 
-        ReadSheets.Reading reading = ReadSheets.Describe(hit, tip, WristOf(source, tip));
+        SheetFingerInput.Reading reading = SheetFingerInput.Describe(hit, tip, WristOf(source, tip));
         _cube = hit.cube;
 
         if (_selected)
@@ -136,7 +136,7 @@ public class SheetTouch : MonoBehaviour
         if (_hub == null) return;
 
         if (wasSelected && cube != null)
-            _hub.Release(ReadSheets.Describe(cube, cube.transform.position));
+            _hub.Release(SheetFingerInput.Describe(cube, cube.transform.position));
 
         _hub.Cleared();
     }

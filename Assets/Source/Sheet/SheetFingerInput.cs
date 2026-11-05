@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-public class ReadSheets : MonoBehaviour
+public class SheetFingerInput : MonoBehaviour
 {
     public struct Reading
     {
