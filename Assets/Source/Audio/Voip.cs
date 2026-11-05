@@ -9,41 +9,41 @@ public static class Voip {
 #if UNITY_ANDROID && !UNITY_EDITOR
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate void fnPtr(
+    private delegate void FnPtr(
         [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)]
         byte[] data,
         int numFrames
     );
 
-    [MonoPInvokeCallback(typeof(fnPtr))]
-    private static void callbackDef(byte[] data, int numFrames) {
+    [MonoPInvokeCallback(typeof(FnPtr))]
+    private static void CallbackDef(byte[] data, int numFrames) {
         FrameCaptured?.Invoke(data);
     }
 
-    private static fnPtr callback = callbackDef;
+    private static FnPtr _callback = CallbackDef;
 
     [DllImport("voip", EntryPoint = "init")]
-    private static extern void init(fnPtr callbackParam);
+    private static extern void Init(FnPtr callbackParam);
 
-    public static void init() {
-        init(callback);
+    public static void Init() {
+        Init(_callback);
     }
 
     [DllImport("voip", EntryPoint = "destroy")]
-    public static extern void destroy();
+    public static extern void Destroy();
 
     [DllImport("voip", EntryPoint = "start")]
-    public static extern void start();
+    public static extern void Start();
 
     [DllImport("voip", EntryPoint = "stop")]
-    public static extern void stop();
+    public static extern void Stop();
 
 #else
 
-    public static void init() { }
-    public static void destroy() { }
-    public static void start() { }
-    public static void stop() { }
+    public static void Init() { }
+    public static void Destroy() { }
+    public static void Start() { }
+    public static void Stop() { }
 
 #endif
 

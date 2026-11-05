@@ -8,21 +8,21 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
     private const int DefaultLines = 200;
     private const int MaxCharacters = 15000;
 
-    private static string lastPagedLabel;
+    private static string _lastPagedLabel;
 
     // The source split into lines, kept while the same text is paged through
     // so each page does not split the whole file again.
-    private static string splitText;
-    private static string[] splitLines;
+    private static string _splitText;
+    private static string[] _splitLines;
 
     [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() {
-        lastPagedLabel = null;
-        splitText = null;
-        splitLines = null;
+        _lastPagedLabel = null;
+        _splitText = null;
+        _splitLines = null;
     }
 
-    public static void Forget() => lastPagedLabel = null;
+    public static void Forget() => _lastPagedLabel = null;
 
     public class Args {
         [Doc("The first line to return, 1-based."), Limits(1, int.MaxValue), DefaultsTo(1), Optional]
@@ -51,19 +51,19 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
             return;
         }
 
-        if (!ReferenceEquals(raw, splitText)) {
-            splitLines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            splitText = raw;
+        if (!ReferenceEquals(raw, _splitText)) {
+            _splitLines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            _splitText = raw;
         }
-        string[] lines = splitLines;
+        string[] lines = _splitLines;
         int total = lines.Length;
 
         int from = Math.Max(1, args.fromLine ?? 1);
 
         string current = Scene.DatasetLabel;
-        if (from > 1 && lastPagedLabel != null && !string.Equals(lastPagedLabel, current)) {
+        if (from > 1 && _lastPagedLabel != null && !string.Equals(_lastPagedLabel, current)) {
             Refuse(result, "continuation from a different dataset",
-                $"Your last read came from {lastPagedLabel}, but {current} is open now. " +
+                $"Your last read came from {_lastPagedLabel}, but {current} is open now. " +
                 "Page reads start over after a switch; call again from line 1.");
             result["dataset"] = current;
             return;
@@ -100,7 +100,7 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
             included++;
         }
 
-        lastPagedLabel = current;
+        _lastPagedLabel = current;
         result["dataset"] = current;
         result["fromLine"] = from;
         result["lineCount"] = included;

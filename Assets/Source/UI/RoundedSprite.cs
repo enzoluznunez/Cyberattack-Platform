@@ -7,12 +7,12 @@ public static class RoundedSprite
     private const int TexelsPerUnit = 4;
     private const float ReferencePixelsPerUnit = 100f;
 
-    private static readonly Dictionary<int, Sprite> _sprites = new Dictionary<int, Sprite>();
+    private static readonly Dictionary<int, Sprite> Sprites = new Dictionary<int, Sprite>();
 
     public static Sprite Get(float radiusUnits)
     {
         int r = Mathf.Max(2, Mathf.RoundToInt(radiusUnits * TexelsPerUnit));
-        if (_sprites.TryGetValue(r, out Sprite cached) && cached != null) return cached;
+        if (Sprites.TryGetValue(r, out Sprite cached) && cached != null) return cached;
 
         int size = r * 2 + 4;
 
@@ -48,7 +48,7 @@ public static class RoundedSprite
         Sprite sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f),
             ReferencePixelsPerUnit * TexelsPerUnit, 0, SpriteMeshType.FullRect, border);
 
-        _sprites[r] = sprite;
+        Sprites[r] = sprite;
         return sprite;
     }
 
@@ -79,13 +79,13 @@ public static class RoundedSprite
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
     {
-        foreach (KeyValuePair<int, Sprite> kv in _sprites)
+        foreach (KeyValuePair<int, Sprite> kv in Sprites)
         {
             if (kv.Value == null) continue;
             Texture2D stale = kv.Value.texture;
             Object.Destroy(kv.Value);
             if (stale != null) Object.Destroy(stale);
         }
-        _sprites.Clear();
+        Sprites.Clear();
     }
 }

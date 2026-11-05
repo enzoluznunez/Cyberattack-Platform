@@ -99,15 +99,15 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
 
         int round = Gemini.ToolRoundId;
         int axisSlot = isColumn ? 1 : 0;
-        if (lastSortRound[axisSlot] == round) {
+        if (LastSortRound[axisSlot] == round) {
             result["error"] = $"Only one reorder can run at a time. Each one shifts the positions of the "
                 + $"{axis} around it, so separate calls do not combine into the arrangement you pictured. "
                 + $"Send one call with 'order' listing the {axis} in the sequence you want.";
             EchoOrder(data, isColumn, isColumn ? data.ColumnOrder : data.RowOrder, result);
             return;
         }
-        int stamped = lastSortRound[axisSlot];
-        lastSortRound[axisSlot] = round;
+        int stamped = LastSortRound[axisSlot];
+        LastSortRound[axisSlot] = round;
 
         if (wantsWhere) RunWhere(args, sort, data, result);
         else if (wantsOrder) RunOrder(args, sort, data, isColumn, axis, lineCount, result);
@@ -116,10 +116,10 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
 
         // A call that failed reordered nothing, so it leaves the round's one
         // reorder for the corrected call.
-        if (result.ContainsKey("error")) lastSortRound[axisSlot] = stamped;
+        if (result.ContainsKey("error")) LastSortRound[axisSlot] = stamped;
     }
 
-    private static readonly int[] lastSortRound = { -1, -1 };
+    private static readonly int[] LastSortRound = { -1, -1 };
 
     private static void RunOrder(Args args, SortTool sort, DataSource data, bool isColumn,
         string axis, int lineCount, Dictionary<string, object> result) {

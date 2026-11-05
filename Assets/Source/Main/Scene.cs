@@ -2,26 +2,26 @@ using UnityEngine;
 
 public static class Scene {
 
-    private static ManageTools toolManager;
-    private static ToolPanelUI toolPanelUI;
-    private static DataSource dataSource;
-    private static Watch watch;
-    private static FilterTool filterTool;
-    private static ProfileTool profileTool;
-    private static SortTool sortTool;
-    private static ManageSheets sheetManager;
-    private static ManageDatasets manageDatasets;
-    private static Tooltip tooltip;
+    private static ManageTools _toolManager;
+    private static ToolPanelUI _toolPanelUI;
+    private static DataSource _dataSource;
+    private static Watch _watch;
+    private static FilterTool _filterTool;
+    private static ProfileTool _profileTool;
+    private static SortTool _sortTool;
+    private static ManageSheets _sheetManager;
+    private static ManageDatasets _manageDatasets;
+    private static Tooltip _tooltip;
 
-    public static ManageTools Tools => Resolve(ref toolManager);
-    public static ToolPanelUI ToolPanel => Resolve(ref toolPanelUI);
-    public static Watch Assistant => Resolve(ref watch);
-    public static FilterTool Filter => Resolve(ref filterTool);
-    public static ProfileTool Profile => Resolve(ref profileTool);
-    public static SortTool Sort => Resolve(ref sortTool);
-    public static ManageSheets Sheets => Resolve(ref sheetManager);
-    public static ManageDatasets Datasets => ManageDatasets.Instance != null ? ManageDatasets.Instance : Resolve(ref manageDatasets);
-    public static Tooltip Tooltip => Resolve(ref tooltip);
+    public static ManageTools Tools => Resolve(ref _toolManager);
+    public static ToolPanelUI ToolPanel => Resolve(ref _toolPanelUI);
+    public static Watch Assistant => Resolve(ref _watch);
+    public static FilterTool Filter => Resolve(ref _filterTool);
+    public static ProfileTool Profile => Resolve(ref _profileTool);
+    public static SortTool Sort => Resolve(ref _sortTool);
+    public static ManageSheets Sheets => Resolve(ref _sheetManager);
+    public static ManageDatasets Datasets => ManageDatasets.Instance != null ? ManageDatasets.Instance : Resolve(ref _manageDatasets);
+    public static Tooltip Tooltip => Resolve(ref _tooltip);
 
     public static string DatasetLabel {
         get {
@@ -37,13 +37,13 @@ public static class Scene {
     public static DataSource Data {
         get {
             if (ManageDatasets.Instance != null) return ManageDatasets.ActiveSource;
-            if (dataSource == null) {
+            if (_dataSource == null) {
                 var sheets = Sheets;
-                dataSource = sheets != null && sheets.dataSource != null
+                _dataSource = sheets != null && sheets.dataSource != null
                     ? sheets.dataSource
                     : Object.FindAnyObjectByType<DataSource>();
             }
-            return dataSource;
+            return _dataSource;
         }
     }
 
