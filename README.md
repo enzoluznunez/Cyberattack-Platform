@@ -176,10 +176,10 @@ shifts so the layout is in front of you again, at the height it first opened at.
 
 ### Prerequisites
 
-- [ ] A Meta Quest 3 with a USB-C cable
-- [ ] A Google Gemini API key on a paid tier (only the assistant needs it)
-- [ ] The Google Cloud API key for the breach database, from the project owner
-- [ ] Internet access on the headset
+- A Meta Quest 3 with a USB-C cable
+- A Google Gemini API key on a paid tier (only the assistant needs it)
+- The Google Cloud API key for the breach database, from the project owner
+- Internet access on the headset
 
 ### Prepare the Meta Quest 3
 
