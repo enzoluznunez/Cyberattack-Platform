@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // The poster figures' ten colours. They were the pipeline's industry-division
-// colours, which it no longer has (pipeline/metrics.py now colours regions
+// colours, which it no longer has (Backend/metrics.py now colours regions
 // and metros with PALETTE), so these are the posters' own.
 public static class PosterPalette
 {

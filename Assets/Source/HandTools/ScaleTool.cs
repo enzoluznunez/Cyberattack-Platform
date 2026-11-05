@@ -6,7 +6,7 @@ public class ScaleTool : GrabTool
     public const float MinScale = 0.01f;
     public const float MaxScale = 2f;
 
-    private static ITransformer ScaleTransformerFor(CreateSheet sheet)
+    private static ITransformer ScaleTransformerFor(SheetPiece sheet)
     {
         GrabFreeTransformer scale = sheet.GetComponent<GrabFreeTransformer>();
         if (scale == null)
@@ -20,7 +20,7 @@ public class ScaleTool : GrabTool
         return scale;
     }
 
-    protected override void PrepareSheet(CreateSheet sheet) => ScaleTransformerFor(sheet);
+    protected override void PrepareSheet(SheetPiece sheet) => ScaleTransformerFor(sheet);
 
     private static TransformerUtils.ConstrainedAxis Pin(float value) => Range(value, value);
 

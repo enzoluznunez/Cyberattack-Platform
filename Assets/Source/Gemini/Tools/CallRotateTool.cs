@@ -41,7 +41,7 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
         Apply(mgr, sheet, mode, args, result);
     }
 
-    private static void Apply(ManageSheets mgr, CreateSheet sheet, string mode, Args args, Dictionary<string, object> step) {
+    private static void Apply(ManageSheets mgr, SheetPiece sheet, string mode, Args args, Dictionary<string, object> step) {
         switch (mode) {
             case "by": By(mgr, sheet, args, step); break;
             case "face": Face(mgr, sheet, step); break;
@@ -52,7 +52,7 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
         }
     }
 
-    private static void By(ManageSheets mgr, CreateSheet sheet, Args args, Dictionary<string, object> result) {
+    private static void By(ManageSheets mgr, SheetPiece sheet, Args args, Dictionary<string, object> result) {
         string direction = args.direction?.Trim().ToLowerInvariant();
         if (!TryTurnSign(direction, out float sign)) {
             NeedChoice(result, "direction", new List<string> { "left", "right" },
@@ -80,7 +80,7 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
         result["degrees"] = Math.Round(degrees, 1);
     }
 
-    private static void Face(ManageSheets mgr, CreateSheet sheet, Dictionary<string, object> result) {
+    private static void Face(ManageSheets mgr, SheetPiece sheet, Dictionary<string, object> result) {
         Transform cam = CameraRig.MainTransform;
         if (cam == null) { result["error"] = "The user's viewpoint could not be found."; return; }
 

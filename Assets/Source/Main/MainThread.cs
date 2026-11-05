@@ -5,15 +5,15 @@ using UnityEngine;
 
 public class MainThread : MonoBehaviour {
 
-    private static MainThread instance;
-    private static readonly ConcurrentQueue<Action> queue = new ConcurrentQueue<Action>();
+    private static MainThread _instance;
+    private static readonly ConcurrentQueue<Action> Queue = new ConcurrentQueue<Action>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-    private static void Bootstrap() => Spawn.Once(ref instance);
+    private static void Bootstrap() => Spawn.Once(ref _instance);
 
     public static Task Run(Action action) {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        queue.Enqueue(() => {
+        Queue.Enqueue(() => {
             try {
                 action();
                 tcs.SetResult(true);
@@ -26,6 +26,6 @@ public class MainThread : MonoBehaviour {
     }
 
     private void Update() {
-        while (queue.TryDequeue(out var action)) action();
+        while (Queue.TryDequeue(out var action)) action();
     }
 }

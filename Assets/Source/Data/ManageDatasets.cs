@@ -40,7 +40,7 @@ public class ManageDatasets : MonoBehaviour
 
         // A parse is in flight exactly while a reader exists that has not
         // answered yet; the result handler and Unload both clear the reader.
-        public bool loading => source != null && !loaded;
+        public bool Loading => source != null && !loaded;
 
         public readonly EditList Edits = new EditList();
     }
@@ -178,7 +178,7 @@ public class ManageDatasets : MonoBehaviour
         while (_preloading.Count < PreloadsAtOnce && _preloads.Count > 0)
         {
             Dataset next = _preloads.Dequeue();
-            if (next.loading || next.loaded || !_datasets.Contains(next)) continue;
+            if (next.Loading || next.loaded || !_datasets.Contains(next)) continue;
             _preloading.Add(next);
             BeginLoad(next);
         }
@@ -191,7 +191,7 @@ public class ManageDatasets : MonoBehaviour
 
     private void BeginLoad(Dataset dataset)
     {
-        if (dataset == null || dataset.loading || dataset.loaded) return;
+        if (dataset == null || dataset.Loading || dataset.loaded) return;
 
         GameObject host = new GameObject($"Dataset_{_datasetsCreated++}");
         host.transform.SetParent(transform, false);

@@ -7,12 +7,12 @@ using UnityEngine.Profiling;
 
 public abstract class AgenticTool : Function {
 
-    private static int refreshedAxes;
+    private static int _refreshedAxes;
 
-    private readonly string sample;
+    private readonly string _sample;
 
     protected AgenticTool() {
-        sample = "GeminiTool." + GetType().Name;
+        _sample = "GeminiTool." + GetType().Name;
     }
 
     protected abstract void Run(Dictionary<string, object> args, Dictionary<string, object> result);
@@ -28,7 +28,7 @@ public abstract class AgenticTool : Function {
 
     protected virtual bool EditsAreOutcome => false;
 
-    protected static void NoteRefreshed(bool columns) => refreshedAxes |= columns ? 2 : 1;
+    protected static void NoteRefreshed(bool columns) => _refreshedAxes |= columns ? 2 : 1;
 
     protected override Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) =>
         Perform(args, result => Run(args ?? new Dictionary<string, object>(), result));
@@ -44,13 +44,13 @@ public abstract class AgenticTool : Function {
 
         await MainThread.Run(() => {
             var run = System.Diagnostics.Stopwatch.StartNew();
-            Profiler.BeginSample(sample);
+            Profiler.BeginSample(_sample);
             StateChannel.InAgentCall = true;
             try {
                 AgentTurn.NoteToolCall();
                 Scene.Sort?.CompleteOrderSequence();
                 editsBefore = ManageDatasets.ActiveEdits != null ? ManageDatasets.ActiveEdits.Count : 0;
-                refreshedAxes = 0;
+                _refreshedAxes = 0;
                 act(result);
             }
             catch (Exception e) {
@@ -59,8 +59,8 @@ public abstract class AgenticTool : Function {
             }
             finally {
                 if (!IsRefusal(result)) {
-                    if ((refreshedAxes & 1) != 0) StalePositions.Clear(false);
-                    if ((refreshedAxes & 2) != 0) StalePositions.Clear(true);
+                    if ((_refreshedAxes & 1) != 0) StalePositions.Clear(false);
+                    if ((_refreshedAxes & 2) != 0) StalePositions.Clear(true);
                 }
                 editsAfter = ManageDatasets.ActiveEdits != null ? ManageDatasets.ActiveEdits.Count : 0;
                 StateChannel.InAgentCall = false;
@@ -106,7 +106,7 @@ public abstract class AgenticTool : Function {
     }
 
     // There is one sheet, so there is nothing to pick: the bounds are its bounds.
-    private static CreateSheet ResolvedSheet() {
+    private static SheetPiece ResolvedSheet() {
         ManageSheets mgr = Scene.Sheets;
         return mgr != null ? mgr.Sheet : null;
     }
@@ -115,7 +115,7 @@ public abstract class AgenticTool : Function {
         out int rowMin, out int rowMax, out int colMin, out int colMax) {
         rowMin = rowMax = colMin = colMax = 0;
 
-        CreateSheet sheet = ResolvedSheet();
+        SheetPiece sheet = ResolvedSheet();
         if (sheet == null) { result["error"] = "No sheet in scene."; return false; }
 
         rowMin = sheet.rowMin; rowMax = sheet.rowMax; colMin = sheet.colMin; colMax = sheet.colMax;
@@ -344,14 +344,14 @@ public abstract class AgenticTool : Function {
     }
 
     protected static bool TryResolveSheet(Dictionary<string, object> result,
-        string verb, out ManageSheets mgr, out CreateSheet sheet) {
+        string verb, out ManageSheets mgr, out SheetPiece sheet) {
         mgr = Scene.Sheets;
         sheet = ResolvedSheet();
         if (sheet == null) { result["error"] = $"The sheet is not ready to {verb}; is a sheet shown?"; return false; }
         return true;
     }
 
-    protected static PiecePose ApplyPieceTransform(ManageSheets mgr, CreateSheet sheet, Action<UnityEngine.Transform> mutate) {
+    protected static PiecePose ApplyPieceTransform(ManageSheets mgr, SheetPiece sheet, Action<UnityEngine.Transform> mutate) {
         mgr.CompletePieceMotion(sheet);
         UnityEngine.Transform t = sheet.transform;
         var pre = new PiecePose(t);
@@ -454,24 +454,24 @@ public abstract class AgenticTool : Function {
     }
 
     protected struct MeasureAcc {
-        private double sum, best, worst;
-        private int n;
+        private double _sum, _best, _worst;
+        private int _n;
 
         public void Add(double v) {
-            if (n == 0) { best = v; worst = v; }
-            else { if (v > best) best = v; if (v < worst) worst = v; }
-            sum += v;
-            n++;
+            if (_n == 0) { _best = v; _worst = v; }
+            else { if (v > _best) _best = v; if (v < _worst) _worst = v; }
+            _sum += v;
+            _n++;
         }
 
         public bool TryScore(string measure, out double score) {
             score = 0d;
-            if (n == 0) return false;
+            if (_n == 0) return false;
             switch (measure) {
-                case "sum": score = sum; return true;
-                case "average": score = sum / n; return true;
-                case "max": score = best; return true;
-                case "min": score = worst; return true;
+                case "sum": score = _sum; return true;
+                case "average": score = _sum / _n; return true;
+                case "max": score = _best; return true;
+                case "min": score = _worst; return true;
                 default: return false;
             }
         }

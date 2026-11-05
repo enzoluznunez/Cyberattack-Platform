@@ -155,7 +155,7 @@ public class HitchLog : MonoBehaviour
         ManageSheets sheets = Scene.Sheets;
         if (sheets != null)
         {
-            CreateSheet sheet = sheets.Sheet;
+            SheetPiece sheet = sheets.Sheet;
             if (sheet != null && sheet.IsGrabbed) _line.Append(", sheet held");
             if (sheets.LinesDragged) _line.Append(", sort drag");
         }

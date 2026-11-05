@@ -338,7 +338,7 @@ public class SheetLabels
     private static float TextScaleFor(float cellSize) =>
         TitleSize * (cellSize > 0f ? cellSize / ReferenceCellSize : 1f);
 
-    public void Rebuild(CreateSheet owner, DataSource data, int rowMin, int rowMax, int colMin, int colMax,
+    public void Rebuild(SheetPiece owner, DataSource data, int rowMin, int rowMax, int colMin, int colMax,
         float cellSize, float cubeSide, float baseY, SheetLabelStyle style)
     {
         using var marker = RebuildMarker.Auto();

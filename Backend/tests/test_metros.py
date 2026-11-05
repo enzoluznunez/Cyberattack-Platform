@@ -11,7 +11,7 @@ from pathlib import Path
 from metrics import MAP_BOX_METRES, ONE_BREACH_METRES
 
 WEST = "US West"
-SCENE = Path(__file__).resolve().parents[2] / "Assets/Scenes/File Reader.unity"
+SCENE = Path(__file__).resolve().parents[2] / "Assets/Scenes/Main.unity"
 
 
 def city(x, y, breaches, population=1, region=WEST):

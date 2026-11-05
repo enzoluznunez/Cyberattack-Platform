@@ -72,7 +72,7 @@ public class FilterTool : Tool
         if (!Active) return;
 
         DataSource data = Data;
-        CreateSheet sheet = sheetManager != null ? sheetManager.Sheet : null;
+        SheetPiece sheet = sheetManager != null ? sheetManager.Sheet : null;
         if (data == null || !data.IsLoaded || sheet == null || !sheet.Shown)
         {
             ClearToolState();
@@ -117,7 +117,7 @@ public class FilterTool : Tool
     // The line a point is on, by its slot on the sheet, and whether it is a
     // row; false off any line. 'inVolume' says whether the point is within
     // the sheet's volume at all, gaps between the bands included.
-    private bool TryLineAt(CreateSheet sheet, Vector3 world, out bool inVolume, out bool rows, out int slot)
+    private bool TryLineAt(SheetPiece sheet, Vector3 world, out bool inVolume, out bool rows, out int slot)
     {
         inVolume = false;
         rows = false;
@@ -152,7 +152,7 @@ public class FilterTool : Tool
     // Whether a coordinate along one axis lies past the sheet's ends there,
     // and whether it is still within reach of them: a line's handle past its
     // end is one line's pitch long, as the Sort tool's grips are.
-    private static bool Outside(CreateSheet sheet, bool columns, float coord, out bool inReach)
+    private static bool Outside(SheetPiece sheet, bool columns, float coord, out bool inReach)
     {
         float half = sheet.PitchOn(columns) * 0.5f;
         float low = sheet.SlotCoord(columns, sheet.FirstSlot(columns)) - half;
@@ -164,7 +164,7 @@ public class FilterTool : Tool
     }
 
     // Takes the line at a slot off the sheet, or brings it back.
-    private void Poke(DataSource data, CreateSheet sheet, bool rows, int slot)
+    private void Poke(DataSource data, SheetPiece sheet, bool rows, int slot)
     {
         ClearTint();
         List<int> order = data.FullOrder(!rows);

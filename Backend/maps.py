@@ -1,6 +1,6 @@
 """Draw the United States and its six regions for the app's maps, once, into the app.
 
-    python maps.py                       rewrite Assets/Resources/Maps/us.json
+    python maps.py                       rewrite Assets/Resources/Maps/US.json
     python maps.py --preview data/maps   also draw every map to a PNG there, to look at
 
 The outlines are Natural Earth's 1:10m states and lakes (public domain),
@@ -46,7 +46,7 @@ from metrics import MAP_BOX_METRES, ONE_BREACH_METRES, STATE_REGIONS, US_REGIONS
 
 STATES = Path("data/naturalearth-states/ne_10m_admin_1_states_provinces.shp")
 LAKES = Path("data/naturalearth-lakes/ne_10m_lakes.shp")
-TARGET = Path(__file__).resolve().parents[1] / "Assets/Resources/Maps/us.json"
+TARGET = Path(__file__).resolve().parents[1] / "Assets/Resources/Maps/US.json"
 
 # Kilometres, the sphere's radius by its mean.
 RADIUS = 6371.0088

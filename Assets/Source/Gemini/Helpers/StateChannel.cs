@@ -18,10 +18,10 @@ public static class StateChannel
 
     public static bool UserDriven => !InAgentCall;
 
-    private static readonly List<string> _agentBatch = new List<string>();
-    private static readonly List<string> _userQueue = new List<string>();
-    private static readonly Dictionary<string, string> _state = new Dictionary<string, string>();
-    private static readonly List<string> _stateOrder = new List<string>();
+    private static readonly List<string> AgentBatch = new List<string>();
+    private static readonly List<string> UserQueue = new List<string>();
+    private static readonly Dictionary<string, string> State = new Dictionary<string, string>();
+    private static readonly List<string> StateOrder = new List<string>();
     private static bool _snapshotWanted;
 
     public static void Record(string what)
@@ -30,29 +30,29 @@ public static class StateChannel
 
         if (InAgentCall)
         {
-            _agentBatch.Add(what);
+            AgentBatch.Add(what);
             return;
         }
 
 
-        _userQueue.Add(what);
-        while (_userQueue.Count > MaxUserQueue) _userQueue.RemoveAt(0);
+        UserQueue.Add(what);
+        while (UserQueue.Count > MaxUserQueue) UserQueue.RemoveAt(0);
         Gemini.RequestActionPush();
     }
 
     public static string TakeAgentBatch()
     {
-        if (_agentBatch.Count == 0) return null;
-        string text = string.Join("; ", _agentBatch);
-        _agentBatch.Clear();
+        if (AgentBatch.Count == 0) return null;
+        string text = string.Join("; ", AgentBatch);
+        AgentBatch.Clear();
         return text;
     }
 
     public static void SetState(string key, string what)
     {
         if (string.IsNullOrEmpty(what)) return;
-        if (!_state.ContainsKey(key)) _stateOrder.Add(key);
-        _state[key] = what;
+        if (!State.ContainsKey(key)) StateOrder.Add(key);
+        State[key] = what;
     }
 
     public static void RecordState(string key, string what)
@@ -63,8 +63,8 @@ public static class StateChannel
 
     public static void ClearPending()
     {
-        _userQueue.Clear();
-        _agentBatch.Clear();
+        UserQueue.Clear();
+        AgentBatch.Clear();
         _agentDepth = 0;
         _snapshotWanted = false;
         StalePositions.ClearAll();
@@ -76,7 +76,7 @@ public static class StateChannel
         Gemini.RequestActionPush();
     }
 
-    public static bool HasPending => _snapshotWanted || _userQueue.Count > 0;
+    public static bool HasPending => _snapshotWanted || UserQueue.Count > 0;
 
     public static bool TryTakeBatch(out string text)
     {
@@ -88,18 +88,18 @@ public static class StateChannel
         if (_snapshotWanted)
         {
             _snapshotWanted = false;
-            if (_stateOrder.Count > 0)
+            if (StateOrder.Count > 0)
             {
-                var facts = new List<string>(_stateOrder.Count);
-                for (int i = 0; i < _stateOrder.Count; i++) facts.Add(_state[_stateOrder[i]]);
+                var facts = new List<string>(StateOrder.Count);
+                for (int i = 0; i < StateOrder.Count; i++) facts.Add(State[StateOrder[i]]);
                 lines.Add("[state] " + string.Join("; ", facts));
             }
         }
 
-        if (_userQueue.Count > 0)
+        if (UserQueue.Count > 0)
         {
-            lines.Add("[tool] User: " + string.Join("; ", _userQueue));
-            _userQueue.Clear();
+            lines.Add("[tool] User: " + string.Join("; ", UserQueue));
+            UserQueue.Clear();
         }
 
         if (lines.Count == 0) return false;

@@ -4,7 +4,7 @@ public abstract class Tool : MonoBehaviour
 {
     public ManageTools toolManager;
     public ManageSheets sheetManager;
-    public ReadSheets readSheets;
+    public SheetFingerInput readSheets;
 
     private bool _active;
 
@@ -16,13 +16,13 @@ public abstract class Tool : MonoBehaviour
 
     protected virtual bool UsesSheetEvents => false;
 
-    protected virtual void OnSheetHover(ReadSheets.Reading reading) { }
+    protected virtual void OnSheetHover(SheetFingerInput.Reading reading) { }
 
-    protected virtual void OnSheetSelect(ReadSheets.Reading reading) { }
+    protected virtual void OnSheetSelect(SheetFingerInput.Reading reading) { }
 
-    protected virtual void OnSheetRelease(ReadSheets.Reading reading) { }
+    protected virtual void OnSheetRelease(SheetFingerInput.Reading reading) { }
 
-    protected virtual void OnSheetCommit(ReadSheets.Reading reading) { }
+    protected virtual void OnSheetCommit(SheetFingerInput.Reading reading) { }
 
     protected virtual void OnSheetCleared() { }
 
@@ -33,10 +33,10 @@ public abstract class Tool : MonoBehaviour
 
     // Lights the line under the finger: one row, or on a grouped column axis the
     // whole metric the column belongs to.
-    protected void TintLine(ReadSheets.Reading reading, bool columns, float swell = Style.PreviewSwell) =>
+    protected void TintLine(SheetFingerInput.Reading reading, bool columns, float swell = Style.PreviewSwell) =>
         TintLine(reading.sheet, columns, columns ? reading.visCol : reading.visRow, swell);
 
-    protected void TintLine(CreateSheet sheet, bool columns, int line, float swell = Style.PreviewSwell)
+    protected void TintLine(SheetPiece sheet, bool columns, int line, float swell = Style.PreviewSwell)
     {
         int lo = line, hi = line;
         if (columns) sheetManager.ColumnStripSpan(line, out lo, out hi);
@@ -81,8 +81,8 @@ public abstract class Tool : MonoBehaviour
     {
         if (toolManager == null) toolManager = Scene.Tools;
         if (sheetManager == null) sheetManager = Scene.Sheets;
-        if (readSheets == null && sheetManager != null) readSheets = sheetManager.GetComponent<ReadSheets>();
-        if (readSheets == null) readSheets = FindAnyObjectByType<ReadSheets>();
+        if (readSheets == null && sheetManager != null) readSheets = sheetManager.GetComponent<SheetFingerInput>();
+        if (readSheets == null) readSheets = FindAnyObjectByType<SheetFingerInput>();
 
         OnToolStart();
 

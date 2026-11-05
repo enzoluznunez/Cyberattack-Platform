@@ -11,7 +11,7 @@ public static class SheetRaycast
     public struct Hit
     {
         public bool valid;
-        public CreateCube cube;
+        public SheetBar cube;
         public Vector3 point;
         public float distance;
     }
@@ -29,7 +29,7 @@ public static class SheetRaycast
         if (sheets == null) return false;
 
         // A sheet put away, or sinking away for another dataset's, is past touching.
-        CreateSheet sheet = sheets.Sheet;
+        SheetPiece sheet = sheets.Sheet;
         if (sheet == null || !sheet.Shown || !sheet.IsBuilt || sheet.Falling) return false;
 
         float best = float.MaxValue;
@@ -37,10 +37,10 @@ public static class SheetRaycast
         return hit.valid;
     }
 
-    public static bool Contains(CreateCube cube, Vector3 point) =>
+    public static bool Contains(SheetBar cube, Vector3 point) =>
         cube != null && cube.Touchable && cube.Contains(point);
 
-    private static void Nearest(CreateSheet sheet, Vector3 world, float radius, ref float best, ref Hit hit)
+    private static void Nearest(SheetPiece sheet, Vector3 world, float radius, ref float best, ref Hit hit)
     {
         float scale = Mathf.Abs(sheet.transform.lossyScale.x);
         if (scale < 1e-6f) return;
@@ -58,7 +58,7 @@ public static class SheetRaycast
             {
                 int visRow = Rows[r];
 
-                CreateCube cube = sheet.CubeAt(visRow, visCol);
+                SheetBar cube = sheet.CubeAt(visRow, visCol);
                 if (cube == null || !cube.Touchable) continue;
 
                 Vector3 closest = cube.ClosestPoint(world);
@@ -78,7 +78,7 @@ public static class SheetRaycast
     // The lines along one axis that could be near a coordinate: those whose
     // slots are within reach, and every line standing off its slot, which may
     // have slid anywhere.
-    private static void Gather(CreateSheet sheet, bool columns, float coord, float reach, List<int> into)
+    private static void Gather(SheetPiece sheet, bool columns, float coord, float reach, List<int> into)
     {
         into.Clear();
         if (SlotSpan(sheet, columns, coord, reach, out int lo, out int hi))
@@ -93,7 +93,7 @@ public static class SheetRaycast
 
     // The slots along one axis within reach of a coordinate, clipped to the
     // sheet; false when the reach falls wholly off it.
-    private static bool SlotSpan(CreateSheet sheet, bool columns, float coord, float reach,
+    private static bool SlotSpan(SheetPiece sheet, bool columns, float coord, float reach,
         out int lo, out int hi)
     {
         int first = sheet.FirstSlot(columns), last = sheet.LastSlot(columns);

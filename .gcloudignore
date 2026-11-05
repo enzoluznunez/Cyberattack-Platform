@@ -1,15 +1,15 @@
 # What `gcloud builds submit` uploads from the repository root, for running
-# cloudbuild.yaml by hand: the build file, the pipeline, and the files in the app
+# cloudbuild.yaml by hand: the build file, the backend, and the files in the app
 # its tests compare against: the generated C# contract, the map outlines, and the
 # scene, whose map and pin sizes the metros are measured by.
 # Triggers check out the repository themselves and ignore this file.
 /*
 !/cloudbuild.yaml
-!/pipeline/
-/pipeline/.venv/
-/pipeline/data/
-/pipeline/regression/
-/pipeline/.env
+!/Backend/
+/Backend/.venv/
+/Backend/data/
+/Backend/regression/
+/Backend/.env
 **/__pycache__/
 !/Assets/
 /Assets/*
@@ -25,5 +25,5 @@
 !/Assets/Resources/Maps/
 !/Assets/Scenes/
 /Assets/Scenes/*
-!/Assets/Scenes/File Reader.unity
+!/Assets/Scenes/Main.unity
 **/.pytest_cache/

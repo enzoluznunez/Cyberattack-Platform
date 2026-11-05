@@ -5,16 +5,16 @@ using UnityEngine;
 // thousands of bars puts nothing in the physics scene, and the sheet's grab
 // has one box to test rather than a collider per bar.
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
-public class CreateCube : MonoBehaviour
+public class SheetBar : MonoBehaviour
 {
     public int visRow = -1;
     public int visCol = -1;
     public int dataRow = -1;
     public int dataCol = -1;
 
-    public CreateSheet Sheet { get; private set; }
+    public SheetPiece Sheet { get; private set; }
 
-    public void SetSheet(CreateSheet sheet) => Sheet = sheet;
+    public void SetSheet(SheetPiece sheet) => Sheet = sheet;
 
     private MeshFilter _filter;
     private MeshRenderer _renderer;
@@ -101,7 +101,7 @@ public class CreateCube : MonoBehaviour
 
         if (_mesh == null)
         {
-            _mesh = new Mesh { name = "CreateCube" };
+            _mesh = new Mesh { name = "SheetBar" };
             _mesh.SetVertices(Verts);
             _mesh.SetTriangles(Tris, 0, false);
             _mesh.bounds = new Bounds(Vector3.zero, Vector3.one);

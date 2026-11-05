@@ -6,7 +6,7 @@
 # Two triggers share this file and differ only in _DEPLOY. Both run as the
 # cyber-ci service account, which can rebuild the 'cyber_ci' dataset and ship
 # new revisions of cyber-api, and nothing else: it cannot touch 'cyber', IAM or
-# the gateway. One-time setup and gateway changes stay in pipeline/deploy.sh.
+# the gateway. One-time setup and gateway changes stay in Backend/deploy.sh.
 #
 # By hand, from the repository root (tests only, unless _DEPLOY=true):
 #
@@ -26,7 +26,7 @@ steps:
   # regression recording is not in the repository, so those tests skip here.
   - id: test
     name: python:3.13-slim
-    dir: pipeline
+    dir: Backend
     entrypoint: bash
     env:
       - GOOGLE_CLOUD_PROJECT=$PROJECT_ID
@@ -53,7 +53,7 @@ steps:
         [ -n "$$TAG" ] || TAG="$BUILD_ID"
         IMAGE="$_REGION-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/$_SERVICE:$$TAG"
         echo "$$IMAGE" > /workspace/image
-        docker build -t "$$IMAGE" pipeline
+        docker build -t "$$IMAGE" Backend
         docker push "$$IMAGE"
 
   # The same settings deploy.sh uses; see there for why each is what it is.

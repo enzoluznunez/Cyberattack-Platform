@@ -95,23 +95,23 @@ public class ViewCatalog : MonoBehaviour
 
     private void ListMetros(BreachMap.Answer map)
     {
-        const string Rows = "a row each: its revenue, net income, assets, book value, market cap and stock " +
+        const string rows = "a row each: its revenue, net income, assets, book value, market cap and stock " +
                             "price, each bar as tall as its place among every US breach.";
 
         var entries = new List<(string, string, string)>();
         entries.Add((UsSheetUrl(), National,
-            $"Every breach at a company headquartered in the United States, every region together, {Rows}"));
+            $"Every breach at a company headquartered in the United States, every region together, {rows}"));
         foreach (BreachMap.Region region in map.regions)
             entries.Add((RegionSheetUrl(region.region), Title(region.region),
                 $"Every breach at a company headquartered in the {Title(region.region)} region, metro by " +
-                $"metro, {Rows}"));
+                $"metro, {rows}"));
 
         List<BreachMap.Metro> metros = map.Metros();
         foreach (BreachMap.Metro metro in metros)
         {
             if (metro.charted == 0) continue;
             entries.Add((SheetUrl(metro.name), metro.name,
-                $"Every breach at a company headquartered in the {metro.name} metro ({Title(metro.region)}), {Rows}"));
+                $"Every breach at a company headquartered in the {metro.name} metro ({Title(metro.region)}), {rows}"));
         }
         manageDatasets.AddCatalogEntries(entries);
         Debug.Log($"[ViewCatalog] Listed {entries.Count} sheets; reading them all before the map opens.");

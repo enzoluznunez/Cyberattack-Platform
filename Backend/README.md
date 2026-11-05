@@ -1,4 +1,4 @@
-# pipeline
+# Backend
 
 Turns the two raw exports into the tables the app draws from, and serves them.
 
@@ -36,7 +36,7 @@ gcloud storage cp breach_events.csv gs://cyberattack-platform-raw/
 python rebuild.py
 ```
 
-Local copies can sit in `pipeline/data/`, which git ignores.
+Local copies can sit in `Backend/data/`, which git ignores.
 
 ## Rebuilding the data
 
@@ -93,7 +93,7 @@ It matches names in GeoNames' `cities500` (CC BY 4.0) and falls back to Census
 ZIP centres for US cities; what neither finds it prints, to be added by hand.
 Each place also carries its GeoNames population, so a metro is named after its
 largest city. `maps.py` draws the United States and its six regions from Natural
-Earth's states (public domain) into `Assets/Resources/Maps/us.json`, which the
+Earth's states (public domain) into `Assets/Resources/Maps/US.json`, which the
 app ships. Each region's map is the national map cut along its borders, in the
 same projection, so a city is at one place on every map:
 

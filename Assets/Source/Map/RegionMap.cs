@@ -391,7 +391,7 @@ public class RegionMap : MonoBehaviour
         // every grey would come out white.
         var most = new Dictionary<string, int>();
         foreach (Pin pin in pins)
-            if (CreateSheet.Uncoloured(pin.color))
+            if (SheetPiece.Uncoloured(pin.color))
                 most[pin.region] = Mathf.Max(most.TryGetValue(pin.region, out int m) ? m : 0, pin.breaches);
 
         foreach (Pin pin in pins)
@@ -447,12 +447,12 @@ public class RegionMap : MonoBehaviour
         for (int d = 0; d < _dots.Count; d++)
         {
             Dot dot = _dots[d];
-            if (!CreateSheet.Uncoloured(dot.color)) continue;
+            if (!SheetPiece.Uncoloured(dot.color)) continue;
             int largest = most.TryGetValue(dot.region, out int m) ? m : 0;
             float t = largest > 1
                 ? Mathf.Clamp01(Mathf.Log(Mathf.Max(dot.breaches, 1)) / Mathf.Log(largest))
                 : 1f;
-            float shade = Mathf.Lerp(LightestGrey, DarkestGrey, CreateSheet.PerceptualFraction(t));
+            float shade = Mathf.Lerp(LightestGrey, DarkestGrey, SheetPiece.PerceptualFraction(t));
             dot.color = Color.Lerp(Color.white, Color.black, shade);
             _dots[d] = dot;
         }

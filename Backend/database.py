@@ -3,7 +3,7 @@
     breaches        one row per breach
     fundamentals    one row per company per year
 
-Settings come from the environment, or from pipeline/.env on a laptop;
+Settings come from the environment, or from Backend/.env on a laptop;
 .env.example shows its shape. Nothing here holds a password or a key: on a
 laptop the client signs in with `gcloud auth application-default login`, and on
 Cloud Run with the service's own account.
